@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.backends.legacy:build"
 
 [project]
-name = "dfine-wrap"
+name = "nitid"
 version = "0.1.0"
 description = "Ultralytics-style wrapper for the D-FINE object detector"
 readme = "README.md"
