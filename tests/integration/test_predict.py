@@ -1,29 +1,59 @@
-"""
-Integration test for the full predict() pipeline.
-Skipped unless a real checkpoint is present at DFINE_TEST_MODEL env var.
-"""
-import os
-import pytest
+"""Integration tests for the full predict() pipeline."""
 import numpy as np
+import types
 
-MODEL_PATH = os.environ.get("DFINE_TEST_MODEL", "")
 
-
-@pytest.mark.skipif(not MODEL_PATH, reason="DFINE_TEST_MODEL not set")
-def test_predict_numpy_frame():
+def test_predict_numpy_frame(tiny_checkpoint):
     from dfine import DFINE
-    model = DFINE(MODEL_PATH, verbose=False)
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     results = model.predict(frame, conf=0.3)
     assert isinstance(results, list)
     assert len(results) == 1
 
 
-@pytest.mark.skipif(not MODEL_PATH, reason="DFINE_TEST_MODEL not set")
-def test_predict_stream_is_generator():
+def test_predict_returns_results_object(tiny_checkpoint):
     from dfine import DFINE
-    import types
-    model = DFINE(MODEL_PATH, verbose=False)
+    from dfine.results import Results
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    results = model.predict(frame, conf=0.0)
+    assert isinstance(results[0], Results)
+
+
+def test_predict_stream_is_generator(tiny_checkpoint):
+    from dfine import DFINE
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     gen = model.predict(frame, stream=True)
     assert isinstance(gen, types.GeneratorType)
+
+
+def test_predict_conf_filter(tiny_checkpoint):
+    from dfine import DFINE
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    all_dets  = model.predict(frame, conf=0.0)[0]
+    none_dets = model.predict(frame, conf=1.0)[0]
+    assert len(all_dets) >= len(none_dets)
+    assert len(none_dets) == 0
+
+
+def test_predict_names_populated(tiny_checkpoint):
+    from dfine import DFINE
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    assert len(model.names) == 80
+    assert model.names[0] == "class_0"
+
+
+def test_predict_boxes_within_image(tiny_checkpoint):
+    from dfine import DFINE
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    results = model.predict(frame, conf=0.0)[0]
+    if len(results) > 0:
+        boxes = results.boxes.xyxy
+        assert (boxes[:, 0] >= 0).all()
+        assert (boxes[:, 1] >= 0).all()
+        assert (boxes[:, 2] <= 640).all()
+        assert (boxes[:, 3] <= 480).all()
