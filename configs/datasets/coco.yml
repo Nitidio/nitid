@@ -1,0 +1,17 @@
+path: /data/coco
+train: images/train2017
+val:   images/val2017
+
+nc: 80
+names:
+  0: person
+  1: bicycle
+  2: car
+  3: motorcycle
+  4: airplane
+  5: bus
+  6: train
+  7: truck
+  8: boat
+  9: traffic light
+  # ... (80 classes total)

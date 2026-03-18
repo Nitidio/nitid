@@ -1,0 +1,15 @@
+"""Minimal logger so we don't pull in heavy dependencies."""
+from __future__ import annotations
+import logging
+import sys
+
+def get_logger(name: str = "dfine") -> logging.Logger:
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
+        logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    return logger
+
+LOGGER = get_logger()

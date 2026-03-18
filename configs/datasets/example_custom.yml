@@ -1,0 +1,11 @@
+# Example custom dataset config — mirrors Ultralytics format
+path: /data/my_dataset
+train: images/train
+val:   images/val
+test:  images/test  # optional
+
+nc: 3  # number of classes
+names:
+  0: person
+  1: car
+  2: bicycle
