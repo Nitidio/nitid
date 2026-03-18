@@ -64,7 +64,8 @@ class DFINEExporter:
     def _to_torchscript(self, imgsz, batch, verbose) -> Path:
         out = Path(f"dfine_{imgsz}.torchscript")
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
-        scripted = torch.jit.trace(self.model, dummy)
+        # D-FINE forward returns a dict; strict=False allows tracing dict outputs
+        scripted = torch.jit.trace(self.model, dummy, strict=False)
         scripted.save(str(out))
         LOGGER.info(f"TorchScript export saved to {out}")
         return out

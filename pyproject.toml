@@ -21,6 +21,8 @@ dependencies = [
     "onnx>=1.15",
     "onnxsim>=0.4",
     "tqdm>=4.66",
+    "tensorboard>=2.14",  # required by extern/dfine src/core/_config.py
+    "scipy>=1.10",        # required by extern/dfine HungarianMatcher (training)
 ]
 
 [project.optional-dependencies]

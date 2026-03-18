@@ -62,7 +62,7 @@ class DFINE:
         Generator[Results] when stream=True.
         """
         from dfine.predictor import DFINEPredictor
-        predictor = DFINEPredictor(self._model, self._cfg, self._device_str)
+        predictor = DFINEPredictor(self._model, self._cfg, self._device_str, self._names)
         return predictor.run(
             source,
             conf=conf,

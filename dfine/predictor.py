@@ -5,17 +5,20 @@ Called internally by DFINE.predict(). Not part of the public API.
 from __future__ import annotations
 from typing import Generator
 import torch
-import numpy as np
 from dfine.results import Results, Boxes
 from dfine.utils.sources import LoadSource
-from dfine.utils.ops import scale_boxes, clip_boxes
+from dfine.utils.ops import clip_boxes
 
 
 class DFINEPredictor:
-    def __init__(self, model, cfg: dict, device: str) -> None:
+    def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
         self.model = model
-        self.cfg = cfg
         self.device = device
+        self.names = names
+
+        from dfine.nn.build import build_postprocessor
+        self._postprocessor = build_postprocessor(cfg)
+        self._postprocessor.to(device)
 
     def run(
         self,
@@ -26,50 +29,48 @@ class DFINEPredictor:
         stream: bool,
         augment: bool,
         verbose: bool,
-        names: dict | None = None,
     ) -> list | Generator:
         loader = LoadSource(source, imgsz=imgsz, device=self.device)
-        gen = self._infer(loader, conf, classes, imgsz, names or {})
+        gen = self._infer(loader, conf, classes)
         return gen if stream else list(gen)
 
-    def _infer(self, loader: LoadSource, conf, classes, imgsz, names) -> Generator:
+    def _infer(self, loader: LoadSource, conf, classes) -> Generator:
         for tensor, orig_img, path in loader:
+            h, w = orig_img.shape[:2]
+            orig_size = torch.tensor([[h, w]], dtype=torch.float32, device=self.device)
             with torch.no_grad():
                 raw = self.model(tensor)
-            result = self._postprocess(raw, orig_img, path, conf, classes, imgsz, names)
-            yield result
+                detections = self._postprocessor(raw, orig_size)
+            yield self._postprocess(detections[0], orig_img, path, conf, classes)
 
-    def _postprocess(self, raw, orig_img, path, conf_thr, classes, imgsz, names) -> Results:
+    def _postprocess(self, det: dict, orig_img, path, conf_thr, classes) -> Results:
         """
-        D-FINE outputs (labels, boxes, scores) — no NMS needed.
-        raw expected to be a dict or tuple depending on D-FINE version.
+        det is one element from DFINEPostProcessor output:
+            {labels: [N], boxes: [N, 4] xyxy in pixel coords, scores: [N]}
         """
-        # TODO: align with exact D-FINE forward() output contract
-        labels, boxes, scores = raw["labels"], raw["boxes"], raw["scores"]
+        labels = det["labels"]
+        boxes  = det["boxes"]
+        scores = det["scores"]
 
-        # Filter by confidence
         mask = scores > conf_thr
         labels, boxes, scores = labels[mask], boxes[mask], scores[mask]
 
-        # Filter by class
         if classes is not None:
-            class_mask = torch.isin(labels, torch.tensor(classes, device=labels.device))
+            cls_tensor = torch.tensor(classes, device=labels.device)
+            class_mask = torch.isin(labels, cls_tensor)
             labels, boxes, scores = labels[class_mask], boxes[class_mask], scores[class_mask]
 
-        # Scale from [imgsz x imgsz] back to original image size
         h, w = orig_img.shape[:2]
-        boxes = scale_boxes(boxes, from_shape=(imgsz, imgsz), to_shape=(h, w))
         boxes = clip_boxes(boxes, (h, w))
 
-        # Pack into [N, 6]: xyxy conf cls
         if len(boxes):
             data = torch.cat([boxes, scores.unsqueeze(1), labels.unsqueeze(1).float()], dim=1)
         else:
-            data = torch.zeros((0, 6))
+            data = torch.zeros((0, 6), device=boxes.device)
 
         return Results(
             orig_img=orig_img,
             path=path,
-            names=names,
+            names=self.names,
             boxes=Boxes(data, orig_shape=(h, w)),
         )
