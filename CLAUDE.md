@@ -4,13 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**nitid** is an Ultralytics-style wrapper for the [D-FINE](https://github.com/Peterande/D-FINE) real-time object detector. The public API intentionally mirrors `ultralytics.YOLO` so users can swap models with minimal friction.
+**nitid** is an Ultralytics-style wrapper for the [D-FINE](https://github.com/Peterande/D-FINE) real-time object detector. The public API intentionally mirrors `ultralytics.YOLO` so users can swap models with minimal friction. The project was designed in five phases: Design → Core → Fine-tuning → Testing → Docs.
 
-> **Critical dependency**: D-FINE source is not bundled. `dfine/nn/build.py` and `dfine/nn/criterion.py` both raise `NotImplementedError` until D-FINE is added as a submodule:
-> ```
-> git submodule add https://github.com/Peterande/D-FINE extern/dfine
-> ```
-> Unit tests do not require this; integration tests do.
+**D-FINE submodule** lives at `extern/dfine` (repo: `https://github.com/Peterande/D-FINE`). It is required for integration tests and any code that loads a model. After cloning run:
+```
+git submodule update --init
+```
 
 ## Commands
 
@@ -18,10 +17,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies (includes dev extras: pytest, ruff, mypy)
 uv sync --extra dev
 
-# Run unit tests (no checkpoint or D-FINE source needed)
+# Run unit tests only (no D-FINE submodule or checkpoint needed)
 uv run pytest tests/unit
 
-# Run all tests
+# Run all tests (integration tests auto-build a tiny checkpoint via conftest.py)
 uv run pytest
 
 # Run a single test file
@@ -43,38 +42,59 @@ uv run dfine export model=dfine_l.pth format=onnx
 ## Architecture
 
 ### Entry points
-- `dfine/model.py` — `DFINE` class: the single public object. Instantiate with a `.pth` path; call `.predict()`, `.train()`, `.val()`, `.export()`. Each method lazily imports its worker class to keep startup fast.
-- `tools/dfine_cli.py` — `dfine` CLI command; parses `key=value` arguments and delegates to `DFINE`.
+- `dfine/model.py` — `DFINE` class: the single public object. Instantiate with a `.pth` path; call `.predict()`, `.train()`, `.val()`, `.export()`. Each method lazily imports its worker class.
+- `tools/dfine_cli.py` — `dfine` CLI; parses `key=value` arguments and delegates to `DFINE`.
 
 ### Worker classes (internal, not public API)
 | File | Class | Role |
 |---|---|---|
 | `dfine/predictor.py` | `DFINEPredictor` | Inference loop |
-| `dfine/trainer.py` | `DFINETrainer` | Fine-tuning loop |
-| `dfine/validator.py` | `DFINEValidator` | COCO-style evaluation |
-| `dfine/exporter.py` | `DFINEExporter` | ONNX / TorchScript export (TensorRT is Phase 2) |
+| `dfine/trainer.py` | `DFINETrainer` | Fine-tuning loop (Phase 3, partially implemented) |
+| `dfine/validator.py` | `DFINEValidator` | COCO-style evaluation (Phase 3, not implemented) |
+| `dfine/exporter.py` | `DFINEExporter` | ONNX / TorchScript export; TensorRT deferred |
 
-### Data flow
-1. `LoadSource` (`dfine/utils/sources.py`) — unified iterator that accepts image files, video files, directories, URLs, webcam indices, RTSP streams, or raw `np.ndarray`. Yields `(tensor [1,3,H,W], orig_img HWC BGR, path_str)` tuples.
-2. `Results` / `Boxes` (`dfine/results.py`) — returned by `predict()`. `Boxes._data` is a `[N, 6]` tensor with columns `x1 y1 x2 y2 conf cls`. Provides `.xyxy`, `.xyxyn`, `.xywh`, `.xywhn`, `.conf`, `.cls` properties.
+### Inference data flow
+1. `LoadSource` (`dfine/utils/sources.py`) — unified iterator over any input (image/video/dir/URL/webcam/ndarray). Yields `(tensor [1,3,H,W], orig_img HWC BGR, path_str)`.
+2. `DFINE.forward()` → `{"pred_logits": [B,300,C], "pred_boxes": [B,300,4]}` in cxcywh normalised coords.
+3. `DFINEPostProcessor(raw, orig_target_sizes)` → `[{labels, boxes, scores}]` per image, boxes in absolute xyxy pixel coords.
+4. `Results` / `Boxes` (`dfine/results.py`) — public return type. `Boxes._data` is `[N,6]` (x1 y1 x2 y2 conf cls).
 
 ### Checkpoint format
-Checkpoints are self-contained `.pth` files with keys: `model` (state dict), `config` (YAML dict), `names` ({int: str}), `epoch`, `metrics`. Raw D-FINE checkpoints lack `config`; convert them with:
+Self-contained `.pth` files with keys: `model` (state_dict), `config` (YAML dict from D-FINE), `names` ({int: str}), `epoch`, `metrics`.
+
+Raw D-FINE checkpoints need conversion — use real D-FINE configs from `extern/dfine/configs/`:
 ```bash
 uv run python tools/convert_checkpoint.py \
     --weights dfine_l.pth \
-    --config  configs/models/dfine_l.yml \
-    --names   configs/datasets/coco.yml \
+    --config  extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
+    --names   extern/dfine/configs/dataset/coco_detection.yml \
     --output  dfine_l_wrapped.pth
 ```
 
+### nn layer (`dfine/nn/`)
+
+`build_model(cfg)`, `build_postprocessor(cfg)`, `build_criterion(cfg)` in `build.py` / `criterion.py`.
+
+**D-FINE import shim** — D-FINE's `src/__init__.py` eagerly imports `src.data` (needs `faster_coco_eval`) and `src.misc` (needs `calflops`, `loguru`). These are training-only deps not required for inference. `_ensure_dfine_on_path()` must be called before any `src.*` import; it adds `extern/dfine` to `sys.path` and pre-registers three stub modules in `sys.modules` so Python never runs those `__init__.py` files:
+
+| Stub | Real thing blocked | What it exposes |
+|---|---|---|
+| `src` | `src/__init__` (imports data) | namespace package |
+| `src.data` | `coco_dataset` → `faster_coco_eval` | `DataLoader` from torch |
+| `src.misc` | `profiler_utils` → `calflops` | namespace package (real sub-modules importable) |
+
+`build_model` also forces `HGNetv2.pretrained=False` (weights come from the checkpoint) and `build_postprocessor` forces `remap_mscoco_category=False` (class names come from the checkpoint's `names` dict).
+
+### Export constraint
+The model pre-computes positional anchors for `eval_spatial_size` (default `[640, 640]`). Export `imgsz` **must match** this value or the encoder will raise a shape error. The size is stored in `cfg["eval_spatial_size"]`.
+
 ### Configuration files
-- `configs/models/dfine_{s,m,l,x}.yml` — model architecture configs (size variants).
-- `configs/datasets/coco.yml` / `configs/datasets/example_custom.yml` — dataset path and class-name definitions.
+- `extern/dfine/configs/dfine/` — canonical D-FINE model configs (used by `convert_checkpoint.py` and the test fixture).
+- `configs/models/` — placeholder YAMLs (kept for reference; prefer the extern configs).
+- `configs/datasets/coco.yml` / `example_custom.yml` — dataset path and class-name definitions.
 
-### nn layer
-`dfine/nn/build.py::build_model(cfg)` and `dfine/nn/criterion.py::build_criterion(cfg)` are thin stubs that must delegate to D-FINE's own factory once the submodule is present.
+## Testing
 
-## Testing layout
-- `tests/unit/` — pure-Python tests; no GPU, no checkpoint, no D-FINE source required.
-- `tests/integration/` — require a wrapped checkpoint and D-FINE source (`test_train`, `test_predict`, `test_export`).
+- `tests/unit/` — pure Python; no GPU, no checkpoint, no submodule required.
+- `tests/integration/` — use a session-scoped `tiny_checkpoint` fixture in `tests/conftest.py` that builds a small D-FINE-S model with random weights at test time (no download). The fixture overrides `num_layers=1`, `num_queries=10`, `num_denoising=0`, `depth_mult=0.1` to keep build time fast.
+- `tests/integration/test_train.py` — marked `xfail` (Phase 3 not implemented).
