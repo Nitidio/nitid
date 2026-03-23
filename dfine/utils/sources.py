@@ -70,7 +70,9 @@ class LoadSource:
         if self._mode == "array":
             yield self._process_frame(self.source, path="<ndarray>")
         elif self._mode == "image":
-            img = cv2.imread(str(self.source))
+            from PIL import Image as _PILImage
+            pil_img = _PILImage.open(str(self.source)).convert("RGB")
+            img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
             yield self._process_frame(img, path=str(self.source))
         elif self._mode in ("video", "webcam", "stream"):
             cap = cv2.VideoCapture(
@@ -92,13 +94,18 @@ class LoadSource:
                 yield from LoadSource(item, self.imgsz, self.device)
 
     def _process_frame(self, img: np.ndarray, path: str):
-        """Preprocess a BGR numpy frame → (tensor, orig_img, path)."""
+        """Preprocess a BGR numpy frame → (tensor, orig_img, path).
+
+        img is BGR numpy (HWC). The tensor is built with PIL+torchvision to
+        exactly match D-FINE's own preprocessing (T.Resize → T.ToTensor).
+        """
+        import torchvision.transforms as T
+        from PIL import Image as _PILImage
+
         orig_img = img.copy()
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img_resized = cv2.resize(img_rgb, (self.imgsz, self.imgsz))
-        tensor = torch.from_numpy(
-            img_resized.transpose(2, 0, 1).astype(np.float32) / 255.0
-        ).unsqueeze(0).to(self.device)
+        pil_img = _PILImage.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        transform = T.Compose([T.Resize((self.imgsz, self.imgsz)), T.ToTensor()])
+        tensor = transform(pil_img).unsqueeze(0).to(self.device)
         return tensor, orig_img, path
 
     def __len__(self) -> int:
