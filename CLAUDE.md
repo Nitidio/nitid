@@ -67,9 +67,13 @@ Raw D-FINE checkpoints need conversion — use real D-FINE configs from `extern/
 uv run python tools/convert_checkpoint.py \
     --weights dfine_l.pth \
     --config  extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
-    --names   extern/dfine/configs/dataset/coco_detection.yml \
+    --names   configs/datasets/coco.yml \
     --output  dfine_l_wrapped.pth
 ```
+
+`--names` must be a file with a `names:` mapping (nitid's `configs/datasets/coco.yml`, not the
+D-FINE dataset config which has no class names). The converter prefers EMA weights
+(`ckpt["ema"]["module"]`) when present, matching D-FINE's own inference scripts.
 
 ### nn layer (`dfine/nn/`)
 
