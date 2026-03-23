@@ -2,16 +2,23 @@
 import pytest
 
 
-@pytest.mark.xfail(reason="Phase 3: DFINETrainer._build_dataloader not yet implemented", strict=True)
-def test_train_runs(tiny_checkpoint, tmp_path):
+def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     from dfine import DFINE
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
-    model.train(data="configs/datasets/example_custom.yml", epochs=1,
-                project=str(tmp_path), name="test")
+    metrics = model.train(
+        data=tiny_dataset,
+        epochs=1,
+        batch=2,
+        project=str(tmp_path),
+        name="test",
+        verbose=False,
+    )
+    assert "loss" in metrics
+    assert (tmp_path / "test" / "epoch1.pth").exists()
 
 
-@pytest.mark.xfail(reason="Phase 3: DFINEValidator not yet implemented", strict=True)
-def test_val_runs(tiny_checkpoint):
+def test_val_runs(tiny_checkpoint, tiny_dataset):
     from dfine import DFINE
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
-    model.val(data="configs/datasets/example_custom.yml")
+    metrics = model.val(data=tiny_dataset, batch=2, verbose=False)
+    assert set(metrics) >= {"mAP50", "mAP50-95"}

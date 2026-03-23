@@ -1,6 +1,9 @@
 """
-Session-scoped fixture that builds a tiny D-FINE model with random weights
-and saves it as a wrapped nitid checkpoint.  No pretrained download needed.
+Session-scoped fixtures for integration tests.
+
+tiny_checkpoint — small wrapped .pth built from random weights (no download).
+tiny_dataset    — minimal synthetic COCO dataset (blank images + JSON anns)
+                  with a data YAML ready for train/val calls.
 """
 from pathlib import Path
 import pytest
@@ -39,3 +42,55 @@ def tiny_checkpoint(tmp_path_factory):
     ckpt_path = ckpt_dir / "tiny_dfine.pth"
     save_checkpoint(str(ckpt_path), model, cfg, names)
     return str(ckpt_path)
+
+
+@pytest.fixture(scope="session")
+def tiny_dataset(tmp_path_factory):
+    """
+    Returns the path to a data YAML backed by a minimal synthetic COCO dataset:
+      - 4 train images (64×64 black JPEG), 2 val images
+      - One annotation per image (category_id=1, bbox=[10,10,20,20])
+      - Two categories: 1=person, 2=car
+    """
+    import json
+    import numpy as np
+    import yaml
+    from PIL import Image as _PILImage
+
+    root = tmp_path_factory.mktemp("coco_dataset")
+
+    categories = [{"id": 1, "name": "person"}, {"id": 2, "name": "car"}]
+    ann_dir = root / "annotations"
+    ann_dir.mkdir()
+
+    for split, n_imgs in (("train", 4), ("val", 2)):
+        img_dir = root / "images" / split
+        img_dir.mkdir(parents=True)
+
+        images, annotations = [], []
+        for i in range(1, n_imgs + 1):
+            fname = f"{i:06d}.jpg"
+            _PILImage.fromarray(
+                np.zeros((64, 64, 3), dtype=np.uint8)
+            ).save(img_dir / fname)
+            images.append({"id": i, "file_name": fname, "width": 64, "height": 64})
+            annotations.append({
+                "id": i, "image_id": i, "category_id": 1,
+                "bbox": [10, 10, 20, 20], "area": 400, "iscrowd": 0,
+            })
+
+        with open(ann_dir / f"instances_{split}.json", "w") as f:
+            json.dump({"images": images, "annotations": annotations,
+                       "categories": categories}, f)
+
+    data_yaml = root / "data.yml"
+    with open(data_yaml, "w") as f:
+        yaml.dump({
+            "path":  str(root),
+            "train": "images/train",
+            "val":   "images/val",
+            "nc": 2,
+            "names": {0: "person", 1: "car"},
+        }, f)
+
+    return str(data_yaml)
