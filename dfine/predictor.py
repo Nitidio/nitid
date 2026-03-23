@@ -37,7 +37,7 @@ class DFINEPredictor:
     def _infer(self, loader: LoadSource, conf, classes) -> Generator:
         for tensor, orig_img, path in loader:
             h, w = orig_img.shape[:2]
-            orig_size = torch.tensor([[h, w]], dtype=torch.float32, device=self.device)
+            orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
             with torch.no_grad():
                 raw = self.model(tensor)
                 detections = self._postprocessor(raw, orig_size)
