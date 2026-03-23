@@ -32,6 +32,9 @@ dev = [
     "ruff",
     "mypy",
 ]
+train = [
+    "pycocotools>=2.0",
+]
 tensorrt = ["tensorrt>=8.6"]
 
 [project.scripts]

@@ -96,6 +96,7 @@ class DFINE:
             model=self._model,
             cfg=self._cfg,
             device=device or self._device_str,
+            names=self._names,
         )
         return trainer.train(
             data=data,
@@ -124,7 +125,7 @@ class DFINE:
     ) -> dict:
         """Evaluate on val/test split. Returns mAP50, mAP50-95, etc."""
         from dfine.validator import DFINEValidator
-        validator = DFINEValidator(self._model, self._cfg, self._device_str)
+        validator = DFINEValidator(self._model, self._cfg, self._device_str, self._names)
         return validator.run(
             data=data,
             imgsz=imgsz,
