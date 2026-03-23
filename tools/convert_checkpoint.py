@@ -13,20 +13,56 @@ Usage:
 """
 from __future__ import annotations
 import argparse
+import copy
 from pathlib import Path
 import torch
 import yaml
 
 
+def _load_config(file_path: str | Path) -> dict:
+    """
+    Load a D-FINE YAML config, recursively resolving ``__include__`` directives.
+    Mirrors the logic in extern/dfine/src/core/yaml_utils.py so that
+    convert_checkpoint.py works without importing the D-FINE package.
+    """
+    file_path = Path(file_path).resolve()
+    with open(file_path) as f:
+        file_cfg = yaml.safe_load(f) or {}
+
+    merged: dict = {}
+    for base_yaml in file_cfg.pop("__include__", []):
+        base_path = Path(base_yaml)
+        if not base_path.is_absolute():
+            base_path = file_path.parent / base_yaml
+        _merge(merged, _load_config(base_path))
+
+    _merge(merged, file_cfg)
+    return merged
+
+
+def _merge(dst: dict, src: dict) -> dict:
+    for k, v in src.items():
+        if k in dst and isinstance(dst[k], dict) and isinstance(v, dict):
+            _merge(dst[k], v)
+        else:
+            dst[k] = copy.deepcopy(v)
+    return dst
+
+
 def convert(weights: str, config: str, names_file: str, output: str) -> None:
     print(f"Loading weights from {weights}")
-    ckpt = torch.load(weights, map_location="cpu", weights_only=True)
+    ckpt = torch.load(weights, map_location="cpu", weights_only=False)
 
-    # Raw D-FINE checkpoints may store weights under "model" or at top level
-    state_dict = ckpt.get("model", ckpt)
+    # Raw D-FINE checkpoints store EMA weights at ckpt["ema"]["module"] when present
+    # (same priority as D-FINE's own inference scripts).  Fall back to ckpt["model"].
+    if "ema" in ckpt:
+        state_dict = ckpt["ema"]["module"]
+        print("Using EMA weights (ckpt['ema']['module'])")
+    else:
+        state_dict = ckpt.get("model", ckpt)
+        print("Using model weights (ckpt['model'])")
 
-    with open(config) as f:
-        cfg = yaml.safe_load(f)
+    cfg = _load_config(config)
 
     with open(names_file) as f:
         names_cfg = yaml.safe_load(f)
