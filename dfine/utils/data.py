@@ -31,6 +31,7 @@ from torch.utils.data import DataLoader, Dataset
 
 
 def load_data_yaml(path: str | Path) -> dict:
+    """Load an ultralytics-style data YAML and return it as a plain dict."""
     with open(path) as f:
         return yaml.safe_load(f)
 
@@ -101,6 +102,7 @@ class CocoFinetuneDataset(Dataset):
 
 
 def _collate(batch):
+    """Stack images into [B,C,H,W]; keep targets as a list of dicts."""
     images, targets = zip(*batch)
     return torch.stack(images), list(targets)
 
