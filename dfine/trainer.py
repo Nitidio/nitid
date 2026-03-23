@@ -3,16 +3,20 @@ DFINETrainer — fine-tuning engine.
 Called internally by DFINE.train(). Not part of the public API.
 """
 from __future__ import annotations
+
 from pathlib import Path
+
 import torch
+from dfine.utils.checkpoint import save_checkpoint
 from dfine.utils.logging import LOGGER
 
 
 class DFINETrainer:
-    def __init__(self, model, cfg: dict, device: str) -> None:
+    def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
         self.model = model
         self.cfg = cfg
         self.device = device
+        self.names = names
 
     def train(
         self,
@@ -28,21 +32,6 @@ class DFINETrainer:
         name: str,
         verbose: bool,
     ) -> dict:
-        """
-        Core training loop.
-
-        Pattern:
-            for epoch in range(epochs):
-                for batch in dataloader:
-                    optimizer.zero_grad()
-                    loss = criterion(model(batch))
-                    loss.backward()
-                    clip_grad_norm_(model.parameters(), max_norm=0.1)
-                    optimizer.step()
-                    ema.update()
-                scheduler.step()
-                save_checkpoint(...)
-        """
         save_dir = Path(project) / name
         save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -52,26 +41,53 @@ class DFINETrainer:
         criterion = self._build_criterion()
 
         self.model.train()
-        metrics = {}
+        criterion.train()
+        weight_dict = criterion.weight_dict
+        metrics: dict = {}
 
         for epoch in range(epochs):
             epoch_loss = 0.0
-            for batch_data in dataloader:
+
+            for images, targets in dataloader:
+                images = images.to(self.device)
+                targets = [
+                    {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                     for k, v in t.items()}
+                    for t in targets
+                ]
+
                 opt.zero_grad()
-                loss = criterion(self.model, batch_data)
+                outputs = self.model(images, targets=targets)
+                loss_dict = criterion(outputs, targets)
+                loss = sum(
+                    loss_dict[k] * weight_dict[k]
+                    for k in loss_dict if k in weight_dict
+                )
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.1)
                 opt.step()
                 epoch_loss += loss.item()
+
             scheduler.step()
+            metrics["loss"] = epoch_loss
+
             if verbose:
-                LOGGER.info(f"Epoch {epoch+1}/{epochs}  loss={epoch_loss:.4f}")
+                LOGGER.info(f"Epoch {epoch + 1}/{epochs}  loss={epoch_loss:.4f}")
+
+            save_checkpoint(
+                save_dir / f"epoch{epoch + 1}.pth",
+                self.model,
+                self.cfg,
+                self.names,
+                epoch=epoch + 1,
+                metrics=metrics,
+            )
 
         return metrics
 
     def _build_dataloader(self, data: str, imgsz: int, batch: int):
-        # TODO: implement COCO-style dataset loader
-        raise NotImplementedError
+        from dfine.utils.data import build_coco_dataloader
+        return build_coco_dataloader(data, split="train", imgsz=imgsz, batch_size=batch)
 
     def _build_optimizer(self, name: str, lr: float):
         if name == "AdamW":
@@ -81,7 +97,6 @@ class DFINETrainer:
         raise ValueError(f"Unknown optimizer: {name}")
 
     def _build_scheduler(self, opt, epochs: int, lrf: float):
-        # Linear decay from lr0 to lr0*lrf over all epochs
         return torch.optim.lr_scheduler.LinearLR(
             opt, start_factor=1.0, end_factor=lrf, total_iters=epochs
         )
