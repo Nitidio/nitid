@@ -48,7 +48,7 @@ def load_checkpoint(path: str | Path, device: str = "cpu"):
     model = build_model(cfg)
     model.load_state_dict(ckpt["model"])
     model.to(device)
-    model.deploy()  # prunes unused decoder layers + materialises weighting fn as static tensor
+    model.eval()
     return model, cfg, names
 
 
