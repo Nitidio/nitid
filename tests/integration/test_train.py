@@ -21,4 +21,4 @@ def test_val_runs(tiny_checkpoint, tiny_dataset):
     from dfine import DFINE
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     metrics = model.val(data=tiny_dataset, batch=2, verbose=False)
-    assert set(metrics) >= {"mAP50", "mAP50-95"}
+    assert set(metrics) >= {"mAP50", "mAP50-95", "AR1", "AR100"}

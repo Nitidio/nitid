@@ -12,6 +12,15 @@ from dfine.utils.logging import LOGGER
 
 
 class DFINETrainer:
+    """
+    Fine-tuning loop for D-FINE.
+
+    Loads a COCO-format dataset, trains for the requested number of epochs
+    with gradient clipping, and saves a wrapped checkpoint after each epoch.
+    The criterion and weight dict come from the checkpoint's embedded config
+    so loss weighting stays consistent with the original training setup.
+    """
+
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
         self.model = model
         self.cfg = cfg
@@ -32,6 +41,25 @@ class DFINETrainer:
         name: str,
         verbose: bool,
     ) -> dict:
+        """
+        Run the fine-tuning loop.
+
+        Args:
+            data:      Path to the data YAML (ultralytics-style).
+            epochs:    Number of training epochs.
+            imgsz:     Input image size (square).
+            batch:     Batch size.
+            lr0:       Initial learning rate.
+            lrf:       Final LR as a fraction of lr0 (linear decay).
+            optimizer: ``"AdamW"`` or ``"SGD"``.
+            resume:    Reserved for future use (checkpoint resume).
+            project:   Root output directory.
+            name:      Run name; checkpoints saved to ``<project>/<name>/``.
+            verbose:   Print per-epoch loss.
+
+        Returns:
+            Metrics dict with at least ``{"loss": <final_epoch_loss>}``.
+        """
         save_dir = Path(project) / name
         save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -90,6 +118,8 @@ class DFINETrainer:
         return build_coco_dataloader(data, split="train", imgsz=imgsz, batch_size=batch)
 
     def _build_optimizer(self, name: str, lr: float):
+        # All parameters share the same lr; D-FINE's param-group logic
+        # (backbone vs encoder/decoder) is reserved for a future iteration.
         if name == "AdamW":
             return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-4)
         if name == "SGD":
@@ -97,6 +127,7 @@ class DFINETrainer:
         raise ValueError(f"Unknown optimizer: {name}")
 
     def _build_scheduler(self, opt, epochs: int, lrf: float):
+        # Linear decay: lr starts at lr0, ends at lr0*lrf after `epochs` steps.
         return torch.optim.lr_scheduler.LinearLR(
             opt, start_factor=1.0, end_factor=lrf, total_iters=epochs
         )

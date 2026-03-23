@@ -11,9 +11,18 @@ from dfine.utils.ops import clip_boxes
 
 
 class DFINEPredictor:
+    """
+    Runs inference for a single source (image, video, directory, stream, …).
+
+    On first use the model is put into deploy mode (BN fusion + weighting
+    function materialisation). The ``_deployed`` flag prevents a second
+    deploy() call if the same DFINE instance is used for multiple predict()
+    calls, since BN fusion is a one-way operation.
+    """
+
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
         if not getattr(model, "_deployed", False):
-            model.deploy()  # fuses BN, materialises weighting fn
+            model.deploy()  # fuses BN, materialises weighting fn as static tensor
             model._deployed = True
         self.model = model
         self.device = device
@@ -33,11 +42,13 @@ class DFINEPredictor:
         augment: bool,
         verbose: bool,
     ) -> list | Generator:
+        """Iterate over source and return results (list or generator if stream=True)."""
         loader = LoadSource(source, imgsz=imgsz, device=self.device)
         gen = self._infer(loader, conf, classes)
         return gen if stream else list(gen)
 
     def _infer(self, loader: LoadSource, conf, classes) -> Generator:
+        """Yield one Results object per frame/image."""
         for tensor, orig_img, path in loader:
             h, w = orig_img.shape[:2]
             orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
