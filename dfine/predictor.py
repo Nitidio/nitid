@@ -12,6 +12,9 @@ from dfine.utils.ops import clip_boxes
 
 class DFINEPredictor:
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
+        if not getattr(model, "_deployed", False):
+            model.deploy()  # fuses BN, materialises weighting fn
+            model._deployed = True
         self.model = model
         self.device = device
         self.names = names
