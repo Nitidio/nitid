@@ -2,7 +2,7 @@
 import torch
 import pytest
 from pathlib import Path
-from dfine.utils.checkpoint import save_checkpoint
+from dfine.utils.checkpoint import save_checkpoint, load_checkpoint
 
 
 def test_save_checkpoint_structure(tmp_path):
@@ -24,3 +24,23 @@ def test_save_checkpoint_structure(tmp_path):
     assert "names" in ckpt
     assert ckpt["epoch"] == 5
     assert ckpt["names"][0] == "person"
+
+
+def test_load_checkpoint_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_checkpoint(tmp_path / "nonexistent.pth")
+
+
+def test_load_checkpoint_missing_config_key(tmp_path):
+    """A raw (unconverted) checkpoint missing 'config' should raise KeyError."""
+    import torch.nn as nn
+
+    class TinyModel(nn.Module):
+        def __init__(self): super().__init__(); self.l = nn.Linear(2, 2)
+        def forward(self, x): return self.l(x)
+
+    path = tmp_path / "raw.pth"
+    torch.save({"model": TinyModel().state_dict()}, str(path))
+
+    with pytest.raises(KeyError, match="config"):
+        load_checkpoint(path)
