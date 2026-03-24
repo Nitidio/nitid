@@ -125,6 +125,8 @@ model.info()
 # Export
 model.export(format="onnx")
 model.export(format="torchscript")
+model.export(format="tensorrt")          # requires: uv sync --extra tensorrt
+model.export(format="tensorrt", half=True)   # FP16
 ```
 
 ### Key differences from Ultralytics YOLO
@@ -134,7 +136,7 @@ model.export(format="torchscript")
 | Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
 | Raw weights | Download directly | Run `convert_checkpoint.py` first |
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
-| TensorRT export | Supported | Not yet implemented |
+| TensorRT export | Supported | Supported (`uv sync --extra tensorrt`) |
 | AMP / EMA training | Supported | Not yet implemented |
 | `model.task` | `"detect"`, `"segment"`, … | Always `"detect"` |
 

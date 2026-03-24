@@ -145,6 +145,7 @@ class DFINE:
         dynamic: bool = False,
         simplify: bool = True,
         opset: int = 17,
+        half: bool = False,
         device: str | None = None,
         verbose: bool = True,
     ) -> Path:
@@ -162,6 +163,7 @@ class DFINE:
             dynamic=dynamic,
             simplify=simplify,
             opset=opset,
+            half=half,
             verbose=verbose,
         )
 

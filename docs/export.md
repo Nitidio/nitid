@@ -1,6 +1,6 @@
 # Export
 
-Export a nitid-wrapped checkpoint to ONNX or TorchScript for deployment.
+Export a nitid-wrapped checkpoint to ONNX, TorchScript, or TensorRT for deployment.
 
 ## ONNX
 
@@ -49,9 +49,46 @@ D-FINE's forward pass returns a dict.
 
 ## TensorRT
 
-TensorRT export is not yet implemented. Calling `model.export(format="tensorrt")` raises `NotImplementedError`.
+Requires the `tensorrt` extra:
 
-The intended workflow when implemented will be: export to ONNX first, then convert with `trtexec` or the TensorRT Python API.
+```bash
+uv sync --extra tensorrt
+```
+
+```python
+model.export(format="tensorrt")
+# → dfine_640.engine
+```
+
+```bash
+uv run dfine export model=dfine_l_wrapped.pth format=tensorrt
+```
+
+The workflow is: trace model → temporary ONNX → TensorRT engine (the intermediate ONNX is removed automatically). Requires a CUDA-capable GPU.
+
+### Options
+
+| Argument   | Default | Description |
+|------------|---------|-------------|
+| `imgsz`    | 640     | Input spatial size — **must match** `eval_spatial_size` |
+| `batch`    | 1       | Static batch size (use `dynamic=True` for variable batch) |
+| `dynamic`  | `False` | Build engine with dynamic batch axis (min=1, opt=batch, max=batch×4) |
+| `half`     | `False` | Enable FP16 precision |
+
+### FP16
+
+```python
+model.export(format="tensorrt", half=True)
+```
+
+FP16 halves memory usage and typically improves throughput on modern GPUs. nitid warns if the GPU reports no native FP16 support but still builds the engine.
+
+### Dynamic batch
+
+```python
+model.export(format="tensorrt", dynamic=True, batch=4)
+# min=1, opt=4, max=16
+```
 
 ## Constraint: `imgsz` must match `eval_spatial_size`
 
