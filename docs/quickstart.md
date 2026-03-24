@@ -113,6 +113,7 @@ json_data = results[0].to_json()   # list of dicts
 
 # Fine-tune
 model.train(data="my_dataset.yml", epochs=50, batch=16)
+model.train(data="my_dataset.yml", epochs=50, amp=True, ema=True)  # with AMP + EMA
 
 # Evaluate
 metrics = model.val(data="my_dataset.yml")
@@ -137,7 +138,7 @@ model.export(format="tensorrt", half=True)   # FP16
 | Raw weights | Download directly | Run `convert_checkpoint.py` first |
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
 | TensorRT export | Supported | Supported (`uv sync --extra tensorrt`) |
-| AMP / EMA training | Supported | Not yet implemented |
+| AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
 | `model.task` | `"detect"`, `"segment"`, … | Always `"detect"` |
 
 ### CLI
