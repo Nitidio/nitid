@@ -156,7 +156,22 @@ model.task    # "detect"                           — always "detect"
 
 ### `model.info()`
 
-> **Not yet implemented.** Raises `NotImplementedError`. Planned to return param count, GFLOPs, and on-disk size.
+```python
+info = model.info(detailed=False, verbose=True)
+# [D-FINE] 31.4M params (31.4M trainable)  120.3 GFLOPs  98.6 MB
+# {
+#   "params":           31_400_000,
+#   "params_trainable": 31_400_000,
+#   "gflops":           120.3,       # None if profiling unavailable
+#   "size_mb":          98.6,        # None if checkpoint file moved
+# }
+```
+
+`detailed=True` adds a `"layers"` key mapping each parameter name to its element count.
+
+GFLOPs are measured via `torch.profiler` (counts conv, linear, and matmul ops).
+The figure covers a single `[1, 3, 640, 640]` forward pass and is `None` on
+the rare case profiling raises an exception.
 
 ---
 

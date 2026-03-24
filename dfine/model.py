@@ -168,8 +168,67 @@ class DFINE:
     # ── Utilities ───────────────────────────────────────────────────────────
 
     def info(self, detailed: bool = False, verbose: bool = True) -> dict:
-        """Return model info: param count, GFLOPs, size on disk."""
-        raise NotImplementedError
+        """
+        Return model info: parameter count, GFLOPs, and on-disk size.
+
+        Args:
+            detailed: If True, also break down parameters per layer.
+            verbose:  Print a one-line summary.
+
+        Returns:
+            dict with keys ``params``, ``params_trainable``, ``gflops``, ``size_mb``.
+            ``gflops`` is ``None`` when profiling fails.
+            ``size_mb`` is ``None`` when the checkpoint path no longer exists.
+        """
+        from pathlib import Path
+        import torch
+
+        n_params     = sum(p.numel() for p in self._model.parameters())
+        n_trainable  = sum(p.numel() for p in self._model.parameters() if p.requires_grad)
+
+        # On-disk size
+        p = Path(self._path)
+        size_mb = p.stat().st_size / 1e6 if p.exists() else None
+
+        # GFLOPs via torch.profiler (counts conv/linear/matmul without extra deps)
+        gflops = None
+        try:
+            h, w = self._cfg.get("eval_spatial_size", [640, 640])
+            dummy = torch.zeros(1, 3, h, w, device=self._device_str)
+            with torch.profiler.profile(
+                activities=[torch.profiler.ProfilerActivity.CPU],
+                with_flops=True,
+            ) as prof:
+                with torch.no_grad():
+                    self._model(dummy)
+            total_flops = sum(e.flops for e in prof.key_averages())
+            gflops = total_flops / 1e9
+        except Exception:
+            pass
+
+        result = {
+            "params":           n_params,
+            "params_trainable": n_trainable,
+            "gflops":           gflops,
+            "size_mb":          size_mb,
+        }
+
+        if verbose:
+            gflop_str = f"{gflops:.1f} GFLOPs" if gflops is not None else "GFLOPs n/a"
+            size_str  = f"{size_mb:.1f} MB" if size_mb is not None else "size n/a"
+            print(
+                f"[D-FINE] {n_params/1e6:.1f}M params "
+                f"({n_trainable/1e6:.1f}M trainable)  "
+                f"{gflop_str}  {size_str}"
+            )
+
+        if detailed:
+            result["layers"] = {
+                name: p.numel()
+                for name, p in self._model.named_parameters()
+            }
+
+        return result
 
     @property
     def names(self) -> dict[int, str]:
@@ -191,6 +250,7 @@ class DFINE:
         from dfine.utils.checkpoint import load_checkpoint
         from dfine.utils.device import resolve_device
         self._device_str = resolve_device(self._device_str)
+        self._path = str(path)
         self._model, self._cfg, self._names = load_checkpoint(
             path, device=self._device_str
         )
