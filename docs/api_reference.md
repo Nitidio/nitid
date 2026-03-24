@@ -97,6 +97,9 @@ metrics = model.train(
     lr0=1e-4,
     lrf=0.01,
     optimizer="AdamW",   # or "SGD"
+    amp=True,            # FP16 mixed precision (CUDA only)
+    ema=True,            # EMA weight averaging
+    ema_decay=0.9999,
     project="runs/train",
     name="exp",
 )

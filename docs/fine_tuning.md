@@ -112,17 +112,73 @@ uv run dfine train \
 
 ### Key parameters
 
-| Parameter   | Default      | Description |
-|-------------|--------------|-------------|
-| `epochs`    | 50           | Number of training epochs |
-| `batch`     | 16           | Batch size |
-| `imgsz`     | 640          | Input resolution (square) |
-| `lr0`       | 1e-4         | Initial learning rate |
-| `lrf`       | 0.01         | Final LR factor (linear decay: ends at `lr0 * lrf`) |
-| `optimizer` | `"AdamW"`    | `"AdamW"` or `"SGD"` |
-| `project`   | `runs/train` | Output root directory |
-| `name`      | `exp`        | Run name |
-| `resume`    | `False`      | Reserved — not yet implemented |
+| Parameter    | Default      | Description |
+|--------------|--------------|-------------|
+| `epochs`     | 50           | Number of training epochs |
+| `batch`      | 16           | Batch size |
+| `imgsz`      | 640          | Input resolution (square) |
+| `lr0`        | 1e-4         | Initial learning rate |
+| `lrf`        | 0.01         | Final LR factor (linear decay: ends at `lr0 * lrf`) |
+| `optimizer`  | `"AdamW"`    | `"AdamW"` or `"SGD"` |
+| `amp`        | `False`      | Enable AMP mixed-precision (CUDA only) |
+| `ema`        | `False`      | Enable EMA weight averaging |
+| `ema_decay`  | 0.9999       | EMA decay factor (ignored when `ema=False`) |
+| `project`    | `runs/train` | Output root directory |
+| `name`       | `exp`        | Run name |
+| `resume`     | `False`      | Reserved — not yet implemented |
+
+## AMP — mixed-precision training
+
+AMP uses `torch.amp.autocast` and `GradScaler` to run the forward pass in
+FP16 while keeping the master weights in FP32. It typically cuts GPU memory
+usage by ~40 % and speeds up training on modern NVIDIA GPUs.
+
+```python
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    batch=32,        # larger batch fits in GPU memory with AMP
+    amp=True,
+)
+```
+
+> **CPU fallback:** `amp=True` is silently ignored on CPU devices (a warning
+> is logged). Training continues in full precision.
+
+## EMA — exponential moving average
+
+EMA maintains a shadow copy of the model whose weights are updated after
+every optimiser step:
+
+```
+ema_weight = decay × ema_weight + (1 − decay) × model_weight
+```
+
+The EMA weights are what gets saved to the epoch checkpoint, so loading
+`DFINE("epoch50.pth")` gives you the more stable EMA model directly.
+Integer parameters (e.g. anchor indices) are copied verbatim rather than
+blended.
+
+```python
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    ema=True,
+    ema_decay=0.9999,   # standard value; lower = faster adaptation
+)
+```
+
+### AMP + EMA together
+
+```python
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    batch=32,
+    amp=True,
+    ema=True,
+)
+```
 
 ## Validation
 
@@ -161,4 +217,6 @@ uv run dfine val \
   `predict()` call after training.
 - Loss weighting (`weight_dict`) comes from the checkpoint's embedded D-FINE
   config so it stays consistent with the original pre-training setup.
-- AMP (mixed precision) and EMA are not yet enabled; planned for a future phase.
+- When `ema=True` the saved checkpoint contains EMA weights. Loading it with
+  `DFINE(path)` gives you the EMA model directly — no extra step needed.
+- AMP is only active on CUDA; on CPU it degrades gracefully to full precision.
