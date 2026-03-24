@@ -124,21 +124,23 @@ metrics = model.val(
 
 ### `export()`
 
-Export to ONNX or TorchScript. See [export.md](export.md).
+Export to ONNX, TorchScript, or TensorRT. See [export.md](export.md).
 
 ```python
-model.export(format="onnx")        # saves dfine_l_wrapped.onnx
-model.export(format="torchscript") # saves dfine_l_wrapped.torchscript
+model.export(format="onnx")        # → dfine_640.onnx
+model.export(format="torchscript") # → dfine_640.torchscript
+model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt extra)
 ```
 
-| Argument    | Default | Description |
-|-------------|---------|-------------|
-| `format`    | `"onnx"`| `"onnx"` or `"torchscript"` |
-| `imgsz`     | 640     | Must match model's `eval_spatial_size` |
-| `batch`     | 1       | Static batch size |
-| `dynamic`   | `False` | Dynamic batch/spatial axes (ONNX only) |
-| `simplify`  | `True`  | Run onnxsim after export |
-| `opset`     | 17      | ONNX opset version |
+| Argument    | Default  | Description |
+|-------------|----------|-------------|
+| `format`    | `"onnx"` | `"onnx"`, `"torchscript"`, or `"tensorrt"` |
+| `imgsz`     | 640      | Must match model's `eval_spatial_size` |
+| `batch`     | 1        | Static batch size |
+| `dynamic`   | `False`  | Dynamic batch axis (ONNX and TensorRT) |
+| `half`      | `False`  | FP16 precision (TensorRT only) |
+| `simplify`  | `True`   | Run onnxsim after export (ONNX only) |
+| `opset`     | 17       | ONNX opset version (ONNX only) |
 
 ---
 
