@@ -118,6 +118,10 @@ model.train(data="my_dataset.yml", epochs=50, batch=16)
 metrics = model.val(data="my_dataset.yml")
 # {"mAP50-95": ..., "mAP50": ..., "AR1": ..., "AR100": ...}
 
+# Model info
+model.info()
+# [D-FINE] 31.4M params (31.4M trainable)  120.3 GFLOPs  98.6 MB
+
 # Export
 model.export(format="onnx")
 model.export(format="torchscript")
@@ -129,7 +133,7 @@ model.export(format="torchscript")
 |---------|-----------------|-------------|
 | Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
 | Raw weights | Download directly | Run `convert_checkpoint.py` first |
-| `model.info()` | Returns param/FLOP stats | `NotImplementedError` (not yet implemented) |
+| `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
 | TensorRT export | Supported | Not yet implemented |
 | AMP / EMA training | Supported | Not yet implemented |
 | `model.task` | `"detect"`, `"segment"`, … | Always `"detect"` |
