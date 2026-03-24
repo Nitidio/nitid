@@ -8,10 +8,15 @@ git submodule update --init        # pulls extern/dfine
 uv sync --extra dev
 ```
 
-## Convert a raw D-FINE checkpoint
+---
 
-Raw D-FINE checkpoints (weights only) must be converted to the nitid self-contained format
-before use. The converter embeds the model config and class names into a single `.pth` file.
+## For D-FINE users
+
+If you already have a raw D-FINE checkpoint, nitid wraps it in a self-contained
+`.pth` that embeds the model config and class names — so you only ever deal with
+one file.
+
+### 1. Convert your checkpoint
 
 ```bash
 uv run python tools/convert_checkpoint.py \
@@ -21,53 +26,119 @@ uv run python tools/convert_checkpoint.py \
     --output  dfine_l_wrapped.pth
 ```
 
-**Important notes:**
-- `--config` must be one of the canonical D-FINE configs from `extern/dfine/configs/`. The
-  converter resolves all `__include__` directives so the full model definition is embedded.
-- `--names` must be a file with a `names:` mapping (`{int: str}` or list). Use
-  `configs/datasets/coco.yml` for COCO models, or your own dataset config.
+- `--config` must be one of the canonical D-FINE configs from `extern/dfine/configs/`.
+  The converter resolves all `__include__` directives and embeds the full model definition.
+- `--names` must be a file with a `names:` mapping. Use `configs/datasets/coco.yml` for
+  COCO models, or your own dataset config.
 - When the raw checkpoint contains EMA weights (`ckpt["ema"]["module"]`), the converter
-  automatically uses them — this matches D-FINE's own inference scripts and gives better
+  uses them automatically — this matches D-FINE's own inference scripts and gives better
   accuracy than the non-EMA weights.
 
-## Predict
+### 2. Run inference
 
 ```python
 from dfine import DFINE
 
 model = DFINE("dfine_l_wrapped.pth")
 results = model.predict("image.jpg", conf=0.5)
-
-for r in results:
-    print(r)          # Results(path='image.jpg', detections=17)
-    r.save("out.jpg") # draws boxes and saves
+results[0].save("out.jpg")
 ```
 
-Or via the CLI:
+The interface is intentionally close to D-FINE's own inference scripts, but with
+pre/post-processing handled for you. `results[0].boxes.xyxy` is in absolute pixel
+coordinates; no manual rescaling needed.
+
+### 3. Fine-tune on your data
+
+Prepare a COCO-format dataset and a data YAML (see [fine_tuning.md](fine_tuning.md)):
+
+```python
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    batch=8,
+    lr0=1e-4,
+    optimizer="AdamW",
+)
+```
+
+Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly with
+`DFINE("epoch50.pth")` — config and names travel with the weights.
+
+---
+
+## For Ultralytics users
+
+nitid mirrors the `ultralytics.YOLO` interface. If you already use YOLO, the
+switch is mostly a one-line change.
+
+### Drop-in replacement
+
+```python
+# Before
+from ultralytics import YOLO
+model = YOLO("yolo11n.pt")
+
+# After
+from dfine import DFINE
+model = DFINE("dfine_l_wrapped.pth")
+```
+
+All the patterns you already know work the same way:
+
+```python
+# Inference
+results = model("image.jpg", conf=0.5)
+results = model.predict("image.jpg", conf=0.5, classes=[0, 2])
+
+# Streaming (memory-efficient for video)
+for r in model.predict("video.mp4", stream=True):
+    annotated = r.plot()
+
+# Iterate boxes
+for i in range(len(results[0].boxes)):
+    x1, y1, x2, y2 = results[0].boxes.xyxy[i].tolist()
+    conf = results[0].boxes.conf[i].item()
+    name = results[0].names[int(results[0].boxes.cls[i])]
+
+# Normalised coords (same as YOLO)
+boxes_n = results[0].boxes.xyxyn   # 0–1 range
+boxes_wh = results[0].boxes.xywh   # cx cy w h absolute
+boxes_whn = results[0].boxes.xywhn # cx cy w h normalised
+
+# Save / show / serialise
+results[0].save("out.jpg")
+results[0].show()
+json_data = results[0].to_json()   # list of dicts
+
+# Fine-tune
+model.train(data="my_dataset.yml", epochs=50, batch=16)
+
+# Evaluate
+metrics = model.val(data="my_dataset.yml")
+# {"mAP50-95": ..., "mAP50": ..., "AR1": ..., "AR100": ...}
+
+# Export
+model.export(format="onnx")
+model.export(format="torchscript")
+```
+
+### Key differences from Ultralytics YOLO
+
+| Feature | Ultralytics YOLO | nitid DFINE |
+|---------|-----------------|-------------|
+| Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
+| Raw weights | Download directly | Run `convert_checkpoint.py` first |
+| `model.info()` | Returns param/FLOP stats | `NotImplementedError` (not yet implemented) |
+| TensorRT export | Supported | Not yet implemented |
+| AMP / EMA training | Supported | Not yet implemented |
+| `model.task` | `"detect"`, `"segment"`, … | Always `"detect"` |
+
+### CLI
 
 ```bash
 uv run dfine predict model=dfine_l_wrapped.pth source=image.jpg conf=0.5
-```
-
-## Iterate detections
-
-```python
-result = results[0]
-boxes = result.boxes          # Boxes object
-
-for i in range(len(boxes)):
-    x1, y1, x2, y2 = boxes.xyxy[i].tolist()
-    conf = boxes.conf[i].item()
-    cls  = int(boxes.cls[i].item())
-    name = result.names[cls]
-    print(f"{name} {conf:.2f}  [{x1:.0f} {y1:.0f} {x2:.0f} {y2:.0f}]")
-```
-
-## Export
-
-```bash
+uv run dfine train  model=dfine_l_wrapped.pth data=my_dataset.yml epochs=50
+uv run dfine val    model=dfine_l_wrapped.pth data=my_dataset.yml
 uv run dfine export model=dfine_l_wrapped.pth format=onnx
-uv run dfine export model=dfine_l_wrapped.pth format=torchscript
 ```
-
-Export `imgsz` must match the model's `eval_spatial_size` (default 640). See `docs/export.md`.

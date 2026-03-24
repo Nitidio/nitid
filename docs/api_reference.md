@@ -49,9 +49,17 @@ Returns `list[Results]` (or a generator when `stream=True`).
 ```python
 r = results[0]
 r.plot()            # → HWC BGR ndarray with boxes drawn
-r.save("out.jpg")   # save plotted image
+r.save("out.jpg")   # write plotted image to disk
+r.show()            # display in a window (blocks until key press)
 r.to_json()         # → list[dict] with box/score/class per detection
 len(r)              # number of detections
+```
+
+Stream predictions with `stream=True` to avoid buffering all frames in memory:
+
+```python
+for r in model.predict("video.mp4", stream=True, conf=0.3):
+    annotated = r.plot()   # process one frame at a time
 ```
 
 #### `Boxes`
@@ -134,10 +142,36 @@ model.export(format="torchscript") # saves dfine_l_wrapped.torchscript
 
 ---
 
-### `model.names`
+### Properties
 
 ```python
-model.names  # {0: "person", 1: "bicycle", ...}
+model.names   # {0: "person", 1: "bicycle", ...}  — class index → name
+model.device  # "cpu" or "cuda:0"                 — device the model lives on
+model.task    # "detect"                           — always "detect"
 ```
 
-Class index → name mapping embedded in the checkpoint.
+`names` is the class mapping embedded in the checkpoint.
+
+---
+
+### `model.info()`
+
+> **Not yet implemented.** Raises `NotImplementedError`. Planned to return param count, GFLOPs, and on-disk size.
+
+---
+
+## Error handling
+
+| Situation | Exception |
+|-----------|-----------|
+| Checkpoint file not found | `FileNotFoundError` |
+| File exists but has no embedded config (raw D-FINE .pth) | `KeyError` — run `tools/convert_checkpoint.py` first |
+| `export(format=…)` with unsupported format | `ValueError` |
+| `train(optimizer=…)` with unknown name | `ValueError` |
+
+```python
+try:
+    model = DFINE("my_model.pth")
+except FileNotFoundError:
+    print("Checkpoint not found — check the path")
+```

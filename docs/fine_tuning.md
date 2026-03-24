@@ -57,15 +57,23 @@ val_ann:   annotations/my_val.json
 
 #### Category ID mapping
 
-By default nitid sorts the category IDs found in the annotation file and maps
-them to 0-based label indices. If your IDs are not contiguous or follow a
-custom order, override with a `cat_ids` block:
+COCO annotation files use arbitrary `category_id` integers (often starting at
+1, or non-contiguous). nitid needs 0-based label indices for the model head.
+By default it sorts the `category_id` values found in the annotation file and
+maps them to `0, 1, 2, …` in that order.
+
+If your IDs are non-contiguous or in a custom order, supply an explicit mapping:
 
 ```yaml
+# annotation file has category_id 1 and 3 (no 2)
 cat_ids:
-  1: 0   # category_id 1 → label 0 (person)
-  3: 1   # category_id 3 → label 1 (car)
+  1: 0   # category_id 1  →  label index 0  (person)
+  3: 1   # category_id 3  →  label index 1  (car)
 ```
+
+Without this override, the auto-mapping would produce the same result for IDs
+`{1, 3}` because they sort to `[1, 3]` → `[0, 1]`. The override is only
+needed when you want a *different* ordering than sorted order.
 
 ## Fine-tuning
 
@@ -110,10 +118,11 @@ uv run dfine train \
 | `batch`     | 16           | Batch size |
 | `imgsz`     | 640          | Input resolution (square) |
 | `lr0`       | 1e-4         | Initial learning rate |
-| `lrf`       | 0.01         | Final LR factor (linear decay) |
-| `optimizer` | AdamW        | `"AdamW"` or `"SGD"` |
+| `lrf`       | 0.01         | Final LR factor (linear decay: ends at `lr0 * lrf`) |
+| `optimizer` | `"AdamW"`    | `"AdamW"` or `"SGD"` |
 | `project`   | `runs/train` | Output root directory |
 | `name`      | `exp`        | Run name |
+| `resume`    | `False`      | Reserved — not yet implemented |
 
 ## Validation
 
