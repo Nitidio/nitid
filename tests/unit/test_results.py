@@ -55,3 +55,59 @@ def test_results_json(dummy_result):
     assert j[0]["name"] == "person"
     assert "confidence" in j[0]
     assert "box" in j[0]
+
+
+def test_results_json_unknown_class(dummy_boxes):
+    """to_json() falls back to 'unknown' when class id missing from names."""
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    r = Results(orig_img=img, path="x.jpg", names={}, boxes=dummy_boxes)
+    j = r.to_json()
+    assert j[0]["name"] == "unknown"
+
+
+def test_results_json_empty():
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    r = Results(orig_img=img, path="x.jpg", names={}, boxes=None)
+    assert r.to_json() == []
+
+
+def test_results_plot_returns_ndarray(dummy_result):
+    out = dummy_result.plot()
+    assert isinstance(out, np.ndarray)
+    assert out.shape == dummy_result.orig_img.shape
+
+
+def test_results_plot_no_boxes():
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    r = Results(orig_img=img, path="x.jpg", names={}, boxes=None)
+    out = r.plot()
+    assert out.shape == img.shape
+
+
+def test_results_save(tmp_path, dummy_result):
+    out_file = tmp_path / "out.jpg"
+    dummy_result.save(str(out_file))
+    assert out_file.exists()
+    assert out_file.stat().st_size > 0
+
+
+def test_boxes_xywh(dummy_boxes):
+    xywh = dummy_boxes.xywh
+    assert xywh.shape == (2, 4)
+    # first box: x1=10,y1=20,x2=100,y2=200 → cx=55,cy=110,w=90,h=180
+    assert float(xywh[0, 0]) == pytest.approx(55.0)
+    assert float(xywh[0, 1]) == pytest.approx(110.0)
+    assert float(xywh[0, 2]) == pytest.approx(90.0)
+    assert float(xywh[0, 3]) == pytest.approx(180.0)
+
+
+def test_boxes_xywhn(dummy_boxes):
+    xywhn = dummy_boxes.xywhn
+    assert xywhn.shape == (2, 4)
+    # orig_shape (480, 640): cx=55/640, cy=110/480
+    assert float(xywhn[0, 0]) == pytest.approx(55 / 640)
+    assert float(xywhn[0, 1]) == pytest.approx(110 / 480)
+
+
+def test_boxes_data(dummy_boxes):
+    assert dummy_boxes.data.shape == (2, 6)

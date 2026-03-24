@@ -20,3 +20,15 @@ def test_clip_boxes():
 def test_roundtrip_xyxy_xywh():
     boxes = torch.tensor([[10., 20., 110., 120.]])
     assert torch.allclose(xywh_to_xyxy(xyxy_to_xywh(boxes)), boxes)
+
+
+def test_clip_boxes_empty():
+    empty = torch.zeros((0, 4))
+    result = clip_boxes(empty, shape=(480, 640))
+    assert result.shape == (0, 4)
+
+
+def test_scale_boxes_empty():
+    empty = torch.zeros((0, 4))
+    result = scale_boxes(empty, from_shape=(640, 640), to_shape=(1280, 1280))
+    assert result.shape == (0, 4)
