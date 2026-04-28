@@ -11,6 +11,7 @@ nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one 
 - [Installation](#installation)
 - [Quickstart](#quickstart)
 - [CLI](#cli)
+- [Web application](#web-application)
 - [Converting a raw D-FINE checkpoint](#converting-a-raw-d-fine-checkpoint)
 - [Training and validation](#training-and-validation)
 - [Export](#export)
@@ -40,6 +41,12 @@ For TensorRT export:
 
 ```bash
 uv sync --extra tensorrt
+```
+
+For the web application:
+
+```bash
+uv sync --extra web
 ```
 
 ---
@@ -113,6 +120,31 @@ uv run dfine train  model=dfine_l_wrapped.pth data=my_dataset.yml epochs=50
 uv run dfine val    model=dfine_l_wrapped.pth data=my_dataset.yml
 uv run dfine export model=dfine_l_wrapped.pth format=onnx
 ```
+
+---
+
+## Web application
+
+nitid includes a browser-based UI for running detection without writing code. Upload images or videos, pick a model, adjust parameters, and browse annotated results with persistent run history per user.
+
+```bash
+# Install web extras
+uv sync --extra web
+
+# Place a wrapped checkpoint
+mkdir -p models && cp dfine_l_wrapped.pth models/
+
+# Start the API (single worker — inference is not thread-safe)
+uv run uvicorn web.api.main:app --workers 1
+
+# Start the frontend (separate terminal)
+cd web/frontend && npm install && npm run dev
+# → open http://localhost:5173
+```
+
+Register an account on first visit. The API is self-documented at `http://localhost:8000/docs`.
+
+See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables, REST API reference, data model, and implementation notes.
 
 ---
 
@@ -196,6 +228,7 @@ See [docs/export.md](docs/export.md) for all options including dynamic batch axe
 | [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset format |
 | [docs/export.md](docs/export.md) | ONNX, TorchScript, TensorRT export |
 | [docs/api_reference.md](docs/api_reference.md) | Full `DFINE` class API reference |
+| [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
 
 ---
 
