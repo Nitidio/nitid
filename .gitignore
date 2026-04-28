@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# nitid web application runtime data
+web/storage/
+models/
+web/frontend/node_modules/
+web/frontend/dist/
