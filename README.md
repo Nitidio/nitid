@@ -224,6 +224,7 @@ See [docs/export.md](docs/export.md) for all options including dynamic batch axe
 
 | Doc | Description |
 |-----|-------------|
+| [docs/onboarding.md](docs/onboarding.md) | **Start here if you're a new developer** — architecture, conventions, gotchas |
 | [docs/quickstart.md](docs/quickstart.md) | Full quickstart for D-FINE users and Ultralytics users |
 | [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset format |
 | [docs/export.md](docs/export.md) | ONNX, TorchScript, TensorRT export |
