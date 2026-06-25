@@ -70,11 +70,13 @@ explicit = true
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cu121", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
-    { index = "pypi", marker = "sys_platform != 'linux' or platform_machine != 'x86_64'" },
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32' and platform_machine == 'x86_64'" },
+    { index = "pypi", marker = "sys_platform == 'darwin' or platform_machine != 'x86_64'" },
 ]
 torchvision = [
     { index = "pytorch-cu121", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
-    { index = "pypi", marker = "sys_platform != 'linux' or platform_machine != 'x86_64'" },
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32' and platform_machine == 'x86_64'" },
+    { index = "pypi", marker = "sys_platform == 'darwin' or platform_machine != 'x86_64'" },
 ]
 # ── ruff (linter) ──────────────────────────────────────────────────────────────────────
 
