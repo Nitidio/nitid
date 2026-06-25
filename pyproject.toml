@@ -35,7 +35,7 @@ dev = [
 train = [
     "pycocotools>=2.0",
 ]
-tensorrt = ["tensorrt>=8.6"]
+
 web = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -57,7 +57,10 @@ dev = [
 # ── uv ────────────────────────────────────────────────────────────────────────
 
 [tool.uv]
-index-url = "https://pypi.org/simple"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
 
 [[tool.uv.index]]
 name = "pytorch-cu121"
@@ -65,10 +68,17 @@ url = "https://download.pytorch.org/whl/cu121"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu121" }
-torchvision = { index = "pytorch-cu121" }
-
-# ── ruff (linter) ─────────────────────────────────────────────────────────────
+torch = [
+    { index = "pytorch-cu121", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32' and platform_machine == 'x86_64'" },
+    { index = "pypi", marker = "sys_platform == 'darwin' or platform_machine != 'x86_64'" },
+]
+torchvision = [
+    { index = "pytorch-cu121", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32' and platform_machine == 'x86_64'" },
+    { index = "pypi", marker = "sys_platform == 'darwin' or platform_machine != 'x86_64'" },
+]
+# ── ruff (linter) ──────────────────────────────────────────────────────────────────────
 
 [tool.ruff]
 line-length = 100
