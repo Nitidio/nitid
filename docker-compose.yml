@@ -1,0 +1,20 @@
+services:
+  nitid-dev:
+    image: nitid-env
+    container_name: nitid_container
+
+    volumes:
+      # Bind-mounts your Mac project folder into /app inside the container.
+      # .venv will be created HERE (on your Mac disk), bypassing Docker's virtual disk.
+      - .:/app
+
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - UV_LINK_MODE=copy
+
+    # Keep the container alive with an interactive shell.
+    # You run 'uv sync --frozen' yourself once inside — so you can see all output.
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
