@@ -9,6 +9,7 @@ nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one 
 ## Table of contents
 
 - [Installation](#installation)
+- [Pretrained models](#pretrained-models)
 - [Quickstart](#quickstart)
 - [CLI](#cli)
 - [Web application](#web-application)
@@ -26,7 +27,7 @@ nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one 
 Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
 
 ```bash
-git clone <repo> && cd nitid
+git clone https://github.com/Vaelsys/nitid.git && cd nitid
 git submodule update --init        # pulls extern/dfine
 uv sync
 ```
@@ -47,6 +48,37 @@ For the web application:
 
 ```bash
 uv sync --extra web
+```
+
+---
+
+## Pretrained models
+
+nitid loads **wrapped** `.pth` checkpoints. The table below links to the official upstream D-FINE COCO checkpoints and shows the wrapped filename to create with `tools/convert_checkpoint.py`.
+
+> Direct nitid-wrapped release assets are not hosted yet. Until they are published, download the matching upstream D-FINE checkpoint below and convert it using the command in [Converting a raw D-FINE checkpoint](#converting-a-raw-d-fine-checkpoint).
+
+| Model | size<br><sup>(pixels)</sup> | COCO mAP<sup>val<br>50-95</sup> | Speed<br><sup>T4 TensorRT10 FP16<br>(ms)</sup> | params<br><sup>(M)</sup> | FLOPs<br><sup>(B)</sup> | Config | Download raw checkpoint | Wrapped output |
+|---|---:|---:|---:|---:|---:|---|---|---|
+| D-FINE-N | 640 | 42.8 | 2.12 | 4 | 7 | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml) | [dfine_n_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth) | `dfine_n_wrapped.pth` |
+| D-FINE-S | 640 | 48.5 | 3.49 | 10 | 25 | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_s_coco.yml) | [dfine_s_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_coco.pth) | `dfine_s_wrapped.pth` |
+| D-FINE-M | 640 | 52.3 | 5.62 | 19 | 57 | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_m_coco.yml) | [dfine_m_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_coco.pth) | `dfine_m_wrapped.pth` |
+| D-FINE-L | 640 | 54.0 | 8.07 | 31 | 91 | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_l_coco.yml) | [dfine_l_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_coco.pth) | `dfine_l_wrapped.pth` |
+| D-FINE-X | 640 | 55.8 | 12.89 | 62 | 202 | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_x_coco.yml) | [dfine_x_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_coco.pth) | `dfine_x_wrapped.pth` |
+
+Metrics are from the official D-FINE COCO model zoo. Latency is reported by D-FINE on a single T4 GPU with batch size 1, FP16, and TensorRT 10.4.0.
+
+Example for D-FINE-L:
+
+```bash
+curl -L -o dfine_l_coco.pth \
+    https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_coco.pth
+
+uv run python tools/convert_checkpoint.py \
+    --weights dfine_l_coco.pth \
+    --config  extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
+    --names   configs/datasets/coco.yml \
+    --output  dfine_l_wrapped.pth
 ```
 
 ---
