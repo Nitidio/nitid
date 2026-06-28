@@ -68,6 +68,18 @@ nitid loads **wrapped** `.pth` checkpoints. The table below links to the officia
 
 Metrics are from the official D-FINE COCO model zoo. Latency is reported by D-FINE on a single T4 GPU with batch size 1, FP16, and TensorRT 10.4.0.
 
+### YOLO reference comparison
+
+For rough context, the table below shows published Ultralytics YOLO model metrics. Benchmark methods and export formats can differ between projects, so use this as a high-level comparison rather than a strict apples-to-apples speed benchmark.
+
+| Model | size<br><sup>(pixels)</sup> | mAP<sup>val<br>50-95</sup> | mAP<sup>val<br>50-95(e2e)</sup> | Speed<br><sup>CPU ONNX<br>(ms)</sup> | Speed<br><sup>T4 TensorRT10<br>(ms)</sup> | params<br><sup>(M)</sup> | FLOPs<br><sup>(B)</sup> |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| YOLO26n | 640 | 40.9 | 40.1 | 38.9 +/- 0.7 | 1.7 +/- 0.0 | 2.4 | 5.4 |
+| YOLO26s | 640 | 48.6 | 47.8 | 87.2 +/- 0.9 | 2.5 +/- 0.0 | 9.5 | 20.7 |
+| YOLO26m | 640 | 53.1 | 52.5 | 220.0 +/- 1.4 | 4.7 +/- 0.1 | 20.4 | 68.2 |
+| YOLO26l | 640 | 55.0 | 54.4 | 286.2 +/- 2.0 | 6.2 +/- 0.2 | 24.8 | 86.4 |
+| YOLO26x | 640 | 57.5 | 56.9 | 525.8 +/- 4.0 | 11.8 +/- 0.2 | 55.7 | 193.9 |
+
 Example for D-FINE-L:
 
 ```bash
