@@ -211,3 +211,13 @@ web/storage/
 models/
 web/frontend/node_modules/
 web/frontend/dist/
+
+# nitid local model checkpoints and prediction outputs
+*.pth
+*.pt
+runs/
+outputs/
+image.jpg
+results.jpg
+nitid_result.jpg
+plain_dfine_result.jpg

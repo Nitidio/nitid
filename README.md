@@ -55,12 +55,18 @@ uv sync --extra web
 
 nitid works with **nitid-wrapped** `.pth` checkpoints — self-contained files that embed the model config and class names alongside the weights. If you have a raw D-FINE checkpoint, [convert it first](#converting-a-raw-d-fine-checkpoint).
 
+Download and wrap an official D-FINE checkpoint automatically:
+
+```bash
+uv run dfine download model=dfine_s
+```
+
 ### Inference
 
 ```python
 from dfine import DFINE
 
-model = DFINE("dfine_l_wrapped.pth")
+model = DFINE("dfine_s_wrapped.pth")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -115,6 +121,7 @@ model.info()
 All methods are available from the command line using `key=value` arguments:
 
 ```bash
+uv run dfine download model=dfine_s
 uv run dfine predict model=dfine_l_wrapped.pth source=image.jpg conf=0.5
 uv run dfine train  model=dfine_l_wrapped.pth data=my_dataset.yml epochs=50
 uv run dfine val    model=dfine_l_wrapped.pth data=my_dataset.yml
