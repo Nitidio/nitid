@@ -55,10 +55,36 @@ uv sync --extra web
 
 nitid works with **nitid-wrapped** `.pth` checkpoints — self-contained files that embed the model config and class names alongside the weights. If you have a raw D-FINE checkpoint, [convert it first](#converting-a-raw-d-fine-checkpoint).
 
-Download and wrap an official D-FINE checkpoint automatically:
+### Download a checkpoint
+
+Download an official D-FINE checkpoint and wrap it for nitid automatically:
 
 ```bash
 uv run dfine download model=dfine_s
+```
+
+Supported model names are:
+
+```text
+dfine_s, dfine_m, dfine_l, dfine_x
+```
+
+By default, the command saves the wrapped checkpoint in the current directory:
+
+```text
+dfine_s_wrapped.pth
+```
+
+To save checkpoints into a folder:
+
+```bash
+uv run dfine download model=dfine_s output=models
+```
+
+To overwrite an existing checkpoint:
+
+```bash
+uv run dfine download model=dfine_s output=models force=true
 ```
 
 ### Inference
