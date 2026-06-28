@@ -37,10 +37,10 @@ For fine-tuning and validation add the `train` extra:
 uv sync --extra train
 ```
 
-For TensorRT export:
+For TensorRT export (NVIDIA GPU only):
 
 ```bash
-uv sync --extra tensorrt
+pip install --extra-index-url https://pypi.nvidia.com tensorrt>=8.6
 ```
 
 For the web application:
@@ -260,7 +260,7 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that build
 | Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
 | Raw weights | Download directly | Run `convert_checkpoint.py` first |
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, disk size |
-| TensorRT export | Supported | Supported (`uv sync --extra tensorrt`) |
+| TensorRT export | Supported | Supported (install tensorrt manually, see Installation) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
 | `model.task` | `"detect"`, `"segment"`, … | Always `"detect"` |
 
