@@ -31,6 +31,8 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
 ]
 train = [
     "pycocotools>=2.0",
