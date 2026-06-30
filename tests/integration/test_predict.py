@@ -1,6 +1,7 @@
 """Integration tests for the full predict() pipeline."""
-import numpy as np
 import types
+
+import numpy as np
 
 
 def test_predict_numpy_frame(tiny_checkpoint):

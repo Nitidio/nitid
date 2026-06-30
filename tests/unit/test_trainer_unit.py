@@ -1,7 +1,7 @@
 """Unit tests for DFINETrainer helper methods (no D-FINE submodule needed)."""
+import pytest
 import torch
 import torch.nn as nn
-import pytest
 
 from dfine.trainer import DFINETrainer, ModelEMA
 

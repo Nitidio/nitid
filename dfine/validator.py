@@ -9,6 +9,7 @@ import io
 from pathlib import Path
 
 import torch
+
 from dfine.utils.logging import LOGGER
 
 

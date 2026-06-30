@@ -2,6 +2,7 @@
 Visualisation helpers. plot_results() draws boxes on an image.
 """
 from __future__ import annotations
+
 import cv2
 import numpy as np
 

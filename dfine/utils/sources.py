@@ -13,11 +13,10 @@ Supported sources:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Generator, Union
+from typing import Generator
 
 import cv2
 import numpy as np
-import torch
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".ts", ".m4v"}

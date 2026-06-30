@@ -3,8 +3,11 @@ DFINEExporter — model export to ONNX, TensorRT, TorchScript.
 Called internally by DFINE.export(). Not part of the public API.
 """
 from __future__ import annotations
+
 from pathlib import Path
+
 import torch
+
 from dfine.utils.logging import LOGGER
 
 
