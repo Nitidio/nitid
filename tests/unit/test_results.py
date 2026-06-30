@@ -1,8 +1,9 @@
 """Unit tests for Results and Boxes."""
-import torch
 import numpy as np
 import pytest
-from dfine.results import Results, Boxes
+import torch
+
+from dfine.results import Boxes, Results
 
 
 @pytest.fixture

@@ -1,7 +1,9 @@
 """Minimal logger so we don't pull in heavy dependencies."""
 from __future__ import annotations
+
 import logging
 import sys
+
 
 def get_logger(name: str = "dfine") -> logging.Logger:
     logger = logging.getLogger(name)

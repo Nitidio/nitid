@@ -48,12 +48,11 @@ if "src.misc" not in sys.modules:
     misc_stub.__package__ = "src.misc"
     sys.modules["src.misc"] = misc_stub
 
-from src.core import YAMLConfig  # noqa: E402
-
 # Trigger @register() decorators so the component registry is populated
-import src.nn    # noqa: F401, E402
+import src.nn  # noqa: F401, E402
 import src.optim  # noqa: F401, E402
-import src.zoo    # noqa: F401, E402
+import src.zoo  # noqa: F401, E402
+from src.core import YAMLConfig  # noqa: E402
 
 
 def build_model(config_path: str, weights_path: str, device: str) -> nn.Module:

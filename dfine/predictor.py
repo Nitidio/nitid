@@ -3,11 +3,14 @@ DFINEPredictor — inference engine.
 Called internally by DFINE.predict(). Not part of the public API.
 """
 from __future__ import annotations
+
 from typing import Generator
+
 import torch
-from dfine.results import Results, Boxes
-from dfine.utils.sources import LoadSource
+
+from dfine.results import Boxes, Results
 from dfine.utils.ops import clip_boxes
+from dfine.utils.sources import LoadSource
 
 
 class DFINEPredictor:

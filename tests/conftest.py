@@ -6,8 +6,8 @@ tiny_dataset    — minimal synthetic COCO dataset (blank images + JSON anns)
                   with a data YAML ready for train/val calls.
 """
 from pathlib import Path
+
 import pytest
-import torch
 
 _DFINE_CONFIGS = Path(__file__).parents[1] / "extern" / "dfine" / "configs"
 
@@ -53,6 +53,7 @@ def tiny_dataset(tmp_path_factory):
       - Two categories: 1=person, 2=car
     """
     import json
+
     import numpy as np
     import yaml
     from PIL import Image as _PILImage

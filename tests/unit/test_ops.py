@@ -1,7 +1,8 @@
 """Unit tests for geometric utilities."""
-import torch
 import pytest
-from dfine.utils.ops import scale_boxes, clip_boxes, xyxy_to_xywh, xywh_to_xyxy
+import torch
+
+from dfine.utils.ops import clip_boxes, scale_boxes, xywh_to_xyxy, xyxy_to_xywh
 
 
 def test_scale_boxes():

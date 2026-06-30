@@ -189,6 +189,7 @@ class DFINE:
             ``size_mb`` is ``None`` when the checkpoint path no longer exists.
         """
         from pathlib import Path
+
         import torch
 
         n_params     = sum(p.numel() for p in self._model.parameters())
