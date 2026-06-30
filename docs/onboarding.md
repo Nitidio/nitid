@@ -220,4 +220,5 @@ uv run dfine predict model=dfine_l_wrapped.pth source=image.jpg conf=0.5
 | [`api_reference.md`](api_reference.md) | Full `DFINE` class API with all parameters |
 | [`fine_tuning.md`](fine_tuning.md) | Dataset format, AMP, EMA, all training parameters |
 | [`export.md`](export.md) | ONNX, TorchScript, TensorRT — options and constraints |
-| [`web_app.md`](web_app.md) | Web app setup, REST API, data model, implementation notes |
+| [`web_app.md`](web_app.md) | Web app setup, REST API, data model, implementation notes. | 
+| [`macos_docker_setup.md`](macos_docker_setup.md) | Setup docker for linux enviroment in MacOS Apple silicon | 
