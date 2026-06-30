@@ -10,7 +10,7 @@ name = "nitid"
 version = "0.1.0"
 description = "Ultralytics-style wrapper for the D-FINE object detector"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "torch>=2.1",
     "torchvision>=0.16",
