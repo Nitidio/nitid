@@ -1,0 +1,14 @@
+site_name: nitid
+site_description: Ultralytics-style wrapper for D-FINE
+repo_url: https://github.com/Vaelsys/nitid
+
+theme:
+  name: material
+
+nav:
+  - Home: index.md
+  - Quick Start: quickstart.md
+  - Fine-tuning: fine_tuning.md
+  - Export: export.md
+  - Web App: web_app.md
+  - API Reference: api_reference.md
