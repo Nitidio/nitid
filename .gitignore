@@ -211,3 +211,21 @@ web/storage/
 models/
 web/frontend/node_modules/
 web/frontend/dist/
+
+# D-FINE Weights and Model Exports
+*.pth
+*.pt
+*.onnx
+*.onnx.data
+*.engine
+*.torchscript
+
+# Training and Inference Outputs
+runs/
+test_input.jpg
+result_*.jpg
+result_*.png
+image.jpg
+
+# Local Python configuration
+.python-version

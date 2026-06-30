@@ -8,6 +8,7 @@ import copy
 from pathlib import Path
 
 import torch
+
 from dfine.utils.checkpoint import save_checkpoint
 from dfine.utils.logging import LOGGER
 

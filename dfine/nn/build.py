@@ -67,9 +67,9 @@ def _ensure_dfine_on_path() -> None:
 
 def _register_dfine_components() -> None:
     """Trigger all @register() decorators so GLOBAL_CONFIG is populated."""
-    import src.nn    # noqa: F401 — backbone, encoder, decoder, postprocessor
+    import src.nn  # noqa: F401 — backbone, encoder, decoder, postprocessor
     import src.optim  # noqa: F401 — EMA, optimizer wrappers
-    import src.zoo    # noqa: F401 — DFINE, DFINECriterion, DFINETransformer …
+    import src.zoo  # noqa: F401 — DFINE, DFINECriterion, DFINETransformer …
 
 
 def build_postprocessor(cfg: dict) -> nn.Module:

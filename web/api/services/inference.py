@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 from web.api.config import settings
 from web.api.models.run import Run, RunStatus
@@ -105,7 +104,6 @@ def _process_video(db, run_id, video_path, model, params, classes):
             break
         if frame_idx % params.frame_step == 0:
             # frame is HWC BGR numpy array — DFINE accepts this directly
-            arr = np.expand_dims(frame, 0) if frame.ndim == 3 else frame
             results = model.predict(
                 source=frame,
                 conf=params.conf,

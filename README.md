@@ -2,6 +2,9 @@
 
 **Ultralytics-style wrapper for [D-FINE](https://github.com/Peterande/D-FINE) — real-time object detection that feels like YOLO.**
 
+![License](https://img.shields.io/github/license/Vaelsys/nitid)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+
 nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one import and keep all the patterns you already know: predict, train, val, export, stream, CLI.
 
 ---
