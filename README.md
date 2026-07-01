@@ -46,7 +46,6 @@ For the web application:
 uv sync --extra web
 ```
 
----
 
 ## Quick Start
 
@@ -63,7 +62,6 @@ results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
 
----
 
 ### Training
 
@@ -76,7 +74,6 @@ model.train(
 
 See [docs/fine_tuning.md](docs/fine_tuning.md) for datasets, optimizers, AMP, EMA and all training options.
 
----
 
 ### Validation
 
@@ -86,7 +83,6 @@ metrics = model.val(
 )
 ```
 
----
 
 ### Export
 
@@ -97,8 +93,6 @@ model.export(format="tensorrt")
 ```
 
 See [docs/export.md](docs/export.md) for TensorRT, FP16 and advanced export options.
-
----
 
 ### Command Line Interface
 
@@ -152,7 +146,6 @@ uv run python tools/convert_checkpoint.py \
 
 When the raw checkpoint contains EMA weights (`ckpt["ema"]["module"]`), the converter uses them automatically — this matches D-FINE's own inference scripts and gives better accuracy.
 
----
 
 ## Web application
 
@@ -177,7 +170,6 @@ Register an account on first visit. The API is self-documented at `http://localh
 
 See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables, REST API reference, data model, and implementation notes.
 
----
 
 ## Documentation
 
@@ -190,7 +182,6 @@ See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables
 | [docs/api_reference.md](docs/api_reference.md) | Full `DFINE` class API reference |
 | [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
 
----
 
 ## Development
 
@@ -223,7 +214,6 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that build
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
 | `model.task` | `"detect"`, `"segment"`, … | Always `"detect"` |
 
----
 
 ## Acknowledgements
 
