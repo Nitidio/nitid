@@ -62,3 +62,50 @@ def test_model_load_missing_file():
     from dfine import DFINE
     with pytest.raises(FileNotFoundError):
         DFINE("definitely_does_not_exist.pth", device="cpu", verbose=False)
+
+
+def test_model_load_trigger_download(monkeypatch, tmp_path):
+    from dfine import DFINE
+    from dfine.utils import downloads
+    from dfine.utils import checkpoint
+
+    download_calls = []
+    load_calls = []
+
+    def fake_download_model(model, output=None, force=False):
+        download_calls.append((model, output))
+        asset = downloads.get_model_asset(model)
+        out_path = downloads.resolve_output_path(asset, output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(b"dummy_weights")
+        return out_path
+
+    def fake_load_checkpoint(path, device="cpu"):
+        load_calls.append(str(path))
+        class DummyModel:
+            def eval(self): pass
+            def parameters(self): return []
+        return DummyModel(), {}, {}
+
+    monkeypatch.setattr(downloads, "download_model", fake_download_model)
+    monkeypatch.setattr(checkpoint, "load_checkpoint", fake_load_checkpoint)
+
+    # 1. Test specifying registered model directly (e.g. dfine_s)
+    # It should download to default filename in current working dir (None)
+    model1 = DFINE("dfine_s", device="cpu", verbose=False)
+    assert len(download_calls) == 1
+    assert download_calls[0] == ("dfine_s", None)
+    assert load_calls[0] == "dfine_s_wrapped.pth"
+    import os
+    if os.path.exists("dfine_s_wrapped.pth"):
+        os.remove("dfine_s_wrapped.pth")
+
+    # 2. Test specifying path with .pth suffix (e.g. path/to/dfine_s.pth)
+    download_calls.clear()
+    load_calls.clear()
+    custom_path = tmp_path / "custom_dir" / "dfine_s.pth"
+    model2 = DFINE(str(custom_path), device="cpu", verbose=False)
+    assert len(download_calls) == 1
+    assert download_calls[0][0] == "dfine_s"
+    assert str(download_calls[0][1]) == str(custom_path)
+    assert load_calls[0] == str(custom_path)
