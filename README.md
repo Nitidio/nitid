@@ -16,8 +16,8 @@ nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one 
 ## Table of contents
 
 - [Installation](#installation)
-- [Pretrained models](#pretrained-models)
 - [Quickstart](#quickstart)
+- [Pretrained models](#pretrained-models)
 - [CLI](#cli)
 - [Training and validation](#training-and-validation)
 - [Export](#export)
@@ -59,64 +59,17 @@ uv sync --extra web
 
 ---
 
-## Pretrained models
-
-nitid loads **wrapped** `.pth` checkpoints. The table below lists the official upstream D-FINE COCO checkpoints. When using these raw checkpoints, they must be converted first (see [Converting a raw D-FINE checkpoint](#converting-a-raw-d-fine-checkpoint)).
-
-| Model | Size | COCO mAP<sup>val 50-95</sup> <br><sup>*(vs YOLO11)*</sup> | Speed<sup>T4 TRT10 FP16 (ms)</sup> <br><sup>*(vs YOLO11)*</sup> | Params<sup>(M)</sup> <br><sup>*(vs YOLO11)*</sup> | FLOPs<sup>(B)</sup> <br><sup>*(vs YOLO11)*</sup> | Config | Download raw checkpoint | Wrapped output |
-|---|---:|---:|---:|---:|---:|---|---|---|
-| **D-FINE-N** | 640 | **42.8** <br><sup>*(vs 40.9)*</sup> | **2.12** <br><sup>*(vs 1.70)*</sup> | **4.0** <br><sup>*(vs 2.6)*</sup> | **7** <br><sup>*(vs 6.5)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml) | [dfine_n_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth) | `dfine_n_wrapped.pth` |
-| **D-FINE-S** | 640 | **48.5** <br><sup>*(vs 48.6)*</sup> | **3.49** <br><sup>*(vs 2.50)*</sup> | **10.0** <br><sup>*(vs 9.4)*</sup> | **25** <br><sup>*(vs 21.5)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_s_coco.yml) | [dfine_s_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_coco.pth) | `dfine_s_wrapped.pth` |
-| **D-FINE-M** | 640 | **52.3** <br><sup>*(vs 53.1)*</sup> | **5.62** <br><sup>*(vs 4.70)*</sup> | **19.0** <br><sup>*(vs 20.1)*</sup> | **57** <br><sup>*(vs 68.0)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_m_coco.yml) | [dfine_m_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_coco.pth) | `dfine_m_wrapped.pth` |
-| **D-FINE-L** | 640 | **54.0** <br><sup>*(vs 55.0)*</sup> | **8.07** <br><sup>*(vs 6.20)*</sup> | **31.0** <br><sup>*(vs 25.3)*</sup> | **91** <br><sup>*(vs 86.9)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_l_coco.yml) | [dfine_l_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_coco.pth) | `dfine_l_wrapped.pth` |
-| **D-FINE-X** | 640 | **55.8** <br><sup>*(vs 57.5)*</sup> | **12.89** <br><sup>*(vs 11.80)*</sup> | **62.0** <br><sup>*(vs 56.9)*</sup> | **202** <br><sup>*(vs 194.9)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_x_coco.yml) | [dfine_x_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_coco.pth) | `dfine_x_wrapped.pth` |
-
-*Note: Metrics in <sup>*(vs YOLO11)*</sup> correspond to the equivalent YOLO11 model variant (YOLO11n, YOLO11s, YOLO11m, YOLO11l, YOLO11x) for rough context. Benchmark methods and export formats can differ between projects, so use this as a high-level comparison rather than a strict apples-to-apples speed benchmark.*
-
----
-
 ## Quickstart
 
-nitid loads **wrapped** `.pth` checkpoints—self-contained files that embed the model config and class names alongside the weights. These are handled automatically on the fly when you specify a model name (e.g. `dfine_s`) or when using the download CLI.
-
-### Download a checkpoint
-
-Download an official D-FINE checkpoint and wrap it for nitid automatically:
-
-```bash
-uv run dfine download model=dfine_s
-```
-
-Supported model names are:
-
-```text
-dfine_s, dfine_m, dfine_l, dfine_x
-```
-
-By default, the command saves the wrapped checkpoint in the current directory:
-
-```text
-dfine_s_wrapped.pth
-```
-
-To save checkpoints into a folder:
-
-```bash
-uv run dfine download model=dfine_s output=models
-```
-
-To overwrite an existing checkpoint:
-
-```bash
-uv run dfine download model=dfine_s output=models force=true
-```
+nitid loads wrapped `.pth` checkpoints. You can pass any of the registered D-FINE model names (e.g. `dfine_n`, `dfine_s`, `dfine_m`, `dfine_l`, `dfine_x`), which will automatically download, wrap, and load the weights for you.
 
 ### Inference
 
 ```python
 from dfine import DFINE
 
-model = DFINE("dfine_s_wrapped.pth")
+# Automatically downloads, wraps, and loads dfine_s
+model = DFINE("dfine_s")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -152,7 +105,7 @@ model = YOLO("yolo11n.pt")
 
 # After
 from dfine import DFINE
-model = DFINE("dfine_l_wrapped.pth")
+model = DFINE("dfine_l")
 ```
 
 The interface is intentionally close to `ultralytics.YOLO`. All the patterns you already know work the same way.
@@ -166,16 +119,31 @@ model.info()
 
 ---
 
+## Pretrained models
+
+nitid loads **wrapped** `.pth` checkpoints. The table below lists the official upstream D-FINE COCO checkpoints. When using these raw checkpoints, they must be converted first (see [Converting a raw D-FINE checkpoint](#converting-a-raw-d-fine-checkpoint)).
+
+| Model | Size | COCO mAP<sup>val 50-95</sup> <br><sup>*(vs YOLO11)*</sup> | Speed<sup>T4 TRT10 FP16 (ms)</sup> <br><sup>*(vs YOLO11)*</sup> | Params<sup>(M)</sup> <br><sup>*(vs YOLO11)*</sup> | FLOPs<sup>(B)</sup> <br><sup>*(vs YOLO11)*</sup> | Config | Download raw checkpoint | Wrapped output |
+|---|---:|---:|---:|---:|---:|---|---|---|
+| **D-FINE-N** | 640 | **42.8** <br><sup>*(vs 40.9)*</sup> | **2.12** <br><sup>*(vs 1.70)*</sup> | **4.0** <br><sup>*(vs 2.6)*</sup> | **7** <br><sup>*(vs 6.5)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml) | [dfine_n_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth) | `dfine_n_wrapped.pth` |
+| **D-FINE-S** | 640 | **48.5** <br><sup>*(vs 48.6)*</sup> | **3.49** <br><sup>*(vs 2.50)*</sup> | **10.0** <br><sup>*(vs 9.4)*</sup> | **25** <br><sup>*(vs 21.5)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_s_coco.yml) | [dfine_s_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_coco.pth) | `dfine_s_wrapped.pth` |
+| **D-FINE-M** | 640 | **52.3** <br><sup>*(vs 53.1)*</sup> | **5.62** <br><sup>*(vs 4.70)*</sup> | **19.0** <br><sup>*(vs 20.1)*</sup> | **57** <br><sup>*(vs 68.0)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_m_coco.yml) | [dfine_m_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_coco.pth) | `dfine_m_wrapped.pth` |
+| **D-FINE-L** | 640 | **54.0** <br><sup>*(vs 55.0)*</sup> | **8.07** <br><sup>*(vs 6.20)*</sup> | **31.0** <br><sup>*(vs 25.3)*</sup> | **91** <br><sup>*(vs 86.9)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_l_coco.yml) | [dfine_l_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_coco.pth) | `dfine_l_wrapped.pth` |
+| **D-FINE-X** | 640 | **55.8** <br><sup>*(vs 57.5)*</sup> | **12.89** <br><sup>*(vs 11.80)*</sup> | **62.0** <br><sup>*(vs 56.9)*</sup> | **202** <br><sup>*(vs 194.9)*</sup> | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_x_coco.yml) | [dfine_x_coco.pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_coco.pth) | `dfine_x_wrapped.pth` |
+
+*Note: Metrics in <sup>*(vs YOLO11)*</sup> correspond to the equivalent YOLO11 model variant (YOLO11n, YOLO11s, YOLO11m, YOLO11l, YOLO11x) for rough context. Benchmark methods and export formats can differ between projects, so use this as a high-level comparison rather than a strict apples-to-apples speed benchmark.*
+
+---
+
 ## CLI
 
 All methods are available from the command line using `key=value` arguments:
 
 ```bash
-uv run dfine download model=dfine_s
-uv run dfine predict model=dfine_l_wrapped.pth source=image.jpg conf=0.5
-uv run dfine train  model=dfine_l_wrapped.pth data=my_dataset.yml epochs=50
-uv run dfine val    model=dfine_l_wrapped.pth data=my_dataset.yml
-uv run dfine export model=dfine_l_wrapped.pth format=onnx
+uv run dfine predict model=dfine_l source=image.jpg conf=0.5
+uv run dfine train  model=dfine_l data=my_dataset.yml epochs=50
+uv run dfine val    model=dfine_l data=my_dataset.yml
+uv run dfine export model=dfine_l format=onnx
 ```
 
 ---
