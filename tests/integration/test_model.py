@@ -66,8 +66,7 @@ def test_model_load_missing_file():
 
 def test_model_load_trigger_download(monkeypatch, tmp_path):
     from dfine import DFINE
-    from dfine.utils import downloads
-    from dfine.utils import checkpoint
+    from dfine.utils import checkpoint, downloads
 
     download_calls = []
     load_calls = []
@@ -92,7 +91,7 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
 
     # 1. Test specifying registered model directly (e.g. dfine_s)
     # It should download to default filename in current working dir (None)
-    model1 = DFINE("dfine_s", device="cpu", verbose=False)
+    _ = DFINE("dfine_s", device="cpu", verbose=False)
     assert len(download_calls) == 1
     assert download_calls[0] == ("dfine_s", None)
     assert load_calls[0] == "dfine_s_wrapped.pth"
@@ -104,7 +103,7 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     download_calls.clear()
     load_calls.clear()
     custom_path = tmp_path / "custom_dir" / "dfine_s.pth"
-    model2 = DFINE(str(custom_path), device="cpu", verbose=False)
+    _ = DFINE(str(custom_path), device="cpu", verbose=False)
     assert len(download_calls) == 1
     assert download_calls[0][0] == "dfine_s"
     assert str(download_calls[0][1]) == str(custom_path)
