@@ -3,7 +3,7 @@
 ## Installation
 
 ```bash
-git clone <repo> && cd nitid
+git clone https://github.com/Vaelsys/nitid.git && cd nitid
 git submodule update --init        # pulls extern/dfine
 uv sync --extra dev
 ```
@@ -39,7 +39,7 @@ uv run python tools/convert_checkpoint.py \
 ```python
 from dfine import DFINE
 
-model = DFINE("dfine_l_wrapped.pth")
+model = DFINE("dfine_l")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -81,7 +81,7 @@ model = YOLO("yolo11n.pt")
 
 # After
 from dfine import DFINE
-model = DFINE("dfine_l_wrapped.pth")
+model = DFINE("dfine_l")
 ```
 
 All the patterns you already know work the same way:
@@ -135,7 +135,7 @@ model.export(format="tensorrt", half=True)   # FP16
 | Feature | Ultralytics YOLO | nitid DFINE |
 |---------|-----------------|-------------|
 | Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
-| Raw weights | Download directly | Run `convert_checkpoint.py` first |
+| Raw weights | Download directly | Downloaded and wrapped automatically |
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
 | TensorRT export | Supported | Supported (`uv sync --extra tensorrt`) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
@@ -144,8 +144,8 @@ model.export(format="tensorrt", half=True)   # FP16
 ### CLI
 
 ```bash
-uv run dfine predict model=dfine_l_wrapped.pth source=image.jpg conf=0.5
-uv run dfine train  model=dfine_l_wrapped.pth data=my_dataset.yml epochs=50
-uv run dfine val    model=dfine_l_wrapped.pth data=my_dataset.yml
-uv run dfine export model=dfine_l_wrapped.pth format=onnx
+uv run dfine predict model=dfine_l source=image.jpg conf=0.5
+uv run dfine train  model=dfine_l data=my_dataset.yml epochs=50
+uv run dfine val    model=dfine_l data=my_dataset.yml
+uv run dfine export model=dfine_l format=onnx
 ```

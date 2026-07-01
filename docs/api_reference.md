@@ -6,17 +6,16 @@
 from dfine import DFINE
 ```
 
-The single public class. Instantiate with a path to a nitid-wrapped `.pth`
-checkpoint; all methods are available immediately.
+The single public class. Instantiate with a path to a nitid-wrapped `.pth` checkpoint, or a registry model name (e.g. `"dfine_s"`, `"dfine_l"`) to automatically download, wrap, and load the official weights.
 
 ```python
-model = DFINE("dfine_l_wrapped.pth", device="cuda:0")
+model = DFINE("dfine_s", device="cuda:0")
 ```
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str` | —       | Path to wrapped `.pth` checkpoint |
-| `device`  | `str` | `"cpu"` | PyTorch device string (`"cpu"`, `"cuda:0"`, …) |
+| `model`   | `str` | `"dfine_l.pth"` | Path to wrapped checkpoint or a registry model name (`"dfine_n"`, `"dfine_s"`, `"dfine_m"`, `"dfine_l"`, `"dfine_x"`) |
+| `device`  | `str` | `"cuda"` | PyTorch device string (`"cpu"`, `"cuda"`, `"cuda:0"`, …) |
 | `verbose` | `bool`| `True`  | Print load summary |
 
 ---
@@ -28,10 +27,12 @@ Run inference on any source.
 ```python
 results = model.predict(
     source,           # path, dir, URL, ndarray, int (webcam), or list
-    conf=0.25,        # confidence threshold
+    conf=0.5,         # confidence threshold
     imgsz=640,        # inference size (square)
     classes=None,     # filter to these class indices, e.g. [0, 2]
     stream=False,     # return generator instead of list
+    augment=False,    # use test-time augmentation
+    verbose=True,     # print inference progress/speed
 )
 ```
 
@@ -93,15 +94,19 @@ Fine-tune on a custom COCO-format dataset. See [fine_tuning.md](fine_tuning.md).
 metrics = model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
+    imgsz=640,
     batch=16,
     lr0=1e-4,
     lrf=0.01,
     optimizer="AdamW",   # or "SGD"
-    amp=True,            # FP16 mixed precision (CUDA only)
-    ema=True,            # EMA weight averaging
+    resume=False,        # reserved for future checkpoint resuming
+    amp=False,           # FP16 mixed precision (CUDA only)
+    ema=False,           # EMA weight averaging
     ema_decay=0.9999,
+    device=None,         # override training device
     project="runs/train",
     name="exp",
+    verbose=True,
 )
 # metrics = {"loss": <final_epoch_loss>}
 ```
@@ -115,9 +120,10 @@ Evaluate with COCO mAP metrics. See [fine_tuning.md](fine_tuning.md).
 ```python
 metrics = model.val(
     data="configs/datasets/my_dataset.yml",
-    split="val",         # "val" or "test"
+    imgsz=640,
     batch=16,
     conf=0.001,
+    split="val",         # "val" or "test"
     verbose=True,
 )
 # metrics = {"mAP50-95": ..., "mAP50": ..., "AR1": ..., "AR100": ...}
@@ -141,9 +147,11 @@ model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt ex
 | `imgsz`     | 640      | Must match model's `eval_spatial_size` |
 | `batch`     | 1        | Static batch size |
 | `dynamic`   | `False`  | Dynamic batch axis (ONNX and TensorRT) |
-| `half`      | `False`  | FP16 precision (TensorRT only) |
 | `simplify`  | `True`   | Run onnxsim after export (ONNX only) |
 | `opset`     | 17       | ONNX opset version (ONNX only) |
+| `half`      | `False`  | FP16 precision (TensorRT only) |
+| `device`    | `None`   | Override export device |
+| `verbose`   | `True`   | Print export progress |
 
 ---
 

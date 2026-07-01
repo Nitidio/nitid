@@ -208,11 +208,10 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that build
 | Feature | Ultralytics YOLO | nitid DFINE |
 |---------|-----------------|-------------|
 | Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
-| Raw weights | Download directly | Run `convert_checkpoint.py` first |
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, disk size |
-| TensorRT export | Supported | Supported (`uv sync --extra tensorrt`) |
+| TensorRT export | Supported | Supported (see Installation) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, … | Always `"detect"` |
+| `model.task` | `"detect"`, `"segment"`, … | Detection only |
 
 
 ## Acknowledgements

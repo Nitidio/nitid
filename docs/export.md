@@ -7,13 +7,13 @@ Export a nitid-wrapped checkpoint to ONNX, TorchScript, or TensorRT for deployme
 ```python
 from dfine import DFINE
 
-model = DFINE("dfine_l_wrapped.pth")
+model = DFINE("dfine_l")
 model.export(format="onnx")
-# → dfine_l_wrapped.onnx
+# → dfine_640.onnx
 ```
 
 ```bash
-uv run dfine export model=dfine_l_wrapped.pth format=onnx
+uv run dfine export model=dfine_l format=onnx
 ```
 
 The exported model takes a single input `images [B, 3, H, W]` and returns
@@ -41,7 +41,7 @@ Dynamic axes: `batch` (axis 0) and spatial dimensions (axes 2, 3).
 
 ```python
 model.export(format="torchscript")
-# → dfine_l_wrapped.torchscript
+# → dfine_640.torchscript
 ```
 
 TorchScript export uses `torch.jit.trace` with `strict=False` because
@@ -61,7 +61,7 @@ model.export(format="tensorrt")
 ```
 
 ```bash
-uv run dfine export model=dfine_l_wrapped.pth format=tensorrt
+uv run dfine export model=dfine_l format=tensorrt
 ```
 
 The workflow is: trace model → temporary ONNX → TensorRT engine (the intermediate ONNX is removed automatically). Requires a CUDA-capable GPU.

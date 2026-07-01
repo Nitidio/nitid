@@ -9,7 +9,7 @@ Welcome to **nitid** — an Ultralytics-style wrapper for the [D-FINE](https://g
 Prerequisites: Python 3.10+, [`uv`](https://github.com/astral-sh/uv), Node.js 18+ (only for web frontend).
 
 ```bash
-git clone <repo> && cd nitid
+git clone https://github.com/Vaelsys/nitid.git && cd nitid
 git submodule update --init        # pulls D-FINE source into extern/dfine
 uv sync --extra dev                # installs runtime + pytest, ruff, mypy
 ```
@@ -195,7 +195,7 @@ uv run python tools/convert_checkpoint.py \
 You can then run a quick smoke test:
 
 ```bash
-uv run dfine predict model=dfine_l_wrapped.pth source=image.jpg conf=0.5
+uv run dfine predict model=dfine_l source=image.jpg conf=0.5
 ```
 
 ---
