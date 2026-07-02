@@ -211,6 +211,9 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that build
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
 | `model.task` | `"detect"`, `"segment"`, … | Detection only |
 
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, commit conventions, and the PR checklist.
 
 ## Acknowledgements
 
