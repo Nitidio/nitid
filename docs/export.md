@@ -49,10 +49,8 @@ D-FINE's forward pass returns a dict.
 
 ## TensorRT
 
-Requires the `tensorrt` extra:
-
 ```bash
-uv sync --extra tensorrt
+pip install --extra-index-url https://pypi.nvidia.com tensorrt>=8.6
 ```
 
 ```python

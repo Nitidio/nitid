@@ -138,7 +138,7 @@ Export to ONNX, TorchScript, or TensorRT. See [export.md](export.md).
 ```python
 model.export(format="onnx")        # → dfine_640.onnx
 model.export(format="torchscript") # → dfine_640.torchscript
-model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt extra)
+model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt installation)
 ```
 
 | Argument    | Default  | Description |

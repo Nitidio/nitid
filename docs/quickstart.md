@@ -137,7 +137,7 @@ model.export(format="tensorrt", half=True)   # FP16
 | Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
 | Raw weights | Download directly | Downloaded and wrapped automatically |
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
-| TensorRT export | Supported | Supported (`uv sync --extra tensorrt`) |
+| TensorRT export | Supported | Supported (`see Installation in README`) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
 | `model.task` | `"detect"`, `"segment"`, … | Always `"detect"` |
 

@@ -124,29 +124,6 @@ The API intentionally mirrors `ultralytics.YOLO`, making it easy to migrate exis
 *Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference.*
 
 
-
-## Converting a raw D-FINE checkpoint
-
-Raw D-FINE checkpoints need to be wrapped before nitid can load them. The converter embeds the model config and class names so you always deal with a single self-contained file.
-
-```bash
-uv run python tools/convert_checkpoint.py \
-    --weights dfine_l.pth \
-    --config  extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
-    --names   configs/datasets/coco.yml \
-    --output  dfine_l_wrapped.pth
-```
-
-| Argument   | Description |
-|------------|-------------|
-| `--weights` | Raw D-FINE checkpoint (downloaded from the D-FINE repo) |
-| `--config`  | Canonical D-FINE config from `extern/dfine/configs/` |
-| `--names`   | YAML file with a `names:` mapping — use `configs/datasets/coco.yml` for COCO models |
-| `--output`  | Path for the wrapped checkpoint |
-
-When the raw checkpoint contains EMA weights (`ckpt["ema"]["module"]`), the converter uses them automatically — this matches D-FINE's own inference scripts and gives better accuracy.
-
-
 ## Web application
 
 nitid includes a browser-based UI for running detection without writing code. Upload images or videos, pick a model, adjust parameters, and browse annotated results with persistent run history per user.
@@ -170,6 +147,27 @@ Register an account on first visit. The API is self-documented at `http://localh
 
 See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables, REST API reference, data model, and implementation notes.
 
+
+## Converting a raw D-FINE checkpoint
+
+Only needed if you have your own D-FINE checkpoint. If you're using an official model, `DFINE("dfine_s")` downloads and wraps it automatically — skip this section.
+
+```bash
+uv run python tools/convert_checkpoint.py \
+    --weights dfine_l.pth \
+    --config  extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
+    --names   configs/datasets/coco.yml \
+    --output  dfine_l_wrapped.pth
+```
+
+| Argument | Description |
+|---|---|
+| `--weights` | Raw D-FINE checkpoint |
+| `--config` | Canonical D-FINE config from `extern/dfine/configs/` |
+| `--names` | YAML with a `names:` mapping — use `configs/datasets/coco.yml` for COCO models |
+| `--output` | Path for the wrapped output |
+
+EMA weights are used automatically when present, matching D-FINE's own inference scripts.
 
 ## Documentation
 
