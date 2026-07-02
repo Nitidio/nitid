@@ -2,6 +2,7 @@
 DFINEExporter — model export to ONNX, TensorRT, TorchScript.
 Called internally by DFINE.export(). Not part of the public API.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -53,16 +54,20 @@ class DFINEExporter:
             return self._to_tensorrt(imgsz, batch, dynamic, half, verbose)
         if format == "torchscript":
             return self._to_torchscript(imgsz, batch, verbose)
-        raise ValueError(f"Unsupported export format: {format!r}. Choose: onnx, tensorrt, torchscript")
+        raise ValueError(
+            f"Unsupported export format: {format!r}. Choose: onnx, tensorrt, torchscript"
+        )
 
     # ── ONNX ────────────────────────────────────────────────────────────────
 
     def _to_onnx(self, imgsz, batch, dynamic, simplify, opset, verbose) -> Path:
         import onnx
+
         out = Path(f"dfine_{imgsz}.onnx")
         self._export_onnx_to_path(out, imgsz, batch, dynamic, opset)
         if simplify:
             import onnxsim
+
             model_onnx = onnx.load(str(out))
             model_onnx, ok = onnxsim.simplify(model_onnx)
             if ok:
@@ -70,8 +75,9 @@ class DFINEExporter:
         LOGGER.info(f"ONNX export saved to {out}")
         return out
 
-    def _export_onnx_to_path(self, path: Path, imgsz: int, batch: int,
-                              dynamic: bool, opset: int) -> None:
+    def _export_onnx_to_path(
+        self, path: Path, imgsz: int, batch: int, dynamic: bool, opset: int
+    ) -> None:
         """Trace the model to ONNX at an explicit output path."""
         from typing import Any
 
@@ -90,12 +96,16 @@ class DFINEExporter:
         wrapped_model.eval()
 
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
-        dynamic_axes = {
-            "images": {0: "batch"},
-            "labels": {0: "batch"},
-            "boxes": {0: "batch"},
-            "scores": {0: "batch"},
-        } if dynamic else None
+        dynamic_axes = (
+            {
+                "images": {0: "batch"},
+                "labels": {0: "batch"},
+                "boxes": {0: "batch"},
+                "scores": {0: "batch"},
+            }
+            if dynamic
+            else None
+        )
 
         torch.onnx.export(
             wrapped_model,
@@ -109,8 +119,9 @@ class DFINEExporter:
 
     # ── TensorRT ─────────────────────────────────────────────────────────────
 
-    def _to_tensorrt(self, imgsz: int, batch: int, dynamic: bool,
-                     half: bool, verbose: bool) -> Path:
+    def _to_tensorrt(
+        self, imgsz: int, batch: int, dynamic: bool, half: bool, verbose: bool
+    ) -> Path:
         """
         Export to a TensorRT serialised engine via the TRT Python API.
 
@@ -123,8 +134,7 @@ class DFINEExporter:
             import tensorrt as trt
         except ImportError:
             raise ImportError(
-                "TensorRT is not installed. "
-                "Install it with: uv sync --extra tensorrt"
+                "TensorRT is not installed. Install it with: uv sync --extra tensorrt"
             ) from None
 
         out = Path(f"dfine_{imgsz}.engine")
@@ -137,9 +147,7 @@ class DFINEExporter:
             self._export_onnx_to_path(tmp_onnx, imgsz, batch, dynamic, opset=17)
 
             # ── Step 2: build TRT engine from ONNX ───────────────────────────
-            trt_logger = trt.Logger(
-                trt.Logger.INFO if verbose else trt.Logger.WARNING
-            )
+            trt_logger = trt.Logger(trt.Logger.INFO if verbose else trt.Logger.WARNING)
             builder = trt.Builder(trt_logger)
             network = builder.create_network(
                 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
@@ -148,9 +156,7 @@ class DFINEExporter:
 
             with open(str(tmp_onnx), "rb") as f:
                 if not parser.parse(f.read()):
-                    errors = "\n".join(
-                        str(parser.get_error(i)) for i in range(parser.num_errors)
-                    )
+                    errors = "\n".join(str(parser.get_error(i)) for i in range(parser.num_errors))
                     raise RuntimeError(f"TensorRT failed to parse ONNX:\n{errors}")
 
             config = builder.create_builder_config()
