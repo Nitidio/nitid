@@ -3,12 +3,30 @@ import pytest
 
 
 def test_export_onnx(tiny_checkpoint, tmp_path):
+    import onnx
+
     from dfine import DFINE
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     # imgsz must match the model's eval_spatial_size (640) — anchors are pre-computed
     out = model.export(format="onnx", imgsz=640, simplify=False, verbose=False)
     assert out.exists()
     assert out.suffix == ".onnx"
+
+    # Validate ONNX graph inputs and outputs
+    onnx_model = onnx.load(str(out))
+
+    # Assert inputs
+    inputs = [inp.name for inp in onnx_model.graph.input]
+    assert len(inputs) == 1
+    assert inputs[0] == "images"
+
+    # Assert outputs
+    outputs = [ot.name for ot in onnx_model.graph.output]
+    assert len(outputs) == 3
+    assert "labels" in outputs
+    assert "boxes" in outputs
+    assert "scores" in outputs
+
     out.unlink()
 
 

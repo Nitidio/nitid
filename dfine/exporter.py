@@ -11,6 +11,24 @@ import torch
 from dfine.utils.logging import LOGGER
 
 
+class DeployModel(torch.nn.Module):
+    def __init__(self, model, postprocessor) -> None:
+        super().__init__()
+        self.model = model
+        self.postprocessor = postprocessor
+        self.eval()
+
+    def forward(self, images):
+        outputs = self.model(images)
+        B = images.shape[0]
+        H = images.shape[2]
+        W = images.shape[3]
+        h_t = torch.as_tensor(H, dtype=torch.float32, device=images.device)
+        w_t = torch.as_tensor(W, dtype=torch.float32, device=images.device)
+        orig_target_sizes = torch.stack([w_t, h_t]).unsqueeze(0).repeat(B, 1)
+        return self.postprocessor(outputs, orig_target_sizes)
+
+
 class DFINEExporter:
     def __init__(self, model, cfg: dict, device: str) -> None:
         self.model = model
@@ -55,15 +73,37 @@ class DFINEExporter:
     def _export_onnx_to_path(self, path: Path, imgsz: int, batch: int,
                               dynamic: bool, opset: int) -> None:
         """Trace the model to ONNX at an explicit output path."""
+        from typing import Any
+
+        from dfine.nn.build import build_postprocessor
+
+        # Deploy raw model if available
+        if hasattr(self.model, "deploy"):
+            self.model.deploy()
+
+        postprocessor: Any = build_postprocessor(self.cfg)
+        if hasattr(postprocessor, "deploy"):
+            postprocessor.deploy()
+        postprocessor.to(self.device)
+
+        wrapped_model = DeployModel(self.model, postprocessor)
+        wrapped_model.eval()
+
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
-        dynamic_axes = {"images": {0: "batch"}, "output": {0: "batch"}} if dynamic else None
+        dynamic_axes = {
+            "images": {0: "batch"},
+            "labels": {0: "batch"},
+            "boxes": {0: "batch"},
+            "scores": {0: "batch"},
+        } if dynamic else None
+
         torch.onnx.export(
-            self.model,
-            dummy,
+            wrapped_model,
+            (dummy,),
             str(path),
             opset_version=opset,
             input_names=["images"],
-            output_names=["output"],
+            output_names=["labels", "boxes", "scores"],
             dynamic_axes=dynamic_axes,
         )
 
