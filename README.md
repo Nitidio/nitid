@@ -11,6 +11,10 @@
 
 nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one import and keep all the patterns you already know: predict, train, val, export, stream, CLI.
 
+![nitid detection demo](docs/assets/nitid-demo.png)
+
+Example prediction using D-FINE-S on a street image.
+
 ## Why nitid?
 
 - Familiar Ultralytics-style API
