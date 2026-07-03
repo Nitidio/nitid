@@ -44,13 +44,14 @@ class DFINEPredictor:
         stream: bool,
         augment: bool,
         verbose: bool,
+        iou: float = 0.85,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
         loader = LoadSource(source, imgsz=imgsz, device=self.device)
-        gen = self._infer(loader, conf, classes)
+        gen = self._infer(loader, conf, classes, augment=augment, iou=iou)
         return gen if stream else list(gen)
 
-    def _infer(self, loader: LoadSource, conf, classes) -> Generator:
+    def _infer(self, loader: LoadSource, conf, classes, augment: bool = False, iou: float = 0.85) -> Generator:
         """Yield one Results object per frame/image."""
         for tensor, orig_img, path in loader:
             h, w = orig_img.shape[:2]
@@ -58,9 +59,37 @@ class DFINEPredictor:
             with torch.no_grad():
                 raw = self.model(tensor)
                 detections = self._postprocessor(raw, orig_size)
-            yield self._postprocess(detections[0], orig_img, path, conf, classes)
+                merged_det = detections[0]
+                merged_det["num_orig"] = len(merged_det["boxes"])
 
-    def _postprocess(self, det: dict, orig_img, path, conf_thr, classes) -> Results:
+                if augment:
+                    # Run prediction on horizontally flipped image
+                    tensor_flipped = torch.flip(tensor, dims=[3])
+                    raw_flipped = self.model(tensor_flipped)
+                    detections_flipped = self._postprocessor(raw_flipped, orig_size)
+                    det_flipped = detections_flipped[0]
+
+                    # Flip back xyxy pixel-space coordinates: x1_new = w - x2_old, x2_new = w - x1_old
+                    boxes_flipped_back = det_flipped["boxes"].clone()
+                    if len(boxes_flipped_back) > 0:
+                        x1 = w - boxes_flipped_back[:, 2]
+                        x2 = w - boxes_flipped_back[:, 0]
+                        boxes_flipped_back[:, 0] = x1
+                        boxes_flipped_back[:, 2] = x2
+
+                    # Combine detections
+                    merged_det = {
+                        "labels": torch.cat([merged_det["labels"], det_flipped["labels"]], dim=0),
+                        "boxes": torch.cat([merged_det["boxes"], boxes_flipped_back], dim=0),
+                        "scores": torch.cat([merged_det["scores"], det_flipped["scores"]], dim=0),
+                        "num_orig": merged_det["num_orig"],
+                    }
+
+            yield self._postprocess(merged_det, orig_img, path, conf, classes, augment=augment, iou=iou)
+
+    def _postprocess(
+        self, det: dict, orig_img, path, conf_thr, classes, augment: bool = False, iou: float = 0.85
+    ) -> Results:
         """
         det is one element from DFINEPostProcessor output:
             {labels: [N], boxes: [N, 4] xyxy in pixel coords, scores: [N]}
@@ -68,14 +97,50 @@ class DFINEPredictor:
         labels = det["labels"]
         boxes  = det["boxes"]
         scores = det["scores"]
+        num_orig = det.get("num_orig", len(boxes))
+
+        # Assign view tracking labels (0 = original view, 1 = flipped TTA view)
+        views = torch.zeros(len(boxes), dtype=torch.long, device=boxes.device)
+        views[num_orig:] = 1
 
         mask = scores > conf_thr
-        labels, boxes, scores = labels[mask], boxes[mask], scores[mask]
+        labels, boxes, scores, views = labels[mask], boxes[mask], scores[mask], views[mask]
 
         if classes is not None:
             cls_tensor = torch.tensor(classes, device=labels.device)
             class_mask = torch.isin(labels, cls_tensor)
-            labels, boxes, scores = labels[class_mask], boxes[class_mask], scores[class_mask]
+            labels, boxes, scores, views = (
+                labels[class_mask],
+                boxes[class_mask],
+                scores[class_mask],
+                views[class_mask],
+            )
+
+        if augment and len(boxes) > 0:
+            import torchvision
+            # Sort by scores in descending order
+            order = scores.argsort(descending=True)
+            keep = torch.ones(len(boxes), dtype=torch.bool, device=boxes.device)
+
+            # Compute all pairwise IoUs
+            ious = torchvision.ops.box_iou(boxes, boxes)
+
+            for i in range(len(order)):
+                idx_a = order[i]
+                if not keep[idx_a]:
+                     continue
+
+                # Suppress boxes of the same class from the OTHER view only
+                nms_mask = (
+                    keep &
+                    (labels == labels[idx_a]) &
+                    (views != views[idx_a]) &
+                    (ious[idx_a] > iou)
+                )
+                keep[nms_mask] = False
+
+            keep_indices = torch.where(keep)[0]
+            labels, boxes, scores = labels[keep_indices], boxes[keep_indices], scores[keep_indices]
 
         h, w = orig_img.shape[:2]
         boxes = clip_boxes(boxes, (h, w))
