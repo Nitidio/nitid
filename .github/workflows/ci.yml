@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [develop, main]
+    branches: [develop, main, ci/add-integration-tests-to-workflow]
   pull_request:
     branches: [develop, main]
 
@@ -30,7 +30,7 @@ jobs:
         run: uv run ruff check .
 
   test:
-    name: Unit Tests
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,15 +46,15 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra train
 
-      - name: Run unit tests with coverage
+      - name: Run tests with coverage
         run: |
           uv run pytest \
             --cov=dfine \
             --cov=web \
             --cov-report=xml \
-            tests/unit
+            tests/unit tests/integration
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
