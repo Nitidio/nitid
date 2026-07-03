@@ -72,7 +72,7 @@ def tiny_dataset(tmp_path_factory):
         for i in range(1, n_imgs + 1):
             fname = f"{i:06d}.jpg"
             _PILImage.fromarray(
-                np.zeros((64, 64, 3), dtype=np.uint8)
+                np.random.randint(0, 256, (64, 64, 3), dtype=np.uint8)
             ).save(img_dir / fname)
             images.append({"id": i, "file_name": fname, "width": 64, "height": 64})
             annotations.append({

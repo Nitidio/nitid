@@ -118,7 +118,7 @@ uv run pytest
 
 Integration tests use the `tiny_checkpoint` session fixture in `tests/conftest.py`. It builds a real D-FINE-S model with random weights entirely in memory — no download required. The fixture overrides `num_layers=1`, `num_queries=10`, `num_denoising=0`, `depth_mult=0.1` to keep build time fast (<10 s).
 
-> `tests/integration/test_train.py` is marked `xfail` — training is implemented but the test exists to document intended behaviour.
+> `tests/integration/test_train.py` verifies the fine-tuning and validation pipelines using the tiny checkpoint on CPU.
 
 ---
 
