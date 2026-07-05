@@ -14,14 +14,164 @@ from __future__ import annotations
 import sys
 
 COMMANDS = {"predict", "download", "train", "val", "export", "info"}
+HELP_FLAGS = {"-h", "--help"}
+
+GENERAL_HELP = """\
+nitid D-FINE CLI
+
+Usage:
+  dfine COMMAND [key=value ...]
+
+Commands:
+  predict  Run object detection on an image, directory, video, URL, or webcam
+  download Download and wrap an official D-FINE checkpoint
+  train    Fine-tune a model on a COCO-format dataset
+  val      Evaluate a model and report COCO metrics
+  export   Export a model to ONNX, TorchScript, or TensorRT
+  info     Show model parameters, GFLOPs, and checkpoint size
+
+Run "dfine COMMAND --help" for command-specific options and examples.
+"""
+
+COMMAND_HELP = {
+    "predict": """\
+Usage:
+  dfine predict model=MODEL source=SOURCE [key=value ...]
+
+Required:
+  source=SOURCE       Image, directory, video, URL, webcam index, or stream URL
+
+Options:
+  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  conf=FLOAT          Confidence threshold (default: 0.5)
+  imgsz=INT           Square inference image size (default: 640)
+  stream=BOOL         Return results as a generator (default: false)
+  augment=BOOL        Use test-time augmentation (default: false)
+  verbose=BOOL        Print prediction progress (default: true)
+
+Examples:
+  dfine predict model=dfine_l.pth source=image.jpg
+  dfine predict model=dfine_l.pth source=video.mp4 conf=0.3 stream=true
+""",
+    "download": """\
+Usage:
+  dfine download [model=MODEL] [key=value ...]
+
+Options:
+  model=NAME          dfine_s, dfine_m, dfine_l, or dfine_x (default: dfine_l)
+  output=PATH         Output directory or .pth file (default: current directory)
+  force=BOOL          Overwrite an existing wrapped checkpoint (default: false)
+
+The command downloads the official raw checkpoint and converts it to nitid's
+wrapped .pth format. The default filename is MODEL_wrapped.pth.
+
+Examples:
+  dfine download model=dfine_s
+  dfine download model=dfine_m output=models
+  dfine download model=dfine_l output=models/custom.pth force=true
+""",
+    "train": """\
+Usage:
+  dfine train model=MODEL data=DATA [key=value ...]
+
+Required:
+  data=PATH           Dataset YAML file using COCO-format annotations
+
+Options:
+  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  epochs=INT          Number of training epochs (default: 50)
+  imgsz=INT           Square training image size (default: 640)
+  batch=INT           Batch size (default: 16)
+  lr0=FLOAT           Initial learning rate (default: 0.0001)
+  lrf=FLOAT           Final learning-rate factor (default: 0.01)
+  optimizer=NAME      AdamW or SGD (default: AdamW)
+  resume=BOOL         Resume a previous run (default: false)
+  amp=BOOL            Enable mixed precision on CUDA (default: false)
+  ema=BOOL            Enable exponential moving average (default: false)
+  ema_decay=FLOAT     EMA decay value (default: 0.9999)
+  device=DEVICE       cpu, cuda, or cuda:N (default: model device)
+  project=PATH        Parent output directory (default: runs/train)
+  name=NAME           Run directory name (default: exp)
+  verbose=BOOL        Print training progress (default: true)
+
+Example:
+  dfine train model=dfine_l.pth data=coco.yaml epochs=50 batch=16 amp=true
+""",
+    "val": """\
+Usage:
+  dfine val model=MODEL data=DATA [key=value ...]
+
+Required:
+  data=PATH           Dataset YAML file using COCO-format annotations
+
+Options:
+  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  imgsz=INT           Square validation image size (default: 640)
+  batch=INT           Batch size (default: 16)
+  conf=FLOAT          Confidence threshold (default: 0.001)
+  split=NAME          Dataset split: val or test (default: val)
+  verbose=BOOL        Print validation progress (default: true)
+
+Example:
+  dfine val model=dfine_l.pth data=coco.yaml split=val batch=16
+""",
+    "export": """\
+Usage:
+  dfine export model=MODEL [key=value ...]
+
+Options:
+  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  format=FORMAT       onnx, torchscript, or tensorrt (default: onnx)
+  imgsz=INT           Square export image size (default: 640)
+  batch=INT           Static batch size (default: 1)
+  dynamic=BOOL        Enable a dynamic batch axis (default: false)
+  simplify=BOOL       Simplify the ONNX graph (default: true)
+  opset=INT           ONNX opset version (default: 17)
+  half=BOOL           Enable FP16 TensorRT export (default: false)
+  device=DEVICE       cpu, cuda, or cuda:N (default: model device)
+  verbose=BOOL        Print export progress (default: true)
+
+Examples:
+  dfine export model=dfine_l.pth format=onnx
+  dfine export model=dfine_l.pth format=tensorrt half=true
+""",
+    "info": """\
+Usage:
+  dfine info model=MODEL [key=value ...]
+
+Options:
+  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  detailed=BOOL       Include per-layer parameter counts (default: false)
+
+Example:
+  dfine info model=dfine_l.pth detailed=true
+""",
+}
+
+
+def _print_help(command: str | None = None) -> None:
+    """Print general help or help for one command."""
+    print(COMMAND_HELP[command] if command else GENERAL_HELP)
 
 
 def parse_args(argv: list[str]) -> tuple[str, dict]:
     """Parse 'command key=value ...' style args."""
-    if len(argv) < 2 or argv[1] not in COMMANDS:
-        print(__doc__)
+    if len(argv) < 2:
+        _print_help()
         sys.exit(1)
-    command = argv[1]
+
+    command = argv[1].lower()
+    if command in HELP_FLAGS:
+        _print_help()
+        sys.exit(0)
+    if command not in COMMANDS:
+        print(f"ERROR: unknown command '{argv[1]}'\n")
+        _print_help()
+        sys.exit(1)
+    if any(token in HELP_FLAGS for token in argv[2:]):
+        _print_help(command)
+        sys.exit(0)
+
     kwargs = {}
     for token in argv[2:]:
         if "=" in token:
