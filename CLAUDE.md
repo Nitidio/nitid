@@ -101,4 +101,4 @@ The model pre-computes positional anchors for `eval_spatial_size` (default `[640
 
 - `tests/unit/` — pure Python; no GPU, no checkpoint, no submodule required.
 - `tests/integration/` — use a session-scoped `tiny_checkpoint` fixture in `tests/conftest.py` that builds a small D-FINE-S model with random weights at test time (no download). The fixture overrides `num_layers=1`, `num_queries=10`, `num_denoising=0`, `depth_mult=0.1` to keep build time fast.
-- `tests/integration/test_train.py` — marked `xfail` (Phase 3 not implemented).
+- `tests/integration/test_train.py` — runs the full training loop on CPU.

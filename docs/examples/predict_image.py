@@ -1,4 +1,5 @@
 """Predict on a single image — the simplest possible usage."""
+
 from dfine import DFINE
 
 model = DFINE("dfine_l.pth")

@@ -1,4 +1,5 @@
 """Unit tests for LoadSource."""
+
 import numpy as np
 import pytest
 
@@ -28,6 +29,7 @@ def test_invalid_source():
 
 def test_image_source(tmp_path):
     from PIL import Image as _PILImage
+
     img_path = tmp_path / "test.jpg"
     _PILImage.fromarray(np.zeros((64, 64, 3), dtype=np.uint8)).save(img_path)
 
@@ -42,10 +44,9 @@ def test_image_source(tmp_path):
 
 def test_directory_source(tmp_path):
     from PIL import Image as _PILImage
+
     for i in range(3):
-        _PILImage.fromarray(np.zeros((32, 32, 3), dtype=np.uint8)).save(
-            tmp_path / f"{i:03d}.jpg"
-        )
+        _PILImage.fromarray(np.zeros((32, 32, 3), dtype=np.uint8)).save(tmp_path / f"{i:03d}.jpg")
     # also write a non-image file that should be ignored
     (tmp_path / "notes.txt").write_text("ignored")
 
@@ -71,3 +72,61 @@ def test_stream_len_is_minus_one():
     loader = LoadSource("rtsp://fake", imgsz=640, device="cpu")
     # len() rejects negative values, so call __len__ directly
     assert loader.__len__() == -1
+
+
+def test_capture_screen_frame_caches_mss_instance(monkeypatch):
+    from dfine.utils.sources import LoadSource
+
+    call_count = {"mss_init": 0, "grab": 0}
+    fake_bgra = np.zeros((100, 100, 4), dtype=np.uint8)
+
+    class FakeSct:
+        monitors = [{"top": 0, "left": 0, "width": 100, "height": 100}]
+
+        def grab(self, monitor):
+            call_count["grab"] += 1
+            return fake_bgra
+
+        def close(self):
+            pass
+
+    def fake_mss():
+        call_count["mss_init"] += 1
+        return FakeSct()
+
+    monkeypatch.setattr("mss.mss", fake_mss)
+
+    loader = LoadSource("screen", imgsz=640, device="cpu")
+    frame1 = loader._capture_screen_frame()
+    frame2 = loader._capture_screen_frame()
+    _ = loader._capture_screen_frame()
+
+    assert call_count["mss_init"] == 1, "mss() should be created once and cached, not per-frame"
+    assert call_count["grab"] == 3
+    assert frame1.shape == (100, 100, 3)  # BGRA → BGR drops the alpha channel
+    assert frame2.shape == (100, 100, 3)
+
+
+def test_screen_iteration_closes_mss_on_exit(monkeypatch):
+    from dfine.utils.sources import LoadSource
+
+    closed = {"called": False}
+    fake_bgra = np.zeros((100, 100, 4), dtype=np.uint8)
+
+    class FakeSct:
+        monitors = [{"top": 0, "left": 0, "width": 100, "height": 100}]
+
+        def grab(self, monitor):
+            return fake_bgra
+
+        def close(self):
+            closed["called"] = True
+
+    monkeypatch.setattr("mss.mss", lambda: FakeSct())
+
+    loader = LoadSource("screen", imgsz=640, device="cpu")
+    gen = iter(loader)
+    next(gen)  # pull one frame, forces mss() to be created
+    gen.close()  # simulates early abandonment (e.g. islice not exhausting it)
+
+    assert closed["called"], "mss instance should be closed when the generator exits early"

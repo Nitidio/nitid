@@ -13,6 +13,7 @@ Checkpoint format:
         "metrics": dict,
     }
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -63,10 +64,10 @@ def save_checkpoint(
     """Save a dfine-wrap checkpoint with embedded config."""
     torch.save(
         {
-            "model":   model.state_dict(),
-            "config":  cfg,
-            "names":   names,
-            "epoch":   epoch,
+            "model": model.state_dict(),
+            "config": cfg,
+            "names": names,
+            "epoch": epoch,
             "metrics": metrics or {},
         },
         str(path),

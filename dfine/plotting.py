@@ -1,15 +1,25 @@
 """
 Visualisation helpers. plot_results() draws boxes on an image.
 """
+
 from __future__ import annotations
 
 import cv2
 import numpy as np
 
 PALETTE = [
-    (56, 56, 255), (151, 157, 255), (31, 112, 255), (29, 178, 255),
-    (49, 210, 207), (10, 249, 72), (23, 204, 146), (134, 219, 61),
-    (52, 147, 26), (187, 212, 0), (168, 153, 44), (255, 194, 0),
+    (56, 56, 255),
+    (151, 157, 255),
+    (31, 112, 255),
+    (29, 178, 255),
+    (49, 210, 207),
+    (10, 249, 72),
+    (23, 204, 146),
+    (134, 219, 61),
+    (52, 147, 26),
+    (187, 212, 0),
+    (168, 153, 44),
+    (255, 194, 0),
 ]
 
 
@@ -33,6 +43,7 @@ def plot_results(result, conf: bool, labels: bool, line_width, font_size) -> np.
             text = f"{name} {score:.2f}" if conf else name
             (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, fs * 0.5, 1)
             cv2.rectangle(img, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)
-            cv2.putText(img, text, (x1, y1 - 2),
-                        cv2.FONT_HERSHEY_SIMPLEX, fs * 0.5, (255, 255, 255), 1)
+            cv2.putText(
+                img, text, (x1, y1 - 2), cv2.FONT_HERSHEY_SIMPLEX, fs * 0.5, (255, 255, 255), 1
+            )
     return img

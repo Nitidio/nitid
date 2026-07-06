@@ -14,6 +14,7 @@ Notes:
       NOT a nitid-wrapped checkpoint.
     - Output image saved to plain_dfine_result.jpg
 """
+
 import argparse
 import os
 import sys
@@ -38,8 +39,9 @@ if "src" not in sys.modules:
 
 if "src.data" not in sys.modules:
     from torch.utils.data import DataLoader as _DL
+
     data_stub = types.ModuleType("src.data")
-    data_stub.DataLoader = _DL
+    setattr(data_stub, "DataLoader", _DL)
     sys.modules["src.data"] = data_stub
 
 if "src.misc" not in sys.modules:
@@ -89,7 +91,7 @@ def infer(model: nn.Module, image_path: str, conf: float, device: str) -> None:
         labels, boxes, scores = model(tensor, orig_size)
 
     labels = labels[0]
-    boxes  = boxes[0]
+    boxes = boxes[0]
     scores = scores[0]
 
     mask = scores > conf
@@ -108,10 +110,10 @@ def infer(model: nn.Module, image_path: str, conf: float, device: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--config",  required=True, help="D-FINE YAML config path")
+    parser.add_argument("-c", "--config", required=True, help="D-FINE YAML config path")
     parser.add_argument("-w", "--weights", required=True, help="Raw D-FINE .pth checkpoint")
-    parser.add_argument("-i", "--image",   required=True, help="Input image path")
-    parser.add_argument("--conf",   type=float, default=0.5)
+    parser.add_argument("-i", "--image", required=True, help="Input image path")
+    parser.add_argument("--conf", type=float, default=0.5)
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
 

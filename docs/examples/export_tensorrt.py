@@ -1,4 +1,5 @@
 """Export to TensorRT for deployment in GStreamer pipeline."""
+
 from dfine import DFINE
 
 model = DFINE("dfine_l.pth")

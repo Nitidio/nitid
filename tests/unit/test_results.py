@@ -1,4 +1,5 @@
 """Unit tests for Results and Boxes."""
+
 import numpy as np
 import pytest
 import torch
@@ -8,16 +9,16 @@ from dfine.results import Boxes, Results
 
 @pytest.fixture
 def dummy_boxes():
-    data = torch.tensor([[10., 20., 100., 200., 0.9, 0.],
-                         [50., 60., 150., 250., 0.7, 1.]])
+    data = torch.tensor(
+        [[10.0, 20.0, 100.0, 200.0, 0.9, 0.0], [50.0, 60.0, 150.0, 250.0, 0.7, 1.0]]
+    )
     return Boxes(data, orig_shape=(480, 640))
 
 
 @pytest.fixture
 def dummy_result(dummy_boxes):
     img = np.zeros((480, 640, 3), dtype=np.uint8)
-    return Results(orig_img=img, path="test.jpg",
-                   names={0: "person", 1: "car"}, boxes=dummy_boxes)
+    return Results(orig_img=img, path="test.jpg", names={0: "person", 1: "car"}, boxes=dummy_boxes)
 
 
 def test_boxes_xyxy(dummy_boxes):

@@ -2,6 +2,7 @@
 build_criterion() — wraps D-FINE's DFINECriterion for use in the training loop.
 Requires the same extern/dfine submodule as build_model().
 """
+
 from __future__ import annotations
 
 import torch.nn as nn

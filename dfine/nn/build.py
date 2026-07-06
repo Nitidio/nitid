@@ -8,6 +8,7 @@ Requires extern/dfine to be present as a git submodule:
 The D-FINE repo root is added to sys.path so its src/ package is importable.
 Importing src triggers all @register() decorators that populate GLOBAL_CONFIG.
 """
+
 from __future__ import annotations
 
 import sys
@@ -30,10 +31,7 @@ def _ensure_dfine_on_path() -> None:
     import types
 
     if not _DFINE_ROOT.exists():
-        raise RuntimeError(
-            "extern/dfine not found. Run:\n"
-            "  git submodule update --init"
-        )
+        raise RuntimeError("extern/dfine not found. Run:\n  git submodule update --init")
 
     root = str(_DFINE_ROOT)
     if root not in sys.path:
@@ -52,8 +50,9 @@ def _ensure_dfine_on_path() -> None:
     # src.data: only expose DataLoader (all dist_utils needs from it)
     if "src.data" not in sys.modules:
         from torch.utils.data import DataLoader as _DL
+
         data_stub = types.ModuleType("src.data")
-        data_stub.DataLoader = _DL
+        setattr(data_stub, "DataLoader", _DL)
         sys.modules["src.data"] = data_stub
 
     # src.misc: namespace stub so sub-modules (box_ops, dist_utils) import
