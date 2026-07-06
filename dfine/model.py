@@ -1,6 +1,7 @@
 """
 DFINE — public entry point. Mirrors the ultralytics.YOLO interface.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -35,8 +36,8 @@ class DFINE:
     ) -> None:
         self._device_str = device
         self.verbose = verbose
-        self._model = None   # torch.nn.Module, loaded lazily
-        self._cfg = None     # dict, deserialised from checkpoint
+        self._model = None  # torch.nn.Module, loaded lazily
+        self._cfg = None  # dict, deserialised from checkpoint
         self._names: dict[int, str] = {}
         self._load(model)
 
@@ -62,6 +63,7 @@ class DFINE:
         Generator[Results] when stream=True.
         """
         from dfine.predictor import DFINEPredictor
+
         predictor = DFINEPredictor(self._model, self._cfg, self._device_str, self._names)
         return predictor.run(
             source,
@@ -95,6 +97,7 @@ class DFINE:
     ) -> dict:
         """Fine-tune on a custom dataset. Returns final metrics dict."""
         from dfine.trainer import DFINETrainer
+
         trainer = DFINETrainer(
             model=self._model,
             cfg=self._cfg,
@@ -131,6 +134,7 @@ class DFINE:
     ) -> dict:
         """Evaluate on val/test split. Returns mAP50, mAP50-95, etc."""
         from dfine.validator import DFINEValidator
+
         validator = DFINEValidator(self._model, self._cfg, self._device_str, self._names)
         return validator.run(
             data=data,
@@ -157,6 +161,7 @@ class DFINE:
     ) -> Path:
         """Export to ONNX, TensorRT, or TorchScript. Returns output path."""
         from dfine.exporter import DFINEExporter
+
         exporter = DFINEExporter(
             self._model,
             self._cfg,
@@ -192,8 +197,8 @@ class DFINE:
 
         import torch
 
-        n_params     = sum(p.numel() for p in self._model.parameters())
-        n_trainable  = sum(p.numel() for p in self._model.parameters() if p.requires_grad)
+        n_params = sum(p.numel() for p in self._model.parameters())
+        n_trainable = sum(p.numel() for p in self._model.parameters() if p.requires_grad)
 
         # On-disk size
         p = Path(self._path)
@@ -216,26 +221,23 @@ class DFINE:
             pass
 
         result = {
-            "params":           n_params,
+            "params": n_params,
             "params_trainable": n_trainable,
-            "gflops":           gflops,
-            "size_mb":          size_mb,
+            "gflops": gflops,
+            "size_mb": size_mb,
         }
 
         if verbose:
             gflop_str = f"{gflops:.1f} GFLOPs" if gflops is not None else "GFLOPs n/a"
-            size_str  = f"{size_mb:.1f} MB" if size_mb is not None else "size n/a"
+            size_str = f"{size_mb:.1f} MB" if size_mb is not None else "size n/a"
             print(
-                f"[D-FINE] {n_params/1e6:.1f}M params "
-                f"({n_trainable/1e6:.1f}M trainable)  "
+                f"[D-FINE] {n_params / 1e6:.1f}M params "
+                f"({n_trainable / 1e6:.1f}M trainable)  "
                 f"{gflop_str}  {size_str}"
             )
 
         if detailed:
-            result["layers"] = {
-                name: p.numel()
-                for name, p in self._model.named_parameters()
-            }
+            result["layers"] = {name: p.numel() for name, p in self._model.named_parameters()}
 
         return result
 
@@ -256,14 +258,41 @@ class DFINE:
 
     def _load(self, path: str) -> None:
         """Load checkpoint, deserialise config, build model."""
+        from pathlib import Path
+
         from dfine.utils.checkpoint import load_checkpoint
         from dfine.utils.device import resolve_device
+        from dfine.utils.downloads import download_model, get_model_asset
+
         self._device_str = resolve_device(self._device_str)
+
+        path_obj = Path(path)
+        if not path_obj.exists():
+            # Check if it is a known model name or alias (e.g. "dfine_l", "dfine_l.pth", etc.)
+            name_to_check = path_obj.name
+            if name_to_check.endswith(".pth"):
+                name_to_check = name_to_check[:-4]
+            if name_to_check.endswith("_wrapped"):
+                name_to_check = name_to_check[:-8]
+
+            try:
+                asset = get_model_asset(name_to_check)
+                if path_obj.suffix == ".pth":
+                    resolved_path = download_model(asset.name, output=path_obj)
+                else:
+                    parent = path_obj.parent
+                    if str(parent) in (".", ""):
+                        resolved_path = download_model(asset.name, output=None)
+                    else:
+                        resolved_path = download_model(asset.name, output=parent)
+                path = str(resolved_path)
+            except ValueError:
+                # Not a known model/alias, let load_checkpoint raise FileNotFoundError
+                pass
+
         self._path = str(path)
-        self._model, self._cfg, self._names = load_checkpoint(
-            path, device=self._device_str
-        )
+        self._model, self._cfg, self._names = load_checkpoint(path, device=self._device_str)
         self._model.eval()
         if self.verbose:
             n_params = sum(p.numel() for p in self._model.parameters())
-            print(f"[D-FINE] Loaded '{path}' — {n_params/1e6:.1f}M params on {self._device_str}")
+            print(f"[D-FINE] Loaded '{path}' — {n_params / 1e6:.1f}M params on {self._device_str}")
