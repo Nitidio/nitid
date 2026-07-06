@@ -31,8 +31,8 @@ results = model.predict(
     imgsz=640,        # inference size (square)
     classes=None,     # filter to these class indices, e.g. [0, 2]
     stream=False,     # return generator instead of list
-    augment=False,    # use test-time augmentation
-    verbose=True,     # print inference progress/speed
+    augment=False,    # run test-time augmentation (horizontal flip)
+    iou=0.85,          # IoU threshold for TTA NMS
 )
 ```
 

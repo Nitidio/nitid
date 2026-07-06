@@ -55,6 +55,7 @@ class DFINE:
         stream: bool = False,
         augment: bool = False,
         verbose: bool = True,
+        iou: float = 0.85,
     ) -> list | Generator:
         """
         Run detection on source.
@@ -62,10 +63,7 @@ class DFINE:
         Returns list[Results] when stream=False,
         Generator[Results] when stream=True.
         """
-        from dfine.predictor import DFINEPredictor
-
-        predictor = DFINEPredictor(self._model, self._cfg, self._device_str, self._names)
-        return predictor.run(
+        return self.predictor.run(
             source,
             conf=conf,
             imgsz=imgsz,
@@ -73,6 +71,7 @@ class DFINE:
             stream=stream,
             augment=augment,
             verbose=verbose,
+            iou=iou,
         )
 
     # ── Training ────────────────────────────────────────────────────────────
@@ -253,6 +252,12 @@ class DFINE:
     @property
     def task(self) -> str:
         return "detect"
+
+    @property
+    def predictor(self):
+        from dfine.predictor import DFINEPredictor
+
+        return DFINEPredictor(self._model, self._cfg, self._device_str, self._names)
 
     # ── Internal ────────────────────────────────────────────────────────────
 
