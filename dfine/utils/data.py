@@ -19,6 +19,7 @@ or specified explicitly with train_ann / val_ann keys.
 Category IDs in the annotation file are mapped to 0-based label indices
 by sorting them; override with a cat_ids: {cat_id: label} mapping in the YAML.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -65,8 +66,7 @@ class CocoFinetuneDataset(Dataset):
         self.img_dir = Path(img_dir)
         # only keep images that have at least one non-crowd annotation
         self.ids = [
-            img_id for img_id in self.coco.imgs
-            if self.coco.getAnnIds(imgIds=img_id, iscrowd=False)
+            img_id for img_id in self.coco.imgs if self.coco.getAnnIds(imgIds=img_id, iscrowd=False)
         ]
         self.transform = T.Compose([T.Resize((imgsz, imgsz)), T.ToTensor()])
 
@@ -94,8 +94,8 @@ class CocoFinetuneDataset(Dataset):
             labels.append(self.cat_id_to_label.get(ann["category_id"], 0))
 
         target = {
-            "labels":   torch.tensor(labels, dtype=torch.long),
-            "boxes":    torch.tensor(boxes,  dtype=torch.float32).reshape(-1, 4),
+            "labels": torch.tensor(labels, dtype=torch.long),
+            "boxes": torch.tensor(boxes, dtype=torch.float32).reshape(-1, 4),
             "image_id": torch.tensor([img_id], dtype=torch.long),
         }
         return self.transform(img), target
@@ -130,13 +130,11 @@ def build_coco_dataloader(
     if ann_key in cfg:
         ann_file = root / cfg[ann_key]
     else:
-        split_name = Path(cfg[split]).name   # "train" from "images/train"
+        split_name = Path(cfg[split]).name  # "train" from "images/train"
         ann_file = root / "annotations" / f"instances_{split_name}.json"
 
     cat_ids_cfg = cfg.get("cat_ids")
-    cat_id_to_label = (
-        {int(k): int(v) for k, v in cat_ids_cfg.items()} if cat_ids_cfg else None
-    )
+    cat_id_to_label = {int(k): int(v) for k, v in cat_ids_cfg.items()} if cat_ids_cfg else None
 
     dataset = CocoFinetuneDataset(
         img_dir=img_dir,

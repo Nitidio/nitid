@@ -10,6 +10,7 @@ Supported sources:
     "screen"    — screen capture (requires mss)
     rtsp://...  — RTSP / RTMP stream
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -70,13 +71,12 @@ class LoadSource:
             yield self._process_frame(self.source, path="<ndarray>")
         elif self._mode == "image":
             from PIL import Image as _PILImage
+
             pil_img = _PILImage.open(str(self.source)).convert("RGB")
             img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
             yield self._process_frame(img, path=str(self.source))
         elif self._mode in ("video", "webcam", "stream"):
-            cap = cv2.VideoCapture(
-                self.source if self._mode == "webcam" else str(self.source)
-            )
+            cap = cv2.VideoCapture(self.source if self._mode == "webcam" else str(self.source))
             while cap.isOpened():
                 ok, frame = cap.read()
                 if not ok:
@@ -86,8 +86,10 @@ class LoadSource:
         elif self._mode == "directory":
             for p in sorted(Path(self.source).iterdir()):
                 if p.suffix.lower() in IMAGE_EXTENSIONS:
-                    img = cv2.imread(str(p))
-                    yield self._process_frame(img, path=str(p))
+                    image_frame: np.ndarray | None = cv2.imread(str(p))
+                    if image_frame is None:
+                        continue
+                    yield self._process_frame(image_frame, path=str(p))
         elif self._mode == "list":
             for item in self.source:
                 yield from LoadSource(item, self.imgsz, self.device)
@@ -117,7 +119,6 @@ class LoadSource:
             return 1
         if self._mode == "directory":
             return sum(
-                1 for p in Path(self.source).iterdir()
-                if p.suffix.lower() in IMAGE_EXTENSIONS
+                1 for p in Path(self.source).iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS
             )
         return -1
