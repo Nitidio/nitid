@@ -29,8 +29,44 @@ jobs:
       - name: Run ruff
         run: uv run ruff check .
 
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+
   test:
-    name: Unit Tests
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra train
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest \
+            --cov=dfine \
+            --cov=web \
+            --cov-report=xml \
+            tests/unit tests/integration
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+
+  mypy:
+    name: Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,15 +84,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Run unit tests with coverage
-        run: |
-          uv run pytest \
-            --cov=dfine \
-            --cov=web \
-            --cov-report=xml \
-            tests/unit
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.xml
+      - name: Run mypy
+        run: uv run mypy dfine/

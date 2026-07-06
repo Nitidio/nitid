@@ -62,7 +62,7 @@ mkdir -p models
 cp dfine_l_wrapped.pth models/
 ```
 
-See [Converting a raw D-FINE checkpoint](../README.md#converting-a-raw-d-fine-checkpoint) if you have a raw checkpoint.
+See [Converting a raw D-FINE checkpoint](https://github.com/Vaelsys/nitid/blob/main/README.md#converting-a-raw-d-fine-checkpoint) if you have a raw checkpoint.
 
 ### Environment variables
 

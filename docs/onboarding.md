@@ -9,7 +9,7 @@ Welcome to **nitid** — an Ultralytics-style wrapper for the [D-FINE](https://g
 Prerequisites: Python 3.10+, [`uv`](https://github.com/astral-sh/uv), Node.js 18+ (only for web frontend).
 
 ```bash
-git clone <repo> && cd nitid
+git clone https://github.com/Vaelsys/nitid.git && cd nitid
 git submodule update --init        # pulls D-FINE source into extern/dfine
 uv sync --extra dev                # installs runtime + pytest, ruff, mypy
 ```
@@ -118,7 +118,7 @@ uv run pytest
 
 Integration tests use the `tiny_checkpoint` session fixture in `tests/conftest.py`. It builds a real D-FINE-S model with random weights entirely in memory — no download required. The fixture overrides `num_layers=1`, `num_queries=10`, `num_denoising=0`, `depth_mult=0.1` to keep build time fast (<10 s).
 
-> `tests/integration/test_train.py` is marked `xfail` — training is implemented but the test exists to document intended behaviour.
+> `tests/integration/test_train.py` verifies the fine-tuning and validation pipelines using the tiny checkpoint on CPU.
 
 ---
 
@@ -195,7 +195,7 @@ uv run python tools/convert_checkpoint.py \
 You can then run a quick smoke test:
 
 ```bash
-uv run dfine predict model=dfine_l_wrapped.pth source=image.jpg conf=0.5
+uv run dfine predict model=dfine_l source=image.jpg conf=0.5
 ```
 
 ---
@@ -220,4 +220,5 @@ uv run dfine predict model=dfine_l_wrapped.pth source=image.jpg conf=0.5
 | [`api_reference.md`](api_reference.md) | Full `DFINE` class API with all parameters |
 | [`fine_tuning.md`](fine_tuning.md) | Dataset format, AMP, EMA, all training parameters |
 | [`export.md`](export.md) | ONNX, TorchScript, TensorRT — options and constraints |
-| [`web_app.md`](web_app.md) | Web app setup, REST API, data model, implementation notes |
+| [`web_app.md`](web_app.md) | Web app setup, REST API, data model, implementation notes. | 
+| [`macos_docker_setup.md`](macos_docker_setup.md) | Setup docker for linux enviroment in MacOS Apple silicon | 

@@ -55,8 +55,11 @@ refactor: simplify checkpoint loading logic
 
 Before opening a PR, make sure:
 
-- [ ] Tests pass: `uv run pytest tests/unit`
+- [ ] Unit tests pass: `uv run pytest tests/unit`
+- [ ] Integration tests pass: `uv run pytest tests/integration`
 - [ ] No lint errors: `uv run ruff check .`
+- [ ] No formatting errors: `uv run ruff format --check .`
+- [ ] No mypy errors: `uv run mypy dfine/`
 - [ ] New behaviour is covered by tests
 - [ ] Documentation updated if needed
 - [ ] PR description explains what and why

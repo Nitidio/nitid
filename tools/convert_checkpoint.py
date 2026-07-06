@@ -11,6 +11,7 @@ Usage:
         --names   configs/datasets/coco.yml \
         --output  dfine_l_wrapped.pth
 """
+
 from __future__ import annotations
 
 import argparse
@@ -76,10 +77,10 @@ def convert(weights: str, config: str, names_file: str, output: str) -> None:
         names = {int(k): v for k, v in raw_names.items()}
 
     out_ckpt = {
-        "model":   state_dict,
-        "config":  cfg,
-        "names":   names,
-        "epoch":   ckpt.get("epoch", 0),
+        "model": state_dict,
+        "config": cfg,
+        "names": names,
+        "epoch": ckpt.get("epoch", 0),
         "metrics": ckpt.get("metrics", {}),
     }
     torch.save(out_ckpt, output)
@@ -89,9 +90,9 @@ def convert(weights: str, config: str, names_file: str, output: str) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description="Convert raw D-FINE checkpoint to dfine-wrap format")
     p.add_argument("--weights", required=True)
-    p.add_argument("--config",  required=True)
-    p.add_argument("--names",   required=True)
-    p.add_argument("--output",  required=True)
+    p.add_argument("--config", required=True)
+    p.add_argument("--names", required=True)
+    p.add_argument("--output", required=True)
     args = p.parse_args()
     convert(args.weights, args.config, args.names, args.output)
 

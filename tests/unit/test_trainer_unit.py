@@ -1,4 +1,5 @@
 """Unit tests for DFINETrainer helper methods (no D-FINE submodule needed)."""
+
 import pytest
 import torch
 import torch.nn as nn
@@ -12,8 +13,10 @@ def tiny_model():
         def __init__(self):
             super().__init__()
             self.l = nn.Linear(4, 4)
+
         def forward(self, x):
             return self.l(x)
+
     return M()
 
 
@@ -58,6 +61,7 @@ def test_scheduler_end_lr(trainer):
 
 # ── ModelEMA ─────────────────────────────────────────────────────────────────
 
+
 def test_ema_initial_weights_match_model(tiny_model):
     ema = ModelEMA(tiny_model, decay=0.999)
     for p_model, p_ema in zip(tiny_model.parameters(), ema.ema.parameters()):
@@ -84,13 +88,14 @@ def test_ema_update_interpolates(tiny_model):
 
 def test_ema_update_integer_params():
     """Integer parameters are copied directly, not blended."""
+
     class ModelWithIntParam(nn.Module):
         def __init__(self):
             super().__init__()
             self.register_parameter(
-                "idx", nn.Parameter(torch.tensor([1, 2, 3], dtype=torch.long),
-                                    requires_grad=False)
+                "idx", nn.Parameter(torch.tensor([1, 2, 3], dtype=torch.long), requires_grad=False)
             )
+
         def forward(self, x):
             return x
 
@@ -117,10 +122,12 @@ def test_ema_update_decay(tiny_model):
 
 def test_ema_buffers_copied(tiny_model):
     """Buffers (e.g. BatchNorm running stats) should be copied, not blended."""
+
     class ModelWithBN(nn.Module):
         def __init__(self):
             super().__init__()
             self.bn = nn.BatchNorm1d(4)
+
         def forward(self, x):
             return self.bn(x)
 

@@ -82,7 +82,7 @@ needed when you want a *different* ordering than sorted order.
 ```python
 from dfine import DFINE
 
-model = DFINE("dfine_l_wrapped.pth")
+model = DFINE("dfine_l")
 metrics = model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
@@ -104,7 +104,7 @@ be loaded directly with `DFINE("epoch50.pth")`.
 
 ```bash
 uv run dfine train \
-    model=dfine_l_wrapped.pth \
+    model=dfine_l \
     data=configs/datasets/my_dataset.yml \
     epochs=50 \
     batch=16
@@ -187,6 +187,7 @@ metrics = model.train(
 ```python
 metrics = model.val(
     data="configs/datasets/my_dataset.yml",
+    imgsz=640,
     split="val",
     batch=16,
     conf=0.001,   # low threshold — include all detections in mAP computation
@@ -205,7 +206,7 @@ print(metrics)
 
 ```bash
 uv run dfine val \
-    model=dfine_l_wrapped.pth \
+    model=dfine_l \
     data=configs/datasets/my_dataset.yml \
     conf=0.001
 ```

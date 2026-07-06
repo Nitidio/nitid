@@ -7,9 +7,10 @@ Supported sources:
     int         — webcam index
     np.ndarray  — single frame (GStreamer pipeline entry point)
     list        — list of any of the above
-    "screen"    — screen capture (requires mss)
+    "screen"    — screen capture (uses mss)
     rtsp://...  — RTSP / RTMP stream
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -70,24 +71,36 @@ class LoadSource:
             yield self._process_frame(self.source, path="<ndarray>")
         elif self._mode == "image":
             from PIL import Image as _PILImage
+
             pil_img = _PILImage.open(str(self.source)).convert("RGB")
             img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
             yield self._process_frame(img, path=str(self.source))
         elif self._mode in ("video", "webcam", "stream"):
-            cap = cv2.VideoCapture(
-                self.source if self._mode == "webcam" else str(self.source)
-            )
+            cap = cv2.VideoCapture(self.source if self._mode == "webcam" else str(self.source))
             while cap.isOpened():
                 ok, frame = cap.read()
                 if not ok:
                     break
                 yield self._process_frame(frame, path=str(self.source))
             cap.release()
+        elif self._mode == "screen":
+            try:
+                while True:
+                    screen_frame = self._capture_screen_frame()
+                    if screen_frame is None:
+                        break
+                    yield self._process_frame(screen_frame, path="<screen>")
+            finally:
+                if hasattr(self, "_sct"):
+                    self._sct.close()
+                    del self._sct
         elif self._mode == "directory":
             for p in sorted(Path(self.source).iterdir()):
                 if p.suffix.lower() in IMAGE_EXTENSIONS:
-                    img = cv2.imread(str(p))
-                    yield self._process_frame(img, path=str(p))
+                    image_frame: np.ndarray | None = cv2.imread(str(p))
+                    if image_frame is None:
+                        continue
+                    yield self._process_frame(image_frame, path=str(p))
         elif self._mode == "list":
             for item in self.source:
                 yield from LoadSource(item, self.imgsz, self.device)
@@ -107,6 +120,26 @@ class LoadSource:
         tensor = transform(pil_img).unsqueeze(0).to(self.device)
         return tensor, orig_img, path
 
+    def _capture_screen_frame(self) -> np.ndarray | None:
+        """Capture the current desktop as a BGR frame.
+
+        Lazily creates and caches a single mss instance across calls.
+        """
+        if not hasattr(self, "_sct"):
+            try:
+                from mss import mss
+            except ImportError as exc:  # pragma: no cover - runtime dependency
+                raise RuntimeError("Screen capture requires mss") from exc
+
+            try:
+                self._sct = mss()
+                self._monitor = self._sct.monitors[0]
+            except (OSError, ValueError, IndexError) as exc:
+                raise RuntimeError("Screen capture is not available in this environment") from exc
+
+        screen = self._sct.grab(self._monitor)
+        return cv2.cvtColor(np.array(screen), cv2.COLOR_BGRA2BGR)
+
     def __len__(self) -> int:
         """Returns -1 for live streams and webcams."""
         if self._mode in ("stream", "webcam", "screen"):
@@ -117,7 +150,6 @@ class LoadSource:
             return 1
         if self._mode == "directory":
             return sum(
-                1 for p in Path(self.source).iterdir()
-                if p.suffix.lower() in IMAGE_EXTENSIONS
+                1 for p in Path(self.source).iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS
             )
         return -1

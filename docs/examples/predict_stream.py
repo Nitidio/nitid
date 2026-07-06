@@ -2,6 +2,7 @@
 Predict on a live stream (RTSP or GStreamer numpy frames).
 This is Jorge's primary use case — feed cv2/GStreamer frames directly.
 """
+
 import cv2
 
 from dfine import DFINE

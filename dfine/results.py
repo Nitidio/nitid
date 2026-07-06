@@ -2,6 +2,7 @@
 Results and Boxes — return types from predict().
 Mirrors ultralytics.engine.results.Results / Boxes.
 """
+
 from __future__ import annotations
 
 import cv2
@@ -40,8 +41,10 @@ class Results:
     ) -> np.ndarray:
         """Draw boxes on image. Returns HWC BGR numpy array."""
         from dfine.plotting import plot_results
-        return plot_results(self, conf=conf, labels=labels,
-                            line_width=line_width, font_size=font_size)
+
+        return plot_results(
+            self, conf=conf, labels=labels, line_width=line_width, font_size=font_size
+        )
 
     def save(self, filename: str) -> None:
         """Save plotted image to disk."""
@@ -55,17 +58,19 @@ class Results:
 
     def to_json(self) -> list[dict]:
         """Serialise detections to a list of dicts."""
-        out = []
+        out: list[dict[str, object]] = []
         if self.boxes is None:
             return out
         for i in range(len(self)):
             xyxy = self.boxes.xyxy[i].tolist()
-            out.append({
-                "box": {"x1": xyxy[0], "y1": xyxy[1], "x2": xyxy[2], "y2": xyxy[3]},
-                "confidence": round(float(self.boxes.conf[i]), 4),
-                "class": int(self.boxes.cls[i]),
-                "name": self.names.get(int(self.boxes.cls[i]), "unknown"),
-            })
+            out.append(
+                {
+                    "box": {"x1": xyxy[0], "y1": xyxy[1], "x2": xyxy[2], "y2": xyxy[3]},
+                    "confidence": round(float(self.boxes.conf[i]), 4),
+                    "class": int(self.boxes.cls[i]),
+                    "name": self.names.get(int(self.boxes.cls[i]), "unknown"),
+                }
+            )
         return out
 
     def __len__(self) -> int:
@@ -85,8 +90,8 @@ class Boxes:
     """
 
     def __init__(self, data, orig_shape: tuple[int, int]) -> None:
-        self._data = data            # torch.Tensor [N, 6]
-        self.orig_shape = orig_shape # (H, W)
+        self._data = data  # torch.Tensor [N, 6]
+        self.orig_shape = orig_shape  # (H, W)
 
     @property
     def data(self):
@@ -111,9 +116,7 @@ class Boxes:
     def xywh(self):
         """cx, cy, w, h in absolute pixels [N, 4]."""
         x1, y1, x2, y2 = self.xyxy.unbind(1)
-        return __import__("torch").stack(
-            [(x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1], dim=1
-        )
+        return __import__("torch").stack([(x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1], dim=1)
 
     @property
     def xywhn(self):

@@ -1,4 +1,5 @@
 """Device resolution — normalises all valid device strings to torch.device."""
+
 from __future__ import annotations
 
 import torch

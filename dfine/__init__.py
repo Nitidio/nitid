@@ -9,6 +9,7 @@ Usage:
     model.train(data="coco.yaml", epochs=50)
     model.export(format="onnx")
 """
+
 from dfine.model import DFINE
 
 __version__ = "0.1.0"
