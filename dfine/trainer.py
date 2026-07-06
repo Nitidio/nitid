@@ -2,6 +2,7 @@
 DFINETrainer — fine-tuning engine.
 Called internally by DFINE.train(). Not part of the public API.
 """
+
 from __future__ import annotations
 
 import copy
@@ -120,12 +121,10 @@ class DFINETrainer:
         # AMP: only meaningful on CUDA
         is_cuda = self.device.startswith("cuda")
         if amp and not is_cuda:
-            LOGGER.warning(
-                "amp=True ignored — AMP requires a CUDA device, got %s", self.device
-            )
+            LOGGER.warning("amp=True ignored — AMP requires a CUDA device, got %s", self.device)
             amp = False
         scaler = torch.cuda.amp.GradScaler() if amp else None
-        device_type = self.device.split(":")[0]   # "cuda" or "cpu"
+        device_type = self.device.split(":")[0]  # "cuda" or "cpu"
 
         # EMA
         ema_model = self._build_ema(ema_decay) if ema else None
@@ -141,8 +140,10 @@ class DFINETrainer:
             for images, targets in dataloader:
                 images = images.to(self.device)
                 targets = [
-                    {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
-                     for k, v in t.items()}
+                    {
+                        k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                        for k, v in t.items()
+                    }
                     for t in targets
                 ]
 
@@ -151,10 +152,7 @@ class DFINETrainer:
                 with torch.amp.autocast(device_type=device_type, enabled=amp):
                     outputs = self.model(images, targets=targets)
                     loss_dict = criterion(outputs, targets)
-                    loss = sum(
-                        loss_dict[k] * weight_dict[k]
-                        for k in loss_dict if k in weight_dict
-                    )
+                    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
 
                 if scaler is not None:
                     scaler.scale(loss).backward()
@@ -193,6 +191,7 @@ class DFINETrainer:
 
     def _build_dataloader(self, data: str, imgsz: int, batch: int):
         from dfine.utils.data import build_coco_dataloader
+
         return build_coco_dataloader(data, split="train", imgsz=imgsz, batch_size=batch)
 
     def _build_optimizer(self, name: str, lr: float):
@@ -212,6 +211,7 @@ class DFINETrainer:
 
     def _build_criterion(self):
         from dfine.nn.criterion import build_criterion
+
         return build_criterion(self.cfg)
 
     def _build_ema(self, decay: float) -> ModelEMA:

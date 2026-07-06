@@ -20,8 +20,7 @@ def test_save_checkpoint_structure(tmp_path):
 
     model = TinyModel()
     path = tmp_path / "test.pth"
-    save_checkpoint(path, model, cfg={"model": {"num_classes": 80}},
-                    names={0: "person"}, epoch=5)
+    save_checkpoint(path, model, cfg={"model": {"num_classes": 80}}, names={0: "person"}, epoch=5)
 
     ckpt = torch.load(path, map_location="cpu", weights_only=False)
     assert "model" in ckpt
@@ -44,7 +43,9 @@ def test_load_checkpoint_missing_config_key(tmp_path):
         def __init__(self):
             super().__init__()
             self.l = nn.Linear(2, 2)
-        def forward(self, x): return self.l(x)
+
+        def forward(self, x):
+            return self.l(x)
 
     path = tmp_path / "raw.pth"
     torch.save({"model": TinyModel().state_dict()}, str(path))

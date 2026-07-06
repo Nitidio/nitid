@@ -2,15 +2,21 @@
 DFINEValidator — COCO mAP evaluation.
 Called internally by DFINE.val(). Not part of the public API.
 """
+
 from __future__ import annotations
 
 import contextlib
 import io
 from pathlib import Path
+from typing import Protocol, cast
 
 import torch
 
 from dfine.utils.logging import LOGGER
+
+
+class CocoLikeDataset(Protocol):
+    cat_id_to_label: dict[int, int]
 
 
 class DFINEValidator:
@@ -72,7 +78,8 @@ class DFINEValidator:
         postprocessor.eval()
 
         # Reverse map: 0-based label index → COCO category_id for result formatting
-        cat_id_to_label = dataloader.dataset.cat_id_to_label
+        dataset = cast(CocoLikeDataset, dataloader.dataset)
+        cat_id_to_label = dataset.cat_id_to_label
         label_to_cat_id = {v: k for k, v in cat_id_to_label.items()}
 
         self.model.eval()
@@ -94,18 +101,20 @@ class DFINEValidator:
                 for det, target in zip(detections, targets):
                     img_id = int(target["image_id"][0])
                     mask = det["scores"] > conf
-                    boxes  = det["boxes"][mask]   # xyxy absolute (imgsz space)
+                    boxes = det["boxes"][mask]  # xyxy absolute (imgsz space)
                     scores = det["scores"][mask]
                     labels = det["labels"][mask]
 
                     for box, score, label in zip(boxes.tolist(), scores.tolist(), labels.tolist()):
                         x1, y1, x2, y2 = box
-                        results.append({
-                            "image_id":    img_id,
-                            "category_id": label_to_cat_id.get(int(label), int(label) + 1),
-                            "bbox":  [x1, y1, x2 - x1, y2 - y1],  # COCO format: xywh
-                            "score": score,
-                        })
+                        results.append(
+                            {
+                                "image_id": img_id,
+                                "category_id": label_to_cat_id.get(int(label), int(label) + 1),
+                                "bbox": [x1, y1, x2 - x1, y2 - y1],  # COCO format: xywh
+                                "score": score,
+                            }
+                        )
 
         coco_gt = COCO(str(ann_file))
 
@@ -132,7 +141,7 @@ class DFINEValidator:
         stats = coco_eval.stats if len(coco_eval.stats) >= 12 else [0.0] * 12
         return {
             "mAP50-95": float(stats[0]),
-            "mAP50":    float(stats[1]),
-            "AR1":      float(stats[6]),
-            "AR100":    float(stats[8]),
+            "mAP50": float(stats[1]),
+            "AR1": float(stats[6]),
+            "AR100": float(stats[8]),
         }

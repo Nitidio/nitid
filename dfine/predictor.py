@@ -2,6 +2,7 @@
 DFINEPredictor — inference engine.
 Called internally by DFINE.predict(). Not part of the public API.
 """
+
 from __future__ import annotations
 
 from typing import Generator
@@ -32,6 +33,7 @@ class DFINEPredictor:
         self.names = names
 
         from dfine.nn.build import build_postprocessor
+
         self._postprocessor = build_postprocessor(cfg)
         self._postprocessor.to(device)
 
@@ -66,7 +68,7 @@ class DFINEPredictor:
             {labels: [N], boxes: [N, 4] xyxy in pixel coords, scores: [N]}
         """
         labels = det["labels"]
-        boxes  = det["boxes"]
+        boxes = det["boxes"]
         scores = det["scores"]
 
         mask = scores > conf_thr

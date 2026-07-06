@@ -1,4 +1,5 @@
 """Unit tests for LoadSource."""
+
 import numpy as np
 import pytest
 
@@ -28,6 +29,7 @@ def test_invalid_source():
 
 def test_image_source(tmp_path):
     from PIL import Image as _PILImage
+
     img_path = tmp_path / "test.jpg"
     _PILImage.fromarray(np.zeros((64, 64, 3), dtype=np.uint8)).save(img_path)
 
@@ -42,10 +44,9 @@ def test_image_source(tmp_path):
 
 def test_directory_source(tmp_path):
     from PIL import Image as _PILImage
+
     for i in range(3):
-        _PILImage.fromarray(np.zeros((32, 32, 3), dtype=np.uint8)).save(
-            tmp_path / f"{i:03d}.jpg"
-        )
+        _PILImage.fromarray(np.zeros((32, 32, 3), dtype=np.uint8)).save(tmp_path / f"{i:03d}.jpg")
     # also write a non-image file that should be ignored
     (tmp_path / "notes.txt").write_text("ignored")
 

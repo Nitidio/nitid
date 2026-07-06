@@ -7,6 +7,7 @@ Usage:
     dfine val      model=dfine_l.pth  data=coco.yaml
     dfine export   model=dfine_l.pth  format=onnx
 """
+
 from __future__ import annotations
 
 import sys
@@ -52,6 +53,7 @@ def main(argv: list[str] | None = None) -> None:
     model_path = kwargs.pop("model", "dfine_l.pth")
 
     from dfine import DFINE
+
     model = DFINE(model_path)
 
     if command == "predict":

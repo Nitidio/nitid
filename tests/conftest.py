@@ -5,6 +5,7 @@ tiny_checkpoint — small wrapped .pth built from random weights (no download).
 tiny_dataset    — minimal synthetic COCO dataset (blank images + JSON anns)
                   with a data YAML ready for train/val calls.
 """
+
 from pathlib import Path
 
 import pytest
@@ -71,27 +72,33 @@ def tiny_dataset(tmp_path_factory):
         images, annotations = [], []
         for i in range(1, n_imgs + 1):
             fname = f"{i:06d}.jpg"
-            _PILImage.fromarray(
-                np.zeros((64, 64, 3), dtype=np.uint8)
-            ).save(img_dir / fname)
+            _PILImage.fromarray(np.zeros((64, 64, 3), dtype=np.uint8)).save(img_dir / fname)
             images.append({"id": i, "file_name": fname, "width": 64, "height": 64})
-            annotations.append({
-                "id": i, "image_id": i, "category_id": 1,
-                "bbox": [10, 10, 20, 20], "area": 400, "iscrowd": 0,
-            })
+            annotations.append(
+                {
+                    "id": i,
+                    "image_id": i,
+                    "category_id": 1,
+                    "bbox": [10, 10, 20, 20],
+                    "area": 400,
+                    "iscrowd": 0,
+                }
+            )
 
         with open(ann_dir / f"instances_{split}.json", "w") as f:
-            json.dump({"images": images, "annotations": annotations,
-                       "categories": categories}, f)
+            json.dump({"images": images, "annotations": annotations, "categories": categories}, f)
 
     data_yaml = root / "data.yml"
     with open(data_yaml, "w") as f:
-        yaml.dump({
-            "path":  str(root),
-            "train": "images/train",
-            "val":   "images/val",
-            "nc": 2,
-            "names": {0: "person", 1: "car"},
-        }, f)
+        yaml.dump(
+            {
+                "path": str(root),
+                "train": "images/train",
+                "val": "images/val",
+                "nc": 2,
+                "names": {0: "person", 1: "car"},
+            },
+            f,
+        )
 
     return str(data_yaml)

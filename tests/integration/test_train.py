@@ -1,4 +1,5 @@
 """Integration tests for training and validation (Phase 3)."""
+
 import logging
 
 import pytest
@@ -7,6 +8,7 @@ import torch
 
 def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     from dfine import DFINE
+
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     metrics = model.train(
         data=tiny_dataset,
@@ -22,6 +24,7 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
 
 def test_val_runs(tiny_checkpoint, tiny_dataset):
     from dfine import DFINE
+
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     metrics = model.val(data=tiny_dataset, batch=2, verbose=False)
     assert set(metrics) >= {"mAP50", "mAP50-95", "AR1", "AR100"}
@@ -38,7 +41,7 @@ def test_train_with_ema(tiny_checkpoint, tiny_dataset, tmp_path):
         epochs=1,
         batch=2,
         ema=True,
-        ema_decay=0.5,   # aggressive decay — EMA visibly diverges from raw model
+        ema_decay=0.5,  # aggressive decay — EMA visibly diverges from raw model
         project=str(tmp_path),
         name="ema_test",
         verbose=False,
@@ -57,14 +60,11 @@ def test_train_with_ema(tiny_checkpoint, tiny_dataset, tmp_path):
     # With decay=0.5 and ≥1 optimizer step, the saved EMA weights should differ
     # from the raw model weights (last optimizer state) — because EMA blends history.
     # We only check this when training produced a nonzero update.
-    raw_final = {n: p for n, p in model._model.named_parameters()
-                 if p.is_floating_point()}
-    saved_dict = {n: p for n, p in saved_model.named_parameters()
-                  if p.is_floating_point()}
+    raw_final = {n: p for n, p in model._model.named_parameters() if p.is_floating_point()}
+    saved_dict = {n: p for n, p in saved_model.named_parameters() if p.is_floating_point()}
     if metrics["loss"] > 0:
         differs = any(
-            not torch.allclose(saved_dict[n], raw_final[n])
-            for n in raw_final if n in saved_dict
+            not torch.allclose(saved_dict[n], raw_final[n]) for n in raw_final if n in saved_dict
         )
         assert differs, "EMA checkpoint should differ from raw model after nonzero training"
 
