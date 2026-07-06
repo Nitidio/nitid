@@ -18,6 +18,15 @@ def test_model_device_property(tiny_checkpoint):
     assert model.device == "cpu"
 
 
+def test_model_default_device_uses_resolver(tiny_checkpoint):
+    from dfine import DFINE
+    from dfine.utils.device import resolve_device
+
+    model = DFINE(tiny_checkpoint, verbose=False)
+
+    assert model.device == resolve_device(None)
+
+
 def test_model_names_is_dict(tiny_checkpoint):
     from dfine import DFINE
 

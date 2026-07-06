@@ -15,8 +15,10 @@ model = DFINE("dfine_s", device="cuda:0")
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
 | `model`   | `str` | `"dfine_l.pth"` | Path to wrapped checkpoint or a registry model name (`"dfine_n"`, `"dfine_s"`, `"dfine_m"`, `"dfine_l"`, `"dfine_x"`) |
-| `device`  | `str` | `"cuda"` | PyTorch device string (`"cpu"`, `"cuda"`, `"cuda:0"`, …) |
+| `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
 | `verbose` | `bool`| `True`  | Print load summary |
+
+If you pass an explicit device string, it is used as-is after normalization. Omitting `device` gives the Ultralytics-style smart default.
 
 ---
 

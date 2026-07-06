@@ -2,6 +2,7 @@
 DFINE — public entry point. Mirrors the ultralytics.YOLO interface.
 """
 
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,7 +19,7 @@ class DFINE:
 
     Args:
         model:   Path to .pth checkpoint (config serialised inside).
-        device:  "cuda", "cpu", or "cuda:N".
+        device:  "cuda", "cpu", "cuda:N", or None for auto-select.
         verbose: Print model info on load.
 
     Example:
@@ -31,7 +32,7 @@ class DFINE:
     def __init__(
         self,
         model: str = "dfine_l.pth",
-        device: str = "cuda",
+        device: str | int | None = None,
         verbose: bool = True,
     ) -> None:
         self._device_str = device
@@ -97,6 +98,7 @@ class DFINE:
         """Fine-tune on a custom dataset. Returns final metrics dict."""
         from dfine.trainer import DFINETrainer
 
+
         trainer = DFINETrainer(
             model=self._model,
             cfg=self._cfg,
@@ -134,6 +136,7 @@ class DFINE:
         """Evaluate on val/test split. Returns mAP50, mAP50-95, etc."""
         from dfine.validator import DFINEValidator
 
+
         validator = DFINEValidator(self._model, self._cfg, self._device_str, self._names)
         return validator.run(
             data=data,
@@ -160,6 +163,7 @@ class DFINE:
     ) -> Path:
         """Export to ONNX, TensorRT, or TorchScript. Returns output path."""
         from dfine.exporter import DFINEExporter
+
 
         exporter = DFINEExporter(
             self._model,
@@ -221,7 +225,10 @@ class DFINE:
 
         result = {
             "params": n_params,
+            "params": n_params,
             "params_trainable": n_trainable,
+            "gflops": gflops,
+            "size_mb": size_mb,
             "gflops": gflops,
             "size_mb": size_mb,
         }
@@ -229,13 +236,17 @@ class DFINE:
         if verbose:
             gflop_str = f"{gflops:.1f} GFLOPs" if gflops is not None else "GFLOPs n/a"
             size_str = f"{size_mb:.1f} MB" if size_mb is not None else "size n/a"
+            size_str = f"{size_mb:.1f} MB" if size_mb is not None else "size n/a"
             print(
+                f"[D-FINE] {n_params / 1e6:.1f}M params "
+                f"({n_trainable / 1e6:.1f}M trainable)  "
                 f"[D-FINE] {n_params / 1e6:.1f}M params "
                 f"({n_trainable / 1e6:.1f}M trainable)  "
                 f"{gflop_str}  {size_str}"
             )
 
         if detailed:
+            result["layers"] = {name: p.numel() for name, p in self._model.named_parameters()}
             result["layers"] = {name: p.numel() for name, p in self._model.named_parameters()}
 
         return result
@@ -297,7 +308,9 @@ class DFINE:
 
         self._path = str(path)
         self._model, self._cfg, self._names = load_checkpoint(path, device=self._device_str)
+        self._model, self._cfg, self._names = load_checkpoint(path, device=self._device_str)
         self._model.eval()
         if self.verbose:
             n_params = sum(p.numel() for p in self._model.parameters())
+            print(f"[D-FINE] Loaded '{path}' — {n_params / 1e6:.1f}M params on {self._device_str}")
             print(f"[D-FINE] Loaded '{path}' — {n_params / 1e6:.1f}M params on {self._device_str}")
