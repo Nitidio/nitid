@@ -1,4 +1,5 @@
 """Download official D-FINE checkpoints and wrap them for nitid."""
+
 from __future__ import annotations
 
 import tempfile

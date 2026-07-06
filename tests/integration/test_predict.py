@@ -81,8 +81,10 @@ def test_predict_boxes_within_image(tiny_checkpoint):
 # augment=True (TTA) tests
 # ---------------------------------------------------------------------------
 
+
 def test_predict_augment_runs_and_returns_valid_boxes(tiny_checkpoint):
     from dfine import DFINE
+
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     frame = _random_frame()
 
@@ -106,10 +108,11 @@ def test_predict_augment_close_to_baseline_count(tiny_checkpoint):
     Loose bound since a tiny/lightly-trained checkpoint is noisy on random
     input — this is a regression guard, not a precision check."""
     from dfine import DFINE
+
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     frame = _random_frame()
 
-    baseline  = model.predict(frame, conf=0.3, augment=False)[0]
+    baseline = model.predict(frame, conf=0.3, augment=False)[0]
     augmented = model.predict(frame, conf=0.3, augment=True)[0]
 
     n_base, n_aug = len(baseline.boxes), len(augmented.boxes)
@@ -123,6 +126,7 @@ def test_predict_augment_respects_iou_kwarg(tiny_checkpoint):
     """A very low iou threshold should suppress more than a very high one,
     proving the iou kwarg actually reaches the cross-view NMS step."""
     from dfine import DFINE
+
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     frame = _random_frame()
 
@@ -136,6 +140,7 @@ def test_predict_augment_respects_iou_kwarg(tiny_checkpoint):
 # Unit-level tests on _postprocess's cross-view NMS (deterministic, no model)
 # ---------------------------------------------------------------------------
 
+
 def _fake_orig_img(h=480, w=640):
     return np.zeros((h, w, 3), dtype=np.uint8)
 
@@ -144,21 +149,29 @@ def test_postprocess_dedupes_same_object_across_views(tiny_checkpoint):
     """Two near-identical boxes from *different* views (original vs. flipped)
     representing the same object should collapse to one after NMS."""
     from dfine import DFINE
+
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     predictor = model.predictor  # adjust attribute name if different
 
     det = {
         "labels": torch.tensor([0, 0]),
-        "boxes": torch.tensor([
-            [100.0, 100.0, 200.0, 200.0],
-            [101.0, 101.0, 201.0, 201.0],  # near-duplicate, other view
-        ]),
+        "boxes": torch.tensor(
+            [
+                [100.0, 100.0, 200.0, 200.0],
+                [101.0, 101.0, 201.0, 201.0],  # near-duplicate, other view
+            ]
+        ),
         "scores": torch.tensor([0.9, 0.85]),
         "num_orig": 1,  # first box = original view, second = flipped view
     }
     results = predictor._postprocess(
-        det, _fake_orig_img(), path="fake", conf_thr=0.0, classes=None,
-        augment=True, iou=0.5,
+        det,
+        _fake_orig_img(),
+        path="fake",
+        conf_thr=0.0,
+        classes=None,
+        augment=True,
+        iou=0.5,
     )
     assert len(results.boxes) == 1
 
@@ -168,21 +181,29 @@ def test_postprocess_keeps_same_view_close_objects(tiny_checkpoint):
     must NOT be suppressed by cross-view NMS — D-FINE's set prediction
     already guarantees no same-view duplicates."""
     from dfine import DFINE
+
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     predictor = model.predictor
 
     det = {
         "labels": torch.tensor([0, 0]),
-        "boxes": torch.tensor([
-            [100.0, 100.0, 200.0, 200.0],
-            [101.0, 101.0, 201.0, 201.0],  # close, but SAME view
-        ]),
+        "boxes": torch.tensor(
+            [
+                [100.0, 100.0, 200.0, 200.0],
+                [101.0, 101.0, 201.0, 201.0],  # close, but SAME view
+            ]
+        ),
         "scores": torch.tensor([0.9, 0.85]),
         "num_orig": 2,  # both boxes are from the original view
     }
     results = predictor._postprocess(
-        det, _fake_orig_img(), path="fake", conf_thr=0.0, classes=None,
-        augment=True, iou=0.5,
+        det,
+        _fake_orig_img(),
+        path="fake",
+        conf_thr=0.0,
+        classes=None,
+        augment=True,
+        iou=0.5,
     )
     assert len(results.boxes) == 2
 

@@ -53,7 +53,9 @@ class DFINEPredictor:
         gen = self._infer(loader, conf, classes, augment=augment, iou=iou)
         return gen if stream else list(gen)
 
-    def _infer(self, loader: LoadSource, conf, classes, augment: bool = False, iou: float = 0.85) -> Generator:
+    def _infer(
+        self, loader: LoadSource, conf, classes, augment: bool = False, iou: float = 0.85
+    ) -> Generator:
         """Yield one Results object per frame/image."""
         for tensor, orig_img, path in loader:
             h, w = orig_img.shape[:2]
@@ -87,7 +89,9 @@ class DFINEPredictor:
                         "num_orig": merged_det["num_orig"],
                     }
 
-            yield self._postprocess(merged_det, orig_img, path, conf, classes, augment=augment, iou=iou)
+            yield self._postprocess(
+                merged_det, orig_img, path, conf, classes, augment=augment, iou=iou
+            )
 
     def _postprocess(
         self, det: dict, orig_img, path, conf_thr, classes, augment: bool = False, iou: float = 0.85
@@ -120,6 +124,7 @@ class DFINEPredictor:
 
         if augment and len(boxes) > 0:
             import torchvision
+
             # Sort by scores in descending order
             order = scores.argsort(descending=True)
             keep = torch.ones(len(boxes), dtype=torch.bool, device=boxes.device)
@@ -130,14 +135,11 @@ class DFINEPredictor:
             for i in range(len(order)):
                 idx_a = order[i]
                 if not keep[idx_a]:
-                     continue
+                    continue
 
                 # Suppress boxes of the same class from the OTHER view only
                 nms_mask = (
-                    keep &
-                    (labels == labels[idx_a]) &
-                    (views != views[idx_a]) &
-                    (ious[idx_a] > iou)
+                    keep & (labels == labels[idx_a]) & (views != views[idx_a]) & (ious[idx_a] > iou)
                 )
                 keep[nms_mask] = False
 

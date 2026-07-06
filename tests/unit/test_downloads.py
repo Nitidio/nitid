@@ -1,4 +1,5 @@
 """Unit tests for model download helpers."""
+
 from pathlib import Path
 
 import pytest
