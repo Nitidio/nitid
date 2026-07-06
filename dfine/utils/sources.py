@@ -7,7 +7,7 @@ Supported sources:
     int         — webcam index
     np.ndarray  — single frame (GStreamer pipeline entry point)
     list        — list of any of the above
-    "screen"    — screen capture (requires mss)
+    "screen"    — screen capture (uses mss)
     rtsp://...  — RTSP / RTMP stream
 """
 
@@ -83,6 +83,17 @@ class LoadSource:
                     break
                 yield self._process_frame(frame, path=str(self.source))
             cap.release()
+        elif self._mode == "screen":
+            try:
+                while True:
+                    screen_frame = self._capture_screen_frame()
+                    if screen_frame is None:
+                        break
+                    yield self._process_frame(screen_frame, path="<screen>")
+            finally:
+                if hasattr(self, "_sct"):
+                    self._sct.close()
+                    del self._sct
         elif self._mode == "directory":
             for p in sorted(Path(self.source).iterdir()):
                 if p.suffix.lower() in IMAGE_EXTENSIONS:
@@ -108,6 +119,26 @@ class LoadSource:
         transform = T.Compose([T.Resize((self.imgsz, self.imgsz)), T.ToTensor()])
         tensor = transform(pil_img).unsqueeze(0).to(self.device)
         return tensor, orig_img, path
+
+    def _capture_screen_frame(self) -> np.ndarray | None:
+        """Capture the current desktop as a BGR frame.
+
+        Lazily creates and caches a single mss instance across calls.
+        """
+        if not hasattr(self, "_sct"):
+            try:
+                from mss import mss
+            except ImportError as exc:  # pragma: no cover - runtime dependency
+                raise RuntimeError("Screen capture requires mss") from exc
+
+            try:
+                self._sct = mss()
+                self._monitor = self._sct.monitors[0]
+            except (OSError, ValueError, IndexError) as exc:
+                raise RuntimeError("Screen capture is not available in this environment") from exc
+
+        screen = self._sct.grab(self._monitor)
+        return cv2.cvtColor(np.array(screen), cv2.COLOR_BGRA2BGR)
 
     def __len__(self) -> int:
         """Returns -1 for live streams and webcams."""

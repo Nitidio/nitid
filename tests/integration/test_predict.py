@@ -1,5 +1,6 @@
 """Integration tests for the full predict() pipeline."""
 
+import itertools
 import types
 
 import numpy as np
@@ -184,3 +185,29 @@ def test_postprocess_keeps_same_view_close_objects(tiny_checkpoint):
         augment=True, iou=0.5,
     )
     assert len(results.boxes) == 2
+
+
+def test_predict_screen_source_streams_frames(tiny_checkpoint, monkeypatch):
+    from dfine import DFINE
+    from dfine.utils.sources import LoadSource
+
+    frames = iter(
+        [
+            np.zeros((480, 640, 3), dtype=np.uint8),
+            np.ones((480, 640, 3), dtype=np.uint8) * 255,
+            None,
+        ]
+    )
+
+    def fake_capture(self):
+        return next(frames)
+
+    monkeypatch.setattr(LoadSource, "_capture_screen_frame", fake_capture)
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    gen = model.predict("screen", conf=0.0, stream=True)
+    results = list(itertools.islice(gen, 2))
+
+    assert len(results) == 2
+    assert results[0].path == "<screen>"
+    assert results[1].path == "<screen>"
