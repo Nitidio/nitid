@@ -74,6 +74,7 @@ model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
 )
+# returns final metrics plus per-epoch history in metrics["history"]
 ```
 
 See [docs/fine_tuning.md](docs/fine_tuning.md) for datasets, optimizers, AMP, EMA and all training options.
@@ -84,7 +85,10 @@ See [docs/fine_tuning.md](docs/fine_tuning.md) for datasets, optimizers, AMP, EM
 ```python
 metrics = model.val(
     data="configs/datasets/my_dataset.yml",
+    project="runs/val",
+    name="exp",
 )
+# saves validation plots to runs/val/exp by default
 ```
 
 
@@ -115,7 +119,7 @@ The API intentionally mirrors `ultralytics.YOLO`, making it easy to migrate exis
 
 ## Official Models
 
-> 💡 Passing `dfine_n`, `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` automatically downloads, wraps, and loads the corresponding official D-FINE checkpoint.
+> 💡 Passing `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` automatically downloads, wraps, and loads the corresponding official D-FINE checkpoint.
 
 | Model | COCO mAP<sup>50-95</sup> *(vs YOLO11)* | Speed<sup>T4 TRT10 FP16</sup> *(vs YOLO11)* | Params | FLOPs | Config | Official Checkpoint |
 |:------|---------------------------------------:|--------------------------------------------:|-------:|------:|:------:|:-------------------:|

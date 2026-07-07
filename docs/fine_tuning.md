@@ -217,6 +217,9 @@ metrics = model.val(
     split="val",
     batch=16,
     conf=0.001,   # low threshold — include all detections in mAP computation
+    project="runs/val",
+    name="exp",
+    plots=True,
     verbose=True,
 )
 print(metrics)
@@ -225,6 +228,10 @@ print(metrics)
 #   "mAP50":    0.623,   # AP at IoU=0.50
 #   "AR1":      0.341,   # Average Recall at max 1 detection per image
 #   "AR100":    0.512,   # Average Recall at max 100 detections per image
+#   "precision": 0.701,
+#   "recall":    0.655,
+#   "f1":        0.677,
+#   "per_class": [...],
 # }
 ```
 
