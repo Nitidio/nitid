@@ -55,8 +55,15 @@ r.plot()            # → HWC BGR ndarray with boxes drawn
 r.save("out.jpg")   # write plotted image to disk
 r.show()            # display in a window (blocks until key press)
 r.to_json()         # → list[dict] with box/score/class per detection
+r.pandas()          # → pandas.DataFrame with xyxy/conf/class/name columns
+r.to_df()           # → same DataFrame as r.pandas()
+r.to_csv("out.csv") # write detections to CSV
 len(r)              # number of detections
 ```
+
+The tabular export helpers use these columns:
+
+`x1`, `y1`, `x2`, `y2`, `confidence`, `class`, `name`
 
 Stream predictions with `stream=True` to avoid buffering all frames in memory:
 

@@ -5,8 +5,14 @@ Mirrors ultralytics.engine.results.Results / Boxes.
 
 from __future__ import annotations
 
+from os import PathLike
+from typing import TYPE_CHECKING
+
 import cv2
 import numpy as np
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class Results:
@@ -72,6 +78,43 @@ class Results:
                 }
             )
         return out
+
+    def pandas(self) -> pd.DataFrame:
+        """Return detections as a pandas DataFrame."""
+        return self.to_df()
+
+    def to_df(self) -> pd.DataFrame:
+        """Return detections as a pandas DataFrame."""
+        import pandas as pd
+
+        columns = ["x1", "y1", "x2", "y2", "confidence", "class", "name"]
+        return pd.DataFrame(self._tabular_rows(), columns=columns)
+
+    def to_csv(self, filename: str | PathLike[str], index: bool = False) -> None:
+        """Save detections as a CSV file."""
+        self.to_df().to_csv(filename, index=index)
+
+    def _tabular_rows(self) -> list[dict[str, object]]:
+        """Return detections in a tabular row format for DataFrame/CSV export."""
+        rows: list[dict[str, object]] = []
+        if self.boxes is None:
+            return rows
+
+        for i in range(len(self)):
+            xyxy = self.boxes.xyxy[i].tolist()
+            cls_id = int(self.boxes.cls[i])
+            rows.append(
+                {
+                    "x1": xyxy[0],
+                    "y1": xyxy[1],
+                    "x2": xyxy[2],
+                    "y2": xyxy[3],
+                    "confidence": round(float(self.boxes.conf[i]), 4),
+                    "class": cls_id,
+                    "name": self.names.get(cls_id, "unknown"),
+                }
+            )
+        return rows
 
     def __len__(self) -> int:
         return 0 if self.boxes is None else len(self.boxes)
