@@ -58,6 +58,9 @@ class DFINE:
         classes: list[int] | None = None,
         stream: bool = False,
         augment: bool = False,
+        save: bool = False,
+        project: str = "runs/detect",
+        name: str = "exp",
         verbose: bool = True,
         iou: float = 0.85,
     ) -> list | Generator:
@@ -74,6 +77,9 @@ class DFINE:
             classes=classes,
             stream=stream,
             augment=augment,
+            save=save,
+            project=project,
+            name=name,
             verbose=verbose,
             iou=iou,
         )

@@ -10,7 +10,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, main
 @pytest.mark.parametrize(
     ("command", "expected_text"),
     [
-        ("predict", ("source=SOURCE", "conf=FLOAT", "dfine predict")),
+        ("predict", ("source=SOURCE", "conf=FLOAT", "save=BOOL", "dfine predict")),
         ("download", ("model=NAME", "force=BOOL", "dfine download")),
         ("train", ("data=PATH", "epochs=INT", "dfine train")),
         ("val", ("data=PATH", "split=NAME", "dfine val")),
