@@ -52,6 +52,56 @@ def test_val_runs(tiny_checkpoint, tiny_dataset):
     assert (Path("runs/pytest_val") / "exp" / "f1_curve.png").exists()
 
 
+def test_val_return_format_includes_per_class_and_summary_fields(tiny_checkpoint, tiny_dataset):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    metrics = model.val(data=tiny_dataset, batch=2, verbose=False)
+
+    assert set(metrics) >= {
+        "mAP50",
+        "mAP50-95",
+        "AR1",
+        "AR100",
+        "precision",
+        "recall",
+        "f1",
+        "fitness",
+        "best_conf",
+        "images",
+        "instances",
+        "per_class",
+    }
+    assert metrics["images"] == 2
+    assert metrics["instances"] == 2
+    assert isinstance(metrics["best_conf"], float)
+    assert isinstance(metrics["per_class"], list)
+    assert len(metrics["per_class"]) > 0
+
+    first_row = metrics["per_class"][0]
+    assert set(first_row) == {"class_id", "name", "instances", "ap50", "ap50-95"}
+    assert isinstance(first_row["class_id"], int)
+    assert isinstance(first_row["name"], str)
+    assert isinstance(first_row["instances"], int)
+    assert isinstance(first_row["ap50"], float)
+    assert isinstance(first_row["ap50-95"], float)
+
+
+def test_val_logs_ultralytics_style_summary(tiny_checkpoint, tiny_dataset, caplog):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    with caplog.at_level(logging.INFO, logger="dfine"):
+        _ = model.val(data=tiny_dataset, batch=2, verbose=True)
+
+    messages = [record.message for record in caplog.records]
+    assert any(
+        "Class" in message and "Images" in message and "mAP50-95" in message for message in messages
+    )
+    assert any("all" in message for message in messages)
+    assert any("Class" in message and "Instances" in message for message in messages)
+
+
 def test_train_with_ema(tiny_checkpoint, tiny_dataset, tmp_path):
     """EMA training completes, checkpoint loads, and EMA differs from raw model."""
     from dfine import DFINE
