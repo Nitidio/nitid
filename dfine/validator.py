@@ -1,16 +1,20 @@
 """
-DFINEValidator — COCO mAP evaluation.
-Called internally by DFINE.val(). Not part of the public API.
+DFINEValidator — COCO mAP evaluation plus Ultralytics-style detection plots.
+Called internally by DFINE.val() and DFINETrainer.
 """
 
 from __future__ import annotations
 
 import contextlib
+import importlib
 import io
+from collections import defaultdict
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol, TypedDict, cast
 
+import numpy as np
 import torch
+from torchvision.ops import box_iou
 
 from dfine.utils.logging import LOGGER
 
@@ -19,12 +23,49 @@ class CocoLikeDataset(Protocol):
     cat_id_to_label: dict[int, int]
 
 
+class GTRecord(TypedDict):
+    boxes: torch.Tensor
+    labels: torch.Tensor
+    image_id: int
+
+
+class PredRecord(TypedDict):
+    boxes: torch.Tensor
+    scores: torch.Tensor
+    labels: torch.Tensor
+
+
+PerClassRow = TypedDict(
+    "PerClassRow",
+    {
+        "class_id": int,
+        "name": str,
+        "instances": int,
+        "ap50": float,
+        "ap50-95": float,
+    },
+)
+
+
+def _cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
+    cx, cy, w, h = boxes.unbind(-1)
+    return torch.stack((cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), dim=-1)
+
+
+def _as_float(value: object, default: float = 0.0) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return default
+
+
 class DFINEValidator:
     """
-    Runs COCO-style bounding-box evaluation against a labelled val split.
+    Runs COCO-style bounding-box evaluation against a labelled split.
 
-    The postprocessor is rebuilt from the checkpoint config so that the
-    model stays in its current state (eval or train) without side-effects.
+    The postprocessor is rebuilt from the checkpoint config so that validation
+    can run without mutating the model state. In addition to COCO metrics, the
+    validator computes precision/recall/F1 curves, a confusion matrix, and
+    per-class AP summaries for Ultralytics-style artifacts.
     """
 
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
@@ -41,26 +82,25 @@ class DFINEValidator:
         conf: float,
         split: str,
         verbose: bool,
+        save_dir: str | Path | None = None,
+        plots: bool = True,
     ) -> dict:
         """
         Evaluate on a COCO-format dataset split.
 
-        Returns a dict with COCO evaluation metrics::
-
-            {
-                "mAP50-95": float,  # AP averaged over IoU thresholds 0.50:0.05:0.95
-                "mAP50":    float,  # AP at IoU=0.50
-                "AR1":      float,  # Average Recall at maxDets=1
-                "AR100":    float,  # Average Recall at maxDets=100
-            }
+        Returns a dict with scalar metrics plus `per_class` rows and curve
+        metadata. The returned scalars are suitable for CSV logging.
         """
-        from pycocotools.coco import COCO
-        from pycocotools.cocoeval import COCOeval
-
         from dfine.nn.build import build_postprocessor
         from dfine.utils.data import build_coco_dataloader, load_data_yaml
 
-        # Resolve annotation file path (mirrors build_coco_dataloader logic)
+        COCO = importlib.import_module("pycocotools.coco").COCO
+        COCOeval = importlib.import_module("pycocotools.cocoeval").COCOeval
+
+        save_dir = Path(save_dir) if save_dir is not None else None
+        if save_dir is not None:
+            save_dir.mkdir(parents=True, exist_ok=True)
+
         cfg_data = load_data_yaml(data)
         root = Path(cfg_data["path"])
         ann_key = f"{split}_ann"
@@ -72,24 +112,22 @@ class DFINEValidator:
 
         dataloader = build_coco_dataloader(data, split=split, imgsz=imgsz, batch_size=batch)
 
-        # Fresh postprocessor — non-deploy mode returns [{labels, boxes, scores}]
         postprocessor = build_postprocessor(self.cfg)
         postprocessor.to(self.device)
         postprocessor.eval()
 
-        # Reverse map: 0-based label index → COCO category_id for result formatting
         dataset = cast(CocoLikeDataset, dataloader.dataset)
         cat_id_to_label = dataset.cat_id_to_label
         label_to_cat_id = {v: k for k, v in cat_id_to_label.items()}
 
-        self.model.eval()
-        results = []
+        gt_records: list[GTRecord] = []
+        pred_records: list[PredRecord] = []
+        coco_results: list[dict[str, object]] = []
 
+        self.model.eval()
         with torch.no_grad():
             for images, targets in dataloader:
                 images = images.to(self.device)
-                # All images were resized to imgsz×imgsz; pass that as orig_size.
-                # Postprocessor scales boxes to absolute pixel coords in imgsz space.
                 orig_sizes = torch.tensor(
                     [[imgsz, imgsz]] * len(images),
                     dtype=torch.float32,
@@ -100,48 +138,418 @@ class DFINEValidator:
 
                 for det, target in zip(detections, targets):
                     img_id = int(target["image_id"][0])
-                    mask = det["scores"] > conf
-                    boxes = det["boxes"][mask]  # xyxy absolute (imgsz space)
-                    scores = det["scores"][mask]
-                    labels = det["labels"][mask]
+                    gt_boxes = _cxcywh_to_xyxy(target["boxes"] * imgsz).cpu()
+                    gt_labels = target["labels"].cpu()
+                    gt_records.append({"boxes": gt_boxes, "labels": gt_labels, "image_id": img_id})
 
-                    for box, score, label in zip(boxes.tolist(), scores.tolist(), labels.tolist()):
+                    pred_boxes = det["boxes"].detach().cpu()
+                    pred_scores = det["scores"].detach().cpu()
+                    pred_labels = det["labels"].detach().cpu()
+                    pred_records.append(
+                        {"boxes": pred_boxes, "scores": pred_scores, "labels": pred_labels}
+                    )
+
+                    mask = pred_scores > conf
+                    for box, score, label in zip(
+                        pred_boxes[mask].tolist(),
+                        pred_scores[mask].tolist(),
+                        pred_labels[mask].tolist(),
+                    ):
                         x1, y1, x2, y2 = box
-                        results.append(
+                        coco_results.append(
                             {
                                 "image_id": img_id,
                                 "category_id": label_to_cat_id.get(int(label), int(label) + 1),
-                                "bbox": [x1, y1, x2 - x1, y2 - y1],  # COCO format: xywh
-                                "score": score,
+                                "bbox": [x1, y1, x2 - x1, y2 - y1],
+                                "score": float(score),
                             }
                         )
 
-        coco_gt = COCO(str(ann_file))
+        with contextlib.redirect_stdout(io.StringIO()):
+            coco_gt = COCO(str(ann_file))
+        coco_eval = None
+        coco_metrics = {"mAP50-95": 0.0, "mAP50": 0.0, "AR1": 0.0, "AR100": 0.0}
+        per_class_rows: list[PerClassRow] = []
 
-        if not results:
-            if verbose:
-                LOGGER.info("No detections above conf threshold — mAP=0")
-            return {"mAP50-95": 0.0, "mAP50": 0.0, "AR1": 0.0, "AR100": 0.0}
+        if coco_results:
+            sink = (
+                contextlib.nullcontext() if verbose else contextlib.redirect_stdout(io.StringIO())
+            )
+            with sink:
+                coco_dt = coco_gt.loadRes(coco_results)
+            coco_eval = COCOeval(coco_gt, coco_dt, "bbox")
+            with sink:
+                coco_eval.evaluate()
+                coco_eval.accumulate()
+                coco_eval.summarize()
 
-        coco_dt = coco_gt.loadRes(results)
-        coco_eval = COCOeval(coco_gt, coco_dt, "bbox")
-        coco_eval.evaluate()
-        coco_eval.accumulate()
-        # summarize() always runs to populate coco_eval.stats (12 elements).
-        # pycocotools prints to stdout unconditionally, so redirect when quiet.
-        sink = contextlib.nullcontext() if verbose else contextlib.redirect_stdout(io.StringIO())
-        with sink:
-            coco_eval.summarize()
+            stats = coco_eval.stats if len(coco_eval.stats) >= 12 else [0.0] * 12
+            coco_metrics = {
+                "mAP50-95": float(stats[0]),
+                "mAP50": float(stats[1]),
+                "AR1": float(stats[6]),
+                "AR100": float(stats[8]),
+            }
+            per_class_rows = self._per_class_ap(coco_eval, gt_records, cat_id_to_label)
+        elif verbose:
+            LOGGER.info("No detections above conf threshold — metrics are zero")
 
-        # COCOeval.stats layout (subset used here):
-        #   [0] AP  @IoU=0.50:0.95  → mAP50-95
-        #   [1] AP  @IoU=0.50       → mAP50
-        #   [6] AR  @maxDets=1      → AR1
-        #   [8] AR  @maxDets=100    → AR100
-        stats = coco_eval.stats if len(coco_eval.stats) >= 12 else [0.0] * 12
-        return {
-            "mAP50-95": float(stats[0]),
-            "mAP50": float(stats[1]),
-            "AR1": float(stats[6]),
-            "AR100": float(stats[8]),
+        thresholds, precisions, recalls, f1_scores = self._precision_recall_curve(
+            gt_records, pred_records
+        )
+        best_idx = int(np.argmax(f1_scores)) if len(f1_scores) else 0
+        best_conf = float(thresholds[best_idx]) if len(thresholds) else float(conf)
+        precision = float(precisions[best_idx]) if len(precisions) else 0.0
+        recall = float(recalls[best_idx]) if len(recalls) else 0.0
+        f1 = float(f1_scores[best_idx]) if len(f1_scores) else 0.0
+        fitness = self._fitness(precision, recall, coco_metrics["mAP50"], coco_metrics["mAP50-95"])
+
+        confusion_matrix, class_ids = self._confusion_matrix(gt_records, pred_records, best_conf)
+
+        if save_dir is not None and plots:
+            self._save_plots(
+                save_dir=save_dir,
+                confusion_matrix=confusion_matrix,
+                class_ids=class_ids,
+                thresholds=thresholds,
+                precisions=precisions,
+                recalls=recalls,
+                f1_scores=f1_scores,
+            )
+
+        metrics = {
+            **coco_metrics,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "fitness": fitness,
+            "best_conf": best_conf,
+            "per_class": per_class_rows,
         }
+
+        if verbose:
+            self._print_summary(metrics, per_class_rows)
+
+        return metrics
+
+    def compact_metrics(self, metrics: dict[str, object]) -> dict[str, float]:
+        """Return the scalar validation fields that belong in the epoch row."""
+        keys = ("precision", "recall", "mAP50", "mAP50-95", "fitness")
+        return {key: _as_float(metrics.get(key, 0.0)) for key in keys}
+
+    def _per_class_ap(
+        self,
+        coco_eval,
+        gt_records: list[GTRecord],
+        cat_id_to_label: dict[int, int],
+    ) -> list[PerClassRow]:
+        precision = coco_eval.eval.get("precision") if coco_eval.eval else None
+        if precision is None:
+            return []
+
+        gt_counts: defaultdict[int, int] = defaultdict(int)
+        for gt in gt_records:
+            for label in gt["labels"].tolist():
+                gt_counts[int(label)] += 1
+
+        rows: list[PerClassRow] = []
+        cat_ids = coco_eval.params.catIds
+        for class_idx, cat_id in enumerate(cat_ids):
+            label_idx = int(cat_id_to_label.get(int(cat_id), int(cat_id)))
+            name = self.names.get(label_idx, str(label_idx))
+
+            class_precision = precision[:, :, class_idx, 0, -1]
+            class_precision = class_precision[class_precision > -1]
+            ap50_95 = float(np.mean(class_precision)) if class_precision.size else 0.0
+
+            ap50_slice = precision[0, :, class_idx, 0, -1]
+            ap50_slice = ap50_slice[ap50_slice > -1]
+            ap50 = float(np.mean(ap50_slice)) if ap50_slice.size else 0.0
+
+            instances = int(gt_counts.get(label_idx, 0))
+            if instances == 0 and ap50_95 == 0.0 and ap50 == 0.0:
+                continue
+
+            rows.append(
+                {
+                    "class_id": label_idx,
+                    "name": name,
+                    "instances": instances,
+                    "ap50": ap50,
+                    "ap50-95": ap50_95,
+                }
+            )
+
+        return rows
+
+    def _precision_recall_curve(
+        self,
+        gt_records: list[GTRecord],
+        pred_records: list[PredRecord],
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        thresholds = np.linspace(0.0, 0.99, 100)
+        precisions = np.zeros_like(thresholds)
+        recalls = np.zeros_like(thresholds)
+        f1_scores = np.zeros_like(thresholds)
+
+        for i, threshold in enumerate(thresholds):
+            tp, fp, fn = self._count_matches(gt_records, pred_records, conf_thresh=float(threshold))
+            precision = tp / (tp + fp) if (tp + fp) else 0.0
+            recall = tp / (tp + fn) if (tp + fn) else 0.0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+            precisions[i] = precision
+            recalls[i] = recall
+            f1_scores[i] = f1
+
+        return thresholds, precisions, recalls, f1_scores
+
+    def _count_matches(
+        self,
+        gt_records: list[GTRecord],
+        pred_records: list[PredRecord],
+        conf_thresh: float,
+        iou_thresh: float = 0.5,
+    ) -> tuple[int, int, int]:
+        tp = fp = fn = 0
+        for gt, pred in zip(gt_records, pred_records):
+            pred_mask = pred["scores"] >= conf_thresh
+            pred_boxes = pred["boxes"][pred_mask]
+            pred_labels = pred["labels"][pred_mask]
+            pred_scores = pred["scores"][pred_mask]
+            gt_boxes = gt["boxes"]
+            gt_labels = gt["labels"]
+
+            img_tp, img_fp, img_fn = self._match_class_aware(
+                pred_boxes=pred_boxes,
+                pred_labels=pred_labels,
+                pred_scores=pred_scores,
+                gt_boxes=gt_boxes,
+                gt_labels=gt_labels,
+                iou_thresh=iou_thresh,
+            )
+            tp += img_tp
+            fp += img_fp
+            fn += img_fn
+        return tp, fp, fn
+
+    def _match_class_aware(
+        self,
+        pred_boxes: torch.Tensor,
+        pred_labels: torch.Tensor,
+        pred_scores: torch.Tensor,
+        gt_boxes: torch.Tensor,
+        gt_labels: torch.Tensor,
+        iou_thresh: float = 0.5,
+    ) -> tuple[int, int, int]:
+        tp = fp = fn = 0
+        if len(pred_boxes) == 0 and len(gt_boxes) == 0:
+            return tp, fp, fn
+        if len(pred_boxes) == 0:
+            return 0, 0, int(len(gt_boxes))
+        if len(gt_boxes) == 0:
+            return 0, int(len(pred_boxes)), 0
+
+        matched_gt: set[int] = set()
+        pred_order = torch.argsort(pred_scores, descending=True)
+        for pred_idx in pred_order.tolist():
+            pred_box = pred_boxes[pred_idx : pred_idx + 1]
+            pred_label = int(pred_labels[pred_idx])
+
+            candidate_indices = [
+                gt_idx
+                for gt_idx, gt_label in enumerate(gt_labels.tolist())
+                if gt_label == pred_label and gt_idx not in matched_gt
+            ]
+            if not candidate_indices:
+                fp += 1
+                continue
+
+            candidate_boxes = gt_boxes[candidate_indices]
+            ious = box_iou(pred_box, candidate_boxes).squeeze(0)
+            best_iou, best_rel_idx = torch.max(ious, dim=0)
+            if float(best_iou) >= iou_thresh:
+                matched_gt.add(candidate_indices[int(best_rel_idx)])
+                tp += 1
+            else:
+                fp += 1
+
+        fn = len(gt_boxes) - len(matched_gt)
+        return tp, fp, fn
+
+    def _confusion_matrix(
+        self,
+        gt_records: list[GTRecord],
+        pred_records: list[PredRecord],
+        conf_thresh: float,
+        iou_thresh: float = 0.5,
+    ) -> tuple[np.ndarray, list[int]]:
+        all_classes: set[int] = set()
+        for gt in gt_records:
+            all_classes.update(int(x) for x in gt["labels"].tolist())
+        for pred in pred_records:
+            all_classes.update(int(x) for x in pred["labels"].tolist())
+        class_ids = sorted(all_classes)
+        class_to_idx = {cls_id: idx for idx, cls_id in enumerate(class_ids)}
+        matrix = np.zeros((len(class_ids) + 1, len(class_ids) + 1), dtype=np.int64)
+
+        for gt, pred in zip(gt_records, pred_records):
+            pred_mask = pred["scores"] >= conf_thresh
+            pred_boxes = pred["boxes"][pred_mask]
+            pred_labels = pred["labels"][pred_mask]
+            gt_boxes = gt["boxes"]
+            gt_labels = gt["labels"]
+
+            if len(pred_boxes) == 0 and len(gt_boxes) == 0:
+                continue
+
+            if len(pred_boxes) == 0:
+                for gt_label in gt_labels.tolist():
+                    matrix[class_to_idx[int(gt_label)], -1] += 1
+                continue
+
+            if len(gt_boxes) == 0:
+                for pred_label in pred_labels.tolist():
+                    matrix[-1, class_to_idx[int(pred_label)]] += 1
+                continue
+
+            ious = box_iou(pred_boxes, gt_boxes)
+            matched_pred: set[int] = set()
+            matched_gt: set[int] = set()
+
+            pred_indices, gt_indices = torch.nonzero(ious >= iou_thresh, as_tuple=True)
+            if pred_indices.numel():
+                iou_values = ious[pred_indices, gt_indices]
+                order = torch.argsort(-iou_values)
+                pred_indices = pred_indices[order]
+                gt_indices = gt_indices[order]
+
+                for pred_idx, gt_idx in zip(pred_indices.tolist(), gt_indices.tolist()):
+                    if pred_idx in matched_pred or gt_idx in matched_gt:
+                        continue
+                    matched_pred.add(pred_idx)
+                    matched_gt.add(gt_idx)
+                    pred_label = int(pred_labels[pred_idx])
+                    gt_label = int(gt_labels[gt_idx])
+                    matrix[class_to_idx[gt_label], class_to_idx[pred_label]] += 1
+
+            for pred_idx, pred_label in enumerate(pred_labels.tolist()):
+                if pred_idx not in matched_pred:
+                    matrix[-1, class_to_idx[int(pred_label)]] += 1
+
+            for gt_idx, gt_label in enumerate(gt_labels.tolist()):
+                if gt_idx not in matched_gt:
+                    matrix[class_to_idx[int(gt_label)], -1] += 1
+
+        return matrix, class_ids
+
+    def _save_plots(
+        self,
+        save_dir: Path,
+        confusion_matrix: np.ndarray,
+        class_ids: list[int],
+        thresholds: np.ndarray,
+        precisions: np.ndarray,
+        recalls: np.ndarray,
+        f1_scores: np.ndarray,
+    ) -> None:
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        plt = importlib.import_module("matplotlib.pyplot")
+
+        class_names = [self.names.get(cls_id, str(cls_id)) for cls_id in class_ids] + ["background"]
+        self._plot_confusion_matrix(
+            save_dir / "confusion_matrix.png", confusion_matrix, class_names
+        )
+        self._plot_confusion_matrix(
+            save_dir / "confusion_matrix_normalized.png",
+            self._normalize_confusion_matrix(confusion_matrix),
+            class_names,
+            normalized=True,
+        )
+
+        plt.figure(figsize=(6, 5))
+        plt.plot(recalls, precisions, color="tab:blue")
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.title("Precision-Recall Curve")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(save_dir / "pr_curve.png", dpi=200)
+        plt.close()
+
+        plt.figure(figsize=(6, 5))
+        plt.plot(thresholds, f1_scores, color="tab:orange")
+        plt.xlabel("Confidence")
+        plt.ylabel("F1")
+        plt.title("F1 Curve")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(save_dir / "f1_curve.png", dpi=200)
+        plt.close()
+
+    def _plot_confusion_matrix(
+        self,
+        path: Path,
+        matrix: np.ndarray,
+        class_labels: list[str],
+        normalized: bool = False,
+    ) -> None:
+        plt = importlib.import_module("matplotlib.pyplot")
+        plt.figure(figsize=(10, 8))
+        plt.imshow(matrix, interpolation="nearest", cmap=plt.cm.Blues)
+        plt.title("Confusion Matrix" + (" (Normalized)" if normalized else ""))
+        plt.colorbar()
+        tick_marks = np.arange(len(class_labels))
+        plt.xticks(tick_marks, class_labels, rotation=45, ha="right")
+        plt.yticks(tick_marks, class_labels)
+
+        thresh = float(matrix.max()) / 2.0 if matrix.size else 0.0
+        for i in range(matrix.shape[0]):
+            for j in range(matrix.shape[1]):
+                value = matrix[i, j]
+                text = f"{value:.2f}" if normalized else f"{int(value)}"
+                plt.text(
+                    j,
+                    i,
+                    text,
+                    horizontalalignment="center",
+                    color="white" if value > thresh else "black",
+                )
+
+        plt.ylabel("True label")
+        plt.xlabel("Predicted label")
+        plt.tight_layout()
+        plt.savefig(path, dpi=200)
+        plt.close()
+
+    def _normalize_confusion_matrix(self, matrix: np.ndarray) -> np.ndarray:
+        matrix = matrix.astype(np.float64)
+        row_sums = matrix.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1.0
+        return matrix / row_sums
+
+    def _fitness(self, precision: float, recall: float, map50: float, map5095: float) -> float:
+        return 0.1 * precision + 0.1 * recall + 0.4 * map50 + 0.4 * map5095
+
+    def _print_summary(self, metrics: dict[str, object], per_class_rows: list[PerClassRow]) -> None:
+        LOGGER.info(
+            "Val: P=%.3f R=%.3f F1=%.3f mAP50=%.3f mAP50-95=%.3f fitness=%.3f",
+            _as_float(metrics["precision"]),
+            _as_float(metrics["recall"]),
+            _as_float(metrics["f1"]),
+            _as_float(metrics["mAP50"]),
+            _as_float(metrics["mAP50-95"]),
+            _as_float(metrics["fitness"]),
+        )
+        if not per_class_rows:
+            return
+
+        LOGGER.info("Class                  Instances     AP50     AP50-95")
+        for row in per_class_rows:
+            LOGGER.info(
+                "%-22s %10d   %7.3f   %9.3f",
+                row["name"],
+                row["instances"],
+                row["ap50"],
+                row["ap50-95"],
+            )

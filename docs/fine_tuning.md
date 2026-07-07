@@ -93,12 +93,38 @@ metrics = model.train(
     project="runs/train",
     name="my_experiment",
 )
-print(metrics)  # {"loss": <final_epoch_loss>}
+print(metrics)
+# {
+#   "loss": 1.234,
+#   "fitness": 0.567,
+#   "mAP50": 0.612,
+#   "mAP50-95": 0.401,
+#   "history": [
+#     {
+#       "epoch": 1,
+#       "loss": 2.345,
+#       "loss_bbox": 0.321,
+#       "loss_giou": 0.654,
+#       "loss_vfl": 0.712,
+#       "loss_fgl": 0.889,
+#       "precision": 0.51,
+#       "recall": 0.47,
+#       "mAP50": 0.28,
+#       "mAP50-95": 0.14,
+#       ...
+#     },
+#     ...
+#   ],
+# }
 ```
 
 Checkpoints are saved after every epoch to `runs/train/my_experiment/epoch{N}.pth`.
 Each checkpoint is a full nitid-wrapped `.pth` (config + names embedded) and can
 be loaded directly with `DFINE("epoch50.pth")`.
+
+The top-level values are the final epoch summary for backward compatibility.
+Use `metrics["history"]` to inspect per-epoch training and validation metrics,
+including `mAP50` and `mAP50-95`, from within Python.
 
 ### CLI
 

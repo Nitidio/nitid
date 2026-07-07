@@ -110,6 +110,9 @@ Options:
   batch=INT           Batch size (default: 16)
   conf=FLOAT          Confidence threshold (default: 0.001)
   split=NAME          Dataset split: val or test (default: val)
+  project=PATH        Output root for validation artifacts (default: runs/val)
+  name=NAME           Validation run name (default: exp)
+  plots=BOOL          Save PR/confusion plots and results.png (default: true)
   verbose=BOOL        Print validation progress (default: true)
 
 Example:

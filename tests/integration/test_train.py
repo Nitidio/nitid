@@ -1,6 +1,7 @@
 """Integration tests for training and validation (Phase 3)."""
 
 import logging
+from pathlib import Path
 
 import pytest
 import torch
@@ -18,16 +19,37 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
         name="test",
         verbose=False,
     )
-    assert "loss" in metrics
+    assert set(metrics) >= {"loss", "fitness", "mAP50", "mAP50-95", "history"}
+    assert len(metrics["history"]) == 1
+    assert set(metrics["history"][0]) >= {
+        "epoch",
+        "loss",
+        "mAP50",
+        "mAP50-95",
+        "precision",
+        "recall",
+    }
     assert (tmp_path / "test" / "epoch1.pth").exists()
+    assert (tmp_path / "test" / "last.pth").exists()
+    assert (tmp_path / "test" / "best.pth").exists()
+    assert (tmp_path / "test" / "results.csv").exists()
+    assert (tmp_path / "test" / "results.png").exists()
+    assert (tmp_path / "test" / "confusion_matrix.png").exists()
+    assert (tmp_path / "test" / "pr_curve.png").exists()
+    assert (tmp_path / "test" / "f1_curve.png").exists()
 
 
 def test_val_runs(tiny_checkpoint, tiny_dataset):
     from dfine import DFINE
 
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
-    metrics = model.val(data=tiny_dataset, batch=2, verbose=False)
-    assert set(metrics) >= {"mAP50", "mAP50-95", "AR1", "AR100"}
+    metrics = model.val(
+        data=tiny_dataset, batch=2, project="runs/pytest_val", name="exp", verbose=False
+    )
+    assert set(metrics) >= {"mAP50", "mAP50-95", "AR1", "AR100", "precision", "recall", "f1"}
+    assert (Path("runs/pytest_val") / "exp" / "confusion_matrix.png").exists()
+    assert (Path("runs/pytest_val") / "exp" / "pr_curve.png").exists()
+    assert (Path("runs/pytest_val") / "exp" / "f1_curve.png").exists()
 
 
 def test_train_with_ema(tiny_checkpoint, tiny_dataset, tmp_path):
@@ -47,6 +69,7 @@ def test_train_with_ema(tiny_checkpoint, tiny_dataset, tmp_path):
         verbose=False,
     )
     assert "loss" in metrics
+    assert len(metrics["history"]) == 1
 
     ckpt_path = tmp_path / "ema_test" / "epoch1.pth"
     assert ckpt_path.exists()
@@ -86,6 +109,7 @@ def test_train_amp_disabled_on_cpu(tiny_checkpoint, tiny_dataset, tmp_path, capl
         )
     assert any("amp" in r.message.lower() for r in caplog.records)
     assert "loss" in metrics
+    assert len(metrics["history"]) == 1
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
@@ -104,6 +128,7 @@ def test_train_with_amp_cuda(tiny_checkpoint, tiny_dataset, tmp_path):
         verbose=False,
     )
     assert "loss" in metrics
+    assert len(metrics["history"]) == 1
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
@@ -123,3 +148,4 @@ def test_train_with_amp_and_ema_cuda(tiny_checkpoint, tiny_dataset, tmp_path):
         verbose=False,
     )
     assert "loss" in metrics
+    assert len(metrics["history"]) == 1

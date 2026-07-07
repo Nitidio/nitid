@@ -19,6 +19,7 @@ dependencies = [
     "pillow>=10.0",
     "mss>=10.0",
     "pyyaml>=6.0",
+    "matplotlib>=3.8",
     "onnx>=1.15",
     "onnxsim>=0.4",
     "tqdm>=4.66",
