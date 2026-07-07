@@ -19,7 +19,9 @@ dependencies = [
     "pillow>=10.0",
     "mss>=10.0",
     "pyyaml>=6.0",
+    "matplotlib>=3.8",
     "onnx>=1.15",
+    "onnxscript>=0.1",
     "onnxsim>=0.4",
     "tqdm>=4.66",
     "tensorboard>=2.14",  # required by extern/dfine src/core/_config.py
@@ -30,6 +32,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov",
+    "pycocotools>=2.0",
     "ruff",
     "mypy",
     "mkdocs>=1.6",

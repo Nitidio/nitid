@@ -22,6 +22,8 @@ by sorting them; override with a cat_ids: {cat_id: label} mapping in the YAML.
 
 from __future__ import annotations
 
+import contextlib
+import io
 from pathlib import Path
 
 import torch
@@ -62,7 +64,8 @@ class CocoFinetuneDataset(Dataset):
     ) -> None:
         from pycocotools.coco import COCO
 
-        self.coco = COCO(str(ann_file))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.coco = COCO(str(ann_file))
         self.img_dir = Path(img_dir)
         # only keep images that have at least one non-crowd annotation
         self.ids = [

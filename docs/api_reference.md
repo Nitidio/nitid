@@ -14,7 +14,7 @@ model = DFINE("dfine_s", device="cuda:0")
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str` | `"dfine_l.pth"` | Path to wrapped checkpoint or a registry model name (`"dfine_n"`, `"dfine_s"`, `"dfine_m"`, `"dfine_l"`, `"dfine_x"`) |
+| `model`   | `str` | `"dfine_l.pth"` | Path to wrapped checkpoint or a registry model name (`"dfine_s"`, `"dfine_m"`, `"dfine_l"`, `"dfine_x"`) |
 | `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
 | `verbose` | `bool`| `True`  | Print load summary |
 
@@ -125,8 +125,17 @@ metrics = model.train(
     name="exp",
     verbose=True,
 )
-# metrics = {"loss": <final_epoch_loss>}
+# metrics = {
+#   "loss": ...,
+#   "fitness": ...,
+#   "mAP50": ...,
+#   "mAP50-95": ...,
+#   "history": [{...}, ...],
+# }
 ```
+
+The top-level values summarize the final epoch. `metrics["history"]` contains
+one row per epoch with training loss terms and validation metrics.
 
 ---
 
@@ -141,9 +150,21 @@ metrics = model.val(
     batch=16,
     conf=0.001,
     split="val",         # "val" or "test"
+    project="runs/val",
+    name="exp",
+    plots=True,
     verbose=True,
 )
-# metrics = {"mAP50-95": ..., "mAP50": ..., "AR1": ..., "AR100": ...}
+# metrics = {
+#   "mAP50-95": ...,
+#   "mAP50": ...,
+#   "AR1": ...,
+#   "AR100": ...,
+#   "precision": ...,
+#   "recall": ...,
+#   "f1": ...,
+#   "per_class": [{...}, ...],
+# }
 ```
 
 ---
