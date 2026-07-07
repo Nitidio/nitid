@@ -20,6 +20,7 @@ If you're new to nitid, follow these guides in order:
 1. [Quick Start](quickstart.md)
 2. [Fine-tuning](fine_tuning.md)
 3. [Export](export.md)
+4. [Troubleshooting](troubleshooting.md)
 
 ## Documentation
 
@@ -28,6 +29,7 @@ If you're new to nitid, follow these guides in order:
 - [Export](export.md)
 - [Web Application](web_app.md)
 - [API Reference](api_reference.md)
+- [Troubleshooting](troubleshooting.md)
 
 ## For Contributors
 

@@ -183,6 +183,7 @@ EMA weights are used automatically when present, matching D-FINE's own inference
 | [docs/export.md](docs/export.md) | ONNX, TorchScript, TensorRT export |
 | [docs/api_reference.md](docs/api_reference.md) | Full `DFINE` class API reference |
 | [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 
 
 ## Development
