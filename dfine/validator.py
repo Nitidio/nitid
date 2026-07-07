@@ -172,13 +172,10 @@ class DFINEValidator:
         per_class_rows: list[PerClassRow] = []
 
         if coco_results:
-            sink = (
-                contextlib.nullcontext() if verbose else contextlib.redirect_stdout(io.StringIO())
-            )
-            with sink:
+            with contextlib.redirect_stdout(io.StringIO()):
                 coco_dt = coco_gt.loadRes(coco_results)
             coco_eval = COCOeval(coco_gt, coco_dt, "bbox")
-            with sink:
+            with contextlib.redirect_stdout(io.StringIO()):
                 coco_eval.evaluate()
                 coco_eval.accumulate()
                 coco_eval.summarize()
@@ -219,6 +216,8 @@ class DFINEValidator:
 
         metrics = {
             **coco_metrics,
+            "images": len(gt_records),
+            "instances": int(sum(gt["labels"].numel() for gt in gt_records)),
             "precision": precision,
             "recall": recall,
             "f1": f1,
@@ -533,23 +532,33 @@ class DFINEValidator:
 
     def _print_summary(self, metrics: dict[str, object], per_class_rows: list[PerClassRow]) -> None:
         LOGGER.info(
-            "Val: P=%.3f R=%.3f F1=%.3f mAP50=%.3f mAP50-95=%.3f fitness=%.3f",
+            "%22s %10s %10s %10s %10s %10s %10s",
+            "Class",
+            "Images",
+            "Instances",
+            "Box(P",
+            "R",
+            "mAP50",
+            "mAP50-95)",
+        )
+        LOGGER.info(
+            "%22s %10d %10d %10.3f %10.3f %10.3f %10.3f",
+            "all",
+            int(_as_float(metrics.get("images", 0))),
+            int(_as_float(metrics.get("instances", 0))),
             _as_float(metrics["precision"]),
             _as_float(metrics["recall"]),
-            _as_float(metrics["f1"]),
             _as_float(metrics["mAP50"]),
             _as_float(metrics["mAP50-95"]),
-            _as_float(metrics["fitness"]),
         )
         if not per_class_rows:
             return
 
-        LOGGER.info("Class                  Instances     AP50     AP50-95")
+        LOGGER.info("%22s %10s %10s", "Class", "Instances", "mAP50-95")
         for row in per_class_rows:
             LOGGER.info(
-                "%-22s %10d   %7.3f   %9.3f",
+                "%22s %10d %10.3f",
                 row["name"],
                 row["instances"],
-                row["ap50"],
                 row["ap50-95"],
             )
