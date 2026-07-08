@@ -47,10 +47,14 @@ Options:
   imgsz=INT           Square inference image size (default: 640)
   stream=BOOL         Return results as a generator (default: false)
   augment=BOOL        Use test-time augmentation (default: false)
+  save=BOOL           Save annotated images (default: false)
+  project=PATH        Parent output directory when save=true (default: runs/detect)
+  name=NAME           Run directory name when save=true (default: exp)
   verbose=BOOL        Print prediction progress (default: true)
 
 Examples:
   dfine predict model=dfine_l.pth source=image.jpg
+  dfine predict model=dfine_l.pth source=image.jpg save=true
   dfine predict model=dfine_l.pth source=video.mp4 conf=0.3 stream=true
 """,
     "download": """\
@@ -225,6 +229,8 @@ def main(argv: list[str] | None = None) -> None:
         results = model.predict(source, **kwargs)
         for r in results:
             print(r)
+            if getattr(r, "save_path", None):
+                print(f"Saved {r.save_path}")
     elif command == "train":
         metrics = model.train(**kwargs)
         print(metrics)
