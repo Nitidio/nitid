@@ -36,6 +36,18 @@ def test_predict_returns_results_object(tiny_checkpoint):
     assert isinstance(results[0], Results)
 
 
+def test_predict_returns_speed_timings(tiny_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = model.predict(frame, conf=0.0)[0]
+
+    assert set(result.speed) == {"preprocess", "inference", "postprocess"}
+    assert all(isinstance(value, float) for value in result.speed.values())
+    assert all(value >= 0 for value in result.speed.values())
+
+
 def test_predict_stream_is_generator(tiny_checkpoint):
     from dfine import DFINE
 

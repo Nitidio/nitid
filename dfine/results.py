@@ -27,12 +27,14 @@ class Results:
         names: dict[int, str],
         boxes=None,
         save_path: str | None = None,
+        speed: dict[str, float] | None = None,
     ) -> None:
         self.orig_img = orig_img
         self.path = path
         self.names = names
         self.boxes = boxes
         self.save_path = save_path
+        self.speed = speed or {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
 
     def plot(
         self,

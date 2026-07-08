@@ -63,6 +63,7 @@ results = model.predict("image.jpg", save=True, project="runs/detect", name="str
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
 | `save_path` | `str \| None`  | Saved annotated image path when `save=True` |
+| `speed` | `dict[str, float]` | Timing in milliseconds for `preprocess`, `inference`, and `postprocess` |
 
 ```python
 r = results[0]
@@ -70,6 +71,7 @@ r.plot()            # → HWC BGR ndarray with boxes drawn
 r.save("out.jpg")   # write plotted image to disk
 r.show()            # display in a window (blocks until key press)
 r.to_json()         # → list[dict] with box/score/class per detection
+r.speed             # → {"preprocess": 4.2, "inference": 18.7, "postprocess": 2.1}
 len(r)              # number of detections
 ```
 
