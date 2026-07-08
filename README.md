@@ -53,7 +53,7 @@ uv sync --extra web
 
 ## Quick Start
 
-Create a model using any official D-FINE model name. nitid will automatically download, wrap, and load the corresponding checkpoint on first use.
+The canonical quickstart lives in [docs/quickstart.md](docs/quickstart.md); use the docs guide for the full walkthrough.
 
 ### Inference
 
@@ -61,11 +61,9 @@ Create a model using any official D-FINE model name. nitid will automatically do
 from dfine import DFINE
 
 model = DFINE("dfine_s")
-
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
-
 
 ### Training
 
@@ -76,9 +74,6 @@ model.train(
 )
 ```
 
-See [docs/fine_tuning.md](docs/fine_tuning.md) for datasets, optimizers, AMP, EMA and all training options.
-
-
 ### Validation
 
 ```python
@@ -86,7 +81,6 @@ metrics = model.val(
     data="configs/datasets/my_dataset.yml",
 )
 ```
-
 
 ### Export
 
@@ -96,21 +90,22 @@ model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
 
-See [docs/export.md](docs/export.md) for TensorRT, FP16 and advanced export options.
 
 ### Command Line Interface
 
 ```bash
 uv run dfine predict model=dfine_s source=image.jpg
-
 uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
-
 uv run dfine val model=dfine_s data=my_dataset.yml
-
 uv run dfine export model=dfine_s format=onnx
 ```
 
-The API intentionally mirrors `ultralytics.YOLO`, making it easy to migrate existing projects.
+For the full guide:
+
+- Full quickstart: [docs/quickstart.md](docs/quickstart.md)
+- Fine-tuning and validation: [docs/fine_tuning.md](docs/fine_tuning.md)
+- Export: [docs/export.md](docs/export.md)
+- CLI: [docs/cli.md](docs/cli.md)
 
 
 ## Official Models
