@@ -5,6 +5,7 @@ Called internally by DFINE.predict(). Not part of the public API.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Generator
 
@@ -71,9 +72,20 @@ class DFINEPredictor:
     ) -> Generator:
         """Yield one Results object per frame/image."""
         seen: dict[str, int] = {}
-        for index, (tensor, orig_img, path) in enumerate(loader, start=1):
+        source_iter = iter(loader)
+        index = 0
+        while True:
+            preprocess_start = time.perf_counter()
+            try:
+                tensor, orig_img, path = next(source_iter)
+            except StopIteration:
+                break
+            preprocess_ms = (time.perf_counter() - preprocess_start) * 1000
+            index += 1
+
             h, w = orig_img.shape[:2]
             orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
+            inference_start = time.perf_counter()
             with torch.no_grad():
                 raw = self.model(tensor)
                 detections = self._postprocessor(raw, orig_size)
@@ -102,10 +114,17 @@ class DFINEPredictor:
                         "scores": torch.cat([merged_det["scores"], det_flipped["scores"]], dim=0),
                         "num_orig": merged_det["num_orig"],
                     }
+            inference_ms = (time.perf_counter() - inference_start) * 1000
 
+            postprocess_start = time.perf_counter()
             result = self._postprocess(
                 merged_det, orig_img, path, conf, classes, augment=augment, iou=iou
             )
+            result.speed = {
+                "preprocess": preprocess_ms,
+                "inference": inference_ms,
+                "postprocess": (time.perf_counter() - postprocess_start) * 1000,
+            }
             if save_dir is not None:
                 save_path = self._save_result(result, save_dir, index, seen)
                 result.save_path = str(save_path)
