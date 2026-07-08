@@ -48,6 +48,15 @@ The interface is intentionally close to D-FINE's own inference scripts, but with
 pre/post-processing handled for you. `results[0].boxes.xyxy` is in absolute pixel
 coordinates; no manual rescaling needed.
 
+You can also export detections directly into tabular data for analysis:
+
+```python
+result = results[0]
+df = result.pandas()       # pandas DataFrame
+same_df = result.to_df()   # alias for pandas()
+result.to_csv("out.csv")   # write detections to CSV
+```
+
 ### 3. Fine-tune on your data
 
 Prepare a COCO-format dataset and a data YAML (see [fine_tuning.md](fine_tuning.md)):
