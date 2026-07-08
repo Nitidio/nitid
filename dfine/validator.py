@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-from pathlib import Path
 from typing import Protocol, cast
 
 import torch
@@ -58,19 +57,11 @@ class DFINEValidator:
         from pycocotools.cocoeval import COCOeval
 
         from dfine.nn.build import build_postprocessor
-        from dfine.utils.data import build_coco_dataloader, load_data_yaml
+        from dfine.utils.data import build_detection_dataloader, resolve_detection_split
 
-        # Resolve annotation file path (mirrors build_coco_dataloader logic)
-        cfg_data = load_data_yaml(data)
-        root = Path(cfg_data["path"])
-        ann_key = f"{split}_ann"
-        if ann_key in cfg_data:
-            ann_file = root / cfg_data[ann_key]
-        else:
-            split_name = Path(cfg_data[split]).name
-            ann_file = root / "annotations" / f"instances_{split_name}.json"
-
-        dataloader = build_coco_dataloader(data, split=split, imgsz=imgsz, batch_size=batch)
+        spec = resolve_detection_split(data, split)
+        ann_file = spec.ann_file
+        dataloader = build_detection_dataloader(data, split=split, imgsz=imgsz, batch_size=batch)
 
         # Fresh postprocessor — non-deploy mode returns [{labels, boxes, scores}]
         postprocessor = build_postprocessor(self.cfg)

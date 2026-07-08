@@ -30,6 +30,46 @@ def test_val_runs(tiny_checkpoint, tiny_dataset):
     assert set(metrics) >= {"mAP50", "mAP50-95", "AR1", "AR100"}
 
 
+def test_train_and_val_run_with_yolo_txt_labels(tiny_checkpoint, tiny_yolo_dataset, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    metrics = model.train(
+        data=tiny_yolo_dataset,
+        epochs=1,
+        batch=2,
+        project=str(tmp_path),
+        name="yolo_train",
+        verbose=False,
+    )
+    assert "loss" in metrics
+    assert (tmp_path / "yolo_train" / "epoch1.pth").exists()
+
+    val_metrics = model.val(data=tiny_yolo_dataset, batch=2, verbose=False)
+    assert set(val_metrics) >= {"mAP50", "mAP50-95", "AR1", "AR100"}
+
+
+def test_train_and_val_run_with_split_first_yolo_layout(
+    tiny_checkpoint, tiny_yolo_splitfirst_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    metrics = model.train(
+        data=tiny_yolo_splitfirst_dataset,
+        epochs=1,
+        batch=2,
+        project=str(tmp_path),
+        name="splitfirst_yolo_train",
+        verbose=False,
+    )
+    assert "loss" in metrics
+    assert (tmp_path / "splitfirst_yolo_train" / "epoch1.pth").exists()
+
+    val_metrics = model.val(data=tiny_yolo_splitfirst_dataset, batch=2, verbose=False)
+    assert set(val_metrics) >= {"mAP50", "mAP50-95", "AR1", "AR100"}
+
+
 def test_train_with_ema(tiny_checkpoint, tiny_dataset, tmp_path):
     """EMA training completes, checkpoint loads, and EMA differs from raw model."""
     from dfine import DFINE
