@@ -32,11 +32,13 @@ class Results:
         path: str,
         names: dict[int, str],
         boxes=None,
+        save_path: str | None = None,
     ) -> None:
         self.orig_img = orig_img
         self.path = path
         self.names = names
         self.boxes = boxes
+        self.save_path = save_path
 
     def plot(
         self,

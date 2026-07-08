@@ -152,9 +152,43 @@ model.export(format="tensorrt", half=True)   # FP16
 
 ### CLI
 
+Use the CLI when you want to run nitid from the terminal instead of Python.
+
+Run prediction and save the annotated image:
+
 ```bash
-uv run dfine predict model=dfine_l source=image.jpg conf=0.5
+uv run dfine predict model=dfine_s source=image.jpg save=true conf=0.5
+```
+
+This automatically downloads and wraps `dfine_s` on first use, runs detection
+on `image.jpg`, and saves the image with boxes drawn here:
+
+```text
+runs/detect/exp/image.jpg
+```
+
+Choose your own output folder name:
+
+```bash
+uv run dfine predict model=dfine_s source=image.jpg save=true project=runs/detect name=street-test
+```
+
+The saved image will be:
+
+```text
+runs/detect/street-test/image.jpg
+```
+
+Other common CLI commands:
+
+```bash
 uv run dfine train  model=dfine_l data=my_dataset.yml epochs=50
 uv run dfine val    model=dfine_l data=my_dataset.yml
 uv run dfine export model=dfine_l format=onnx
+```
+
+Show all prediction options:
+
+```bash
+uv run dfine predict --help
 ```

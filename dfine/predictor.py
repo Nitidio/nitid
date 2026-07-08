@@ -5,13 +5,14 @@ Called internally by DFINE.predict(). Not part of the public API.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Generator
 
 import torch
 
 from dfine.results import Boxes, Results
 from dfine.utils.ops import clip_boxes
-from dfine.utils.sources import LoadSource
+from dfine.utils.sources import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, LoadSource
 
 
 class DFINEPredictor:
@@ -45,19 +46,32 @@ class DFINEPredictor:
         classes: list[int] | None,
         stream: bool,
         augment: bool,
+        save: bool,
+        project: str,
+        name: str,
         verbose: bool,
         iou: float = 0.85,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
         loader = LoadSource(source, imgsz=imgsz, device=self.device)
-        gen = self._infer(loader, conf, classes, augment=augment, iou=iou)
+        save_dir = Path(project) / name if save else None
+        if save_dir is not None:
+            save_dir.mkdir(parents=True, exist_ok=True)
+        gen = self._infer(loader, conf, classes, augment=augment, iou=iou, save_dir=save_dir)
         return gen if stream else list(gen)
 
     def _infer(
-        self, loader: LoadSource, conf, classes, augment: bool = False, iou: float = 0.85
+        self,
+        loader: LoadSource,
+        conf,
+        classes,
+        augment: bool = False,
+        iou: float = 0.85,
+        save_dir: Path | None = None,
     ) -> Generator:
         """Yield one Results object per frame/image."""
-        for tensor, orig_img, path in loader:
+        seen: dict[str, int] = {}
+        for index, (tensor, orig_img, path) in enumerate(loader, start=1):
             h, w = orig_img.shape[:2]
             orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
             with torch.no_grad():
@@ -89,9 +103,51 @@ class DFINEPredictor:
                         "num_orig": merged_det["num_orig"],
                     }
 
-            yield self._postprocess(
+            result = self._postprocess(
                 merged_det, orig_img, path, conf, classes, augment=augment, iou=iou
             )
+            if save_dir is not None:
+                save_path = self._save_result(result, save_dir, index, seen)
+                result.save_path = str(save_path)
+            yield result
+
+    def _save_result(
+        self,
+        result: Results,
+        save_dir: Path,
+        index: int,
+        seen: dict[str, int],
+    ) -> Path:
+        """Save an annotated prediction image and return the output path."""
+        out_path = save_dir / self._output_filename(result.path, index)
+        count = seen.get(out_path.name, 0)
+        seen[out_path.name] = count + 1
+        if count:
+            out_path = out_path.with_name(f"{out_path.stem}_{count + 1}{out_path.suffix}")
+
+        while out_path.exists():
+            count += 1
+            out_path = out_path.with_name(f"{out_path.stem}_{count + 1}{out_path.suffix}")
+
+        result.save(str(out_path))
+        return out_path
+
+    def _output_filename(self, path: str, index: int) -> str:
+        """Choose a stable output filename for file, stream, screen, and array sources."""
+        source_path = Path(path)
+        suffix = source_path.suffix.lower()
+
+        if suffix in IMAGE_EXTENSIONS:
+            return source_path.name
+        if suffix in VIDEO_EXTENSIONS:
+            return f"{source_path.stem}_{index:06d}.jpg"
+        if path == "<screen>":
+            return f"screen_{index:06d}.jpg"
+        if path == "<ndarray>":
+            return f"image_{index:06d}.jpg"
+        if source_path.name:
+            return f"{source_path.name}_{index:06d}.jpg"
+        return f"image_{index:06d}.jpg"
 
     def _postprocess(
         self, det: dict, orig_img, path, conf_thr, classes, augment: bool = False, iou: float = 0.85
