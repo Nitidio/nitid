@@ -218,6 +218,8 @@ uv run dfine export model=dfine_l format=onnx
 - `val`: run COCO-style evaluation on the validation or test split.
 - `export`: convert a wrapped checkpoint to ONNX, TorchScript, or TensorRT.
 
+By default, `train` writes wrapped epoch checkpoints to `runs/train/exp/`, while `val` prints metrics to the terminal without creating a run directory.
+
 Show all prediction options:
 
 ```bash
