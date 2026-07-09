@@ -92,7 +92,7 @@ class DFINEValidator:
         metadata. The returned scalars are suitable for CSV logging.
         """
         from dfine.nn.build import build_postprocessor
-        from dfine.utils.data import build_coco_dataloader, load_data_yaml
+        from dfine.utils.data import build_detection_dataloader, resolve_detection_split
 
         COCO = importlib.import_module("pycocotools.coco").COCO
         COCOeval = importlib.import_module("pycocotools.cocoeval").COCOeval
@@ -101,16 +101,15 @@ class DFINEValidator:
         if save_dir is not None:
             save_dir.mkdir(parents=True, exist_ok=True)
 
-        cfg_data = load_data_yaml(data)
-        root = Path(cfg_data["path"])
-        ann_key = f"{split}_ann"
-        if ann_key in cfg_data:
-            ann_file = root / cfg_data[ann_key]
-        else:
-            split_name = Path(cfg_data[split]).name
-            ann_file = root / "annotations" / f"instances_{split_name}.json"
-
-        dataloader = build_coco_dataloader(data, split=split, imgsz=imgsz, batch_size=batch)
+        spec = resolve_detection_split(data, split)
+        ann_file = spec.ann_file
+        dataloader = build_detection_dataloader(
+            data,
+            split=split,
+            imgsz=imgsz,
+            batch_size=batch,
+            spec=spec,
+        )
 
         postprocessor = build_postprocessor(self.cfg)
         postprocessor.to(self.device)
