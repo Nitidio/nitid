@@ -114,6 +114,7 @@ uv run dfine train \
 
 The table below documents the full public `model.train(...)` surface as it
 exists today. Defaults match [`DFINE.train()`](../dfine/model.py).
+Use this table as the authoritative reference for train-time arguments.
 
 | Parameter | Type | Default | Valid range / values | Description |
 |-----------|------|---------|----------------------|-------------|

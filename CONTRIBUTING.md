@@ -54,7 +54,8 @@ full suite.
 ## Running tests
 
 Use the narrowest command that covers your change first, then the full suite
-before opening a PR.
+before opening a PR. In practice, targeted tests are fastest during iteration,
+and the full suite is the final confidence check before review.
 
 ```bash
 # Unit tests only (no GPU or checkpoint needed)
