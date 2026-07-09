@@ -33,6 +33,7 @@ results = model.predict(
     imgsz=640,        # inference size (square)
     classes=None,     # filter to these class indices, e.g. [0, 2]
     stream=False,     # return generator instead of list
+    vid_stride=1,     # process every Nth frame for video/webcam/stream sources
     augment=False,    # run test-time augmentation (horizontal flip)
     save=False,       # save annotated images to project/name
     project="runs/detect",
@@ -42,6 +43,9 @@ results = model.predict(
 ```
 
 Returns `list[Results]` (or a generator when `stream=True`).
+
+For video, webcam, and stream sources, `vid_stride=N` keeps every Nth frame in
+source order while skipping the intermediate frames.
 
 When `save=True`, nitid also writes annotated images to `project/name` while
 still returning the normal `Results` objects:

@@ -2,8 +2,11 @@
 
 import itertools
 import types
+from pathlib import Path
 
+import cv2
 import numpy as np
+import pytest
 import torch
 from PIL import Image
 
@@ -14,6 +17,15 @@ def _random_frame(seed=42, shape=(480, 640, 3)):
     coordinate or dedup bugs in the augment path)."""
     rng = np.random.default_rng(seed)
     return rng.integers(0, 255, shape, dtype=np.uint8)
+
+
+def _write_test_video(path: Path, frame_values: list[int], shape=(64, 64)) -> None:
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(str(path), fourcc, 5.0, shape)
+    for value in frame_values:
+        frame = np.full((shape[1], shape[0], 3), value, dtype=np.uint8)
+        writer.write(frame)
+    writer.release()
 
 
 def test_predict_numpy_frame(tiny_checkpoint):
@@ -43,6 +55,32 @@ def test_predict_stream_is_generator(tiny_checkpoint):
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     gen = model.predict(frame, stream=True)
     assert isinstance(gen, types.GeneratorType)
+
+
+def test_predict_vid_stride_skips_video_frames_and_keeps_order(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    video_path = tmp_path / "stride.mp4"
+    _write_test_video(video_path, frame_values=[0, 40, 80, 120, 160])
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    results = model.predict(str(video_path), conf=0.0, vid_stride=2)
+
+    assert len(results) == 3
+    means = [float(r.orig_img.mean()) for r in results]
+    assert means[0] == pytest.approx(0.0, abs=5.0)
+    assert means[1] == pytest.approx(80.0, abs=10.0)
+    assert means[2] == pytest.approx(160.0, abs=10.0)
+    assert means[0] < means[1] < means[2]
+
+
+def test_predict_vid_stride_rejects_invalid_value(tiny_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="vid_stride must be >= 1"):
+        model.predict(frame, vid_stride=0)
 
 
 def test_predict_conf_filter(tiny_checkpoint):

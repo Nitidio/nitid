@@ -38,10 +38,14 @@ class LoadSource:
         source,
         imgsz: int = 640,
         device: str = "cuda:0",
+        vid_stride: int = 1,
     ) -> None:
+        if vid_stride < 1:
+            raise ValueError("vid_stride must be >= 1")
         self.source = source
         self.imgsz = imgsz
         self.device = device
+        self.vid_stride = vid_stride
         self._mode = self._detect_mode(source)
 
     def _detect_mode(self, source) -> str:
@@ -77,10 +81,14 @@ class LoadSource:
             yield self._process_frame(img, path=str(self.source))
         elif self._mode in ("video", "webcam", "stream"):
             cap = cv2.VideoCapture(self.source if self._mode == "webcam" else str(self.source))
+            frame_index = 0
             while cap.isOpened():
                 ok, frame = cap.read()
                 if not ok:
                     break
+                frame_index += 1
+                if (frame_index - 1) % self.vid_stride != 0:
+                    continue
                 yield self._process_frame(frame, path=str(self.source))
             cap.release()
         elif self._mode == "screen":
@@ -103,7 +111,7 @@ class LoadSource:
                     yield self._process_frame(image_frame, path=str(p))
         elif self._mode == "list":
             for item in self.source:
-                yield from LoadSource(item, self.imgsz, self.device)
+                yield from LoadSource(item, self.imgsz, self.device, self.vid_stride)
 
     def _process_frame(self, img: np.ndarray, path: str):
         """Preprocess a BGR numpy frame → (tensor, orig_img, path).

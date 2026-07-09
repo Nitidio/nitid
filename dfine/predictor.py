@@ -45,6 +45,7 @@ class DFINEPredictor:
         imgsz: int,
         classes: list[int] | None,
         stream: bool,
+        vid_stride: int,
         augment: bool,
         save: bool,
         project: str,
@@ -53,7 +54,7 @@ class DFINEPredictor:
         iou: float = 0.85,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
-        loader = LoadSource(source, imgsz=imgsz, device=self.device)
+        loader = LoadSource(source, imgsz=imgsz, device=self.device, vid_stride=vid_stride)
         save_dir = Path(project) / name if save else None
         if save_dir is not None:
             save_dir.mkdir(parents=True, exist_ok=True)
