@@ -74,6 +74,38 @@ def test_predict_vid_stride_skips_video_frames_and_keeps_order(tiny_checkpoint, 
     assert means[0] < means[1] < means[2]
 
 
+def test_predict_save_writes_annotated_video_with_adjusted_fps(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    video_path = tmp_path / "input.mp4"
+    _write_test_video(video_path, frame_values=[0, 40, 80, 120, 160, 200])
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    results = model.predict(
+        str(video_path),
+        conf=0.0,
+        vid_stride=2,
+        save=True,
+        project=str(tmp_path / "runs"),
+        name="video-save-test",
+    )
+
+    save_path = tmp_path / "runs" / "video-save-test" / "input.mp4"
+    assert save_path.exists()
+    assert save_path.stat().st_size > 0
+    assert all(result.save_path == str(save_path) for result in results)
+
+    cap = cv2.VideoCapture(str(save_path))
+    try:
+        fps = float(cap.get(cv2.CAP_PROP_FPS))
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    finally:
+        cap.release()
+
+    assert fps == pytest.approx(2.5, abs=0.5)
+    assert frame_count == 3
+
+
 def test_predict_vid_stride_rejects_invalid_value(tiny_checkpoint):
     from dfine import DFINE
 

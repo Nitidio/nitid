@@ -47,6 +47,9 @@ class LoadSource:
         self.device = device
         self.vid_stride = vid_stride
         self._mode = self._detect_mode(source)
+        self.video_fps: float | None = None
+        if self._mode == "video":
+            self.video_fps = self._probe_video_fps()
 
     def _detect_mode(self, source) -> str:
         if isinstance(source, np.ndarray):
@@ -69,6 +72,18 @@ class LoadSource:
         if isinstance(source, list):
             return "list"
         raise ValueError(f"Unrecognised source type: {type(source)}")
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    def _probe_video_fps(self) -> float | None:
+        cap = cv2.VideoCapture(str(self.source))
+        try:
+            fps = float(cap.get(cv2.CAP_PROP_FPS))
+        finally:
+            cap.release()
+        return fps if fps > 0 else None
 
     def __iter__(self) -> Generator:
         if self._mode == "array":

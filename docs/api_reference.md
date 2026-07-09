@@ -35,7 +35,7 @@ results = model.predict(
     stream=False,     # return generator instead of list
     vid_stride=1,     # process every Nth frame for video/webcam/stream sources
     augment=False,    # run test-time augmentation (horizontal flip)
-    save=False,       # save annotated images to project/name
+    save=False,       # save annotated outputs to project/name
     project="runs/detect",
     name="exp",
     iou=0.85,          # IoU threshold for TTA NMS
@@ -47,7 +47,7 @@ Returns `list[Results]` (or a generator when `stream=True`).
 For video, webcam, and stream sources, `vid_stride=N` keeps every Nth frame in
 source order while skipping the intermediate frames.
 
-When `save=True`, nitid also writes annotated images to `project/name` while
+When `save=True`, nitid also writes annotated outputs to `project/name` while
 still returning the normal `Results` objects:
 
 ```python
@@ -56,7 +56,14 @@ results = model.predict("image.jpg", save=True)
 
 results = model.predict("image.jpg", save=True, project="runs/detect", name="street-test")
 # saved image: runs/detect/street-test/image.jpg
+
+results = model.predict("video.mp4", save=True, vid_stride=2)
+# saved video: runs/detect/exp/video.mp4
 ```
+
+For video-file sources, nitid saves an annotated `.mp4`. When `vid_stride=N`,
+the saved video contains the processed frames and its FPS is reduced by `N` so
+playback stays close to the original duration.
 
 #### `Results`
 
@@ -66,7 +73,7 @@ results = model.predict("image.jpg", save=True, project="runs/detect", name="str
 | `path`     | `str`           | Source path or descriptor |
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
-| `save_path` | `str \| None`  | Saved annotated image path when `save=True` |
+| `save_path` | `str \| None`  | Saved annotated image or video path when `save=True` |
 
 ```python
 r = results[0]
