@@ -3,10 +3,16 @@
 import json
 
 import numpy as np
+import pytest
 import yaml
 from PIL import Image
 
-from dfine.utils.data import _load_yolo_annotations, normalize_names, resolve_detection_split
+from dfine.utils.data import (
+    _dataset_cache_dir,
+    _load_yolo_annotations,
+    normalize_names,
+    resolve_detection_split,
+)
 
 
 def test_normalize_names_accepts_list():
@@ -134,3 +140,94 @@ def test_yolo_conversion_rounds_cached_bbox_values(tmp_path):
 
     assert anns[0]["bbox"] == [156.410218, 169.33024, 434.589782, 463.50016]
     assert anns[0]["area"] == 201432.433491
+
+
+def test_load_yolo_annotations_skips_bad_rows_and_logs(tmp_path, caplog):
+    label_path = tmp_path / "bad.txt"
+    label_path.write_text(
+        "\n".join(
+            [
+                "0 0.5 0.5 0.25",  # malformed
+                "0 nope 0.5 0.25 0.25",  # non-numeric
+                "7 0.5 0.5 0.25 0.25",  # out of range
+                "0 nan 0.5 0.25 0.25",  # non-finite
+                "0 0.5 0.5 -0.25 0.25",  # non-positive
+                "0 0.5 0.5 0.25 0.25",  # valid
+            ]
+        )
+    )
+
+    with caplog.at_level("WARNING", logger="dfine"):
+        anns = _load_yolo_annotations(label_path, width=100, height=100, names={0: "person"})
+
+    assert len(anns) == 1
+    messages = [record.message for record in caplog.records]
+    assert any("malformed" in message for message in messages)
+    assert any("non-numeric" in message for message in messages)
+    assert any("out-of-range" in message for message in messages)
+    assert any("non-finite" in message for message in messages)
+    assert any("non-positive" in message for message in messages)
+
+
+def test_resolve_detection_split_raises_when_no_format_matches(tmp_path):
+    root = tmp_path / "unknown"
+    (root / "images" / "train").mkdir(parents=True)
+
+    data_yaml = root / "data.yml"
+    data_yaml.write_text(
+        yaml.dump({"path": str(root), "train": "images/train", "names": {0: "person"}})
+    )
+
+    with pytest.raises(FileNotFoundError, match="Could not resolve dataset format"):
+        resolve_detection_split(data_yaml, "train")
+
+
+def test_resolve_detection_split_uses_system_cache_dir(tmp_path, monkeypatch):
+    cache_root = tmp_path / "cache_root"
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_root))
+
+    root = tmp_path / "yolo"
+    (root / "images" / "train").mkdir(parents=True)
+    (root / "labels" / "train").mkdir(parents=True)
+    Image.fromarray(np.zeros((16, 16, 3), dtype=np.uint8)).save(root / "images" / "train" / "a.jpg")
+    (root / "labels" / "train" / "a.txt").write_text("0 0.5 0.5 0.25 0.25\n")
+
+    data_yaml = root / "data.yml"
+    data_yaml.write_text(
+        yaml.dump({"path": str(root), "train": "images/train", "names": {0: "person"}})
+    )
+
+    spec = resolve_detection_split(data_yaml, "train")
+
+    assert spec.ann_file.is_relative_to(cache_root / "nitid")
+    assert spec.ann_file.parent == _dataset_cache_dir(root)
+
+
+def test_resolve_detection_split_reuses_fresh_yolo_cache(tmp_path, monkeypatch):
+    import dfine.utils.data as data_mod
+
+    root = tmp_path / "yolo"
+    (root / "images" / "train").mkdir(parents=True)
+    (root / "labels" / "train").mkdir(parents=True)
+    Image.fromarray(np.zeros((16, 16, 3), dtype=np.uint8)).save(root / "images" / "train" / "a.jpg")
+    (root / "labels" / "train" / "a.txt").write_text("0 0.5 0.5 0.25 0.25\n")
+
+    data_yaml = root / "data.yml"
+    data_yaml.write_text(
+        yaml.dump({"path": str(root), "train": "images/train", "names": {0: "person"}})
+    )
+
+    original_convert = data_mod.convert_yolo_split_to_coco_json
+    calls = {"count": 0}
+
+    def wrapped_convert(*args, **kwargs):
+        calls["count"] += 1
+        return original_convert(*args, **kwargs)
+
+    monkeypatch.setattr(data_mod, "convert_yolo_split_to_coco_json", wrapped_convert)
+
+    first = resolve_detection_split(data_yaml, "train")
+    second = resolve_detection_split(data_yaml, "train")
+
+    assert first.ann_file == second.ann_file
+    assert calls["count"] == 1

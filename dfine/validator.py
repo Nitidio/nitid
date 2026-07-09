@@ -61,7 +61,9 @@ class DFINEValidator:
 
         spec = resolve_detection_split(data, split)
         ann_file = spec.ann_file
-        dataloader = build_detection_dataloader(data, split=split, imgsz=imgsz, batch_size=batch)
+        dataloader = build_detection_dataloader(
+            data, split=split, imgsz=imgsz, batch_size=batch, spec=spec
+        )
 
         # Fresh postprocessor — non-deploy mode returns [{labels, boxes, scores}]
         postprocessor = build_postprocessor(self.cfg)

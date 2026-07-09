@@ -59,7 +59,8 @@ my_dataset/
 ```
 
 nitid detects the layout automatically and converts YOLO labels to cached COCO
-JSON internally for training and validation.
+JSON internally for training and validation. The generated cache is stored in
+nitid's user cache directory rather than inside the dataset tree.
 
 ### Data YAML
 

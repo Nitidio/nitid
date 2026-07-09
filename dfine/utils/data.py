@@ -23,8 +23,11 @@ or split-first:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -80,11 +83,12 @@ def resolve_detection_split(data: str | Path, split: str) -> DetectionSplitSpec:
 
     label_dir = _find_yolo_label_dir(root, img_dir, split)
     if label_dir is not None:
-        cache_dir = root / ".nitid" / "cache"
+        cache_dir = _dataset_cache_dir(root)
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_name = f"{split}_{_slugify_relpath(Path(cfg[split]))}.coco.json"
         ann_file = cache_dir / cache_name
-        convert_yolo_split_to_coco_json(img_dir, label_dir, ann_file, normalize_names(cfg))
+        if not _yolo_cache_is_fresh(ann_file, img_dir, label_dir):
+            convert_yolo_split_to_coco_json(img_dir, label_dir, ann_file, normalize_names(cfg))
         return DetectionSplitSpec(
             format="yolo", img_dir=img_dir, ann_file=ann_file, label_dir=label_dir
         )
@@ -166,10 +170,11 @@ def build_detection_dataloader(
     split: str,
     imgsz: int,
     batch_size: int,
+    spec: DetectionSplitSpec | None = None,
 ) -> DataLoader:
     """Build a DataLoader from COCO JSON or YOLO txt labels."""
     cfg = load_data_yaml(data)
-    spec = resolve_detection_split(data, split)
+    spec = spec or resolve_detection_split(data, split)
 
     cat_ids_cfg = cfg.get("cat_ids")
     cat_id_to_label = {int(k): int(v) for k, v in cat_ids_cfg.items()} if cat_ids_cfg else None
@@ -196,9 +201,10 @@ def build_coco_dataloader(
     split: str,
     imgsz: int,
     batch_size: int,
+    spec: DetectionSplitSpec | None = None,
 ) -> DataLoader:
     """Backward-compatible alias for the generalized detection dataloader."""
-    return build_detection_dataloader(data, split, imgsz, batch_size)
+    return build_detection_dataloader(data, split, imgsz, batch_size, spec=spec)
 
 
 def convert_yolo_split_to_coco_json(
@@ -332,6 +338,7 @@ def _load_yolo_annotations(
             LOGGER.warning("Skipping non-finite YOLO box in %s:%d", label_path, line_no)
             continue
         if bw <= 0 or bh <= 0:
+            LOGGER.warning("Skipping non-positive YOLO box in %s:%d", label_path, line_no)
             continue
 
         x1 = (cx - bw / 2) * width
@@ -367,3 +374,40 @@ def _load_yolo_annotations(
 
 def _slugify_relpath(path: Path) -> str:
     return "__".join(path.parts) or "root"
+
+
+def _dataset_cache_dir(root: Path) -> Path:
+    root_hash = hashlib.sha1(str(root.resolve()).encode("utf-8")).hexdigest()[:12]
+    return _nitid_cache_root() / "datasets" / root_hash
+
+
+def _nitid_cache_root() -> Path:
+    xdg_cache = os.environ.get("XDG_CACHE_HOME")
+    if xdg_cache:
+        return Path(xdg_cache) / "nitid"
+    if os.name == "nt":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            return Path(local_appdata) / "nitid"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches" / "nitid"
+    return Path.home() / ".cache" / "nitid"
+
+
+def _yolo_cache_is_fresh(ann_file: Path, img_dir: Path, label_dir: Path) -> bool:
+    if not ann_file.exists():
+        return False
+
+    cache_mtime = ann_file.stat().st_mtime
+    newest_source_mtime = max(
+        _latest_tree_mtime(img_dir),
+        _latest_tree_mtime(label_dir),
+    )
+    return cache_mtime >= newest_source_mtime
+
+
+def _latest_tree_mtime(root: Path) -> float:
+    mtimes = [root.stat().st_mtime]
+    for path in root.rglob("*"):
+        mtimes.append(path.stat().st_mtime)
+    return max(mtimes)
