@@ -110,22 +110,40 @@ uv run dfine train \
     batch=16
 ```
 
-### Key parameters
+### Hyperparameter reference
 
-| Parameter    | Default      | Description |
-|--------------|--------------|-------------|
-| `epochs`     | 50           | Number of training epochs |
-| `batch`      | 16           | Batch size |
-| `imgsz`      | 640          | Input resolution (square) |
-| `lr0`        | 1e-4         | Initial learning rate |
-| `lrf`        | 0.01         | Final LR factor (linear decay: ends at `lr0 * lrf`) |
-| `optimizer`  | `"AdamW"`    | `"AdamW"` or `"SGD"` |
-| `amp`        | `False`      | Enable AMP mixed-precision (CUDA only) |
-| `ema`        | `False`      | Enable EMA weight averaging |
-| `ema_decay`  | 0.9999       | EMA decay factor (ignored when `ema=False`) |
-| `project`    | `runs/train` | Output root directory |
-| `name`       | `exp`        | Run name |
-| `resume`     | `False`      | Reserved — not yet implemented |
+The table below documents the full public `model.train(...)` surface as it
+exists today. Defaults match [`DFINE.train()`](../dfine/model.py).
+
+| Parameter | Type | Default | Valid range / values | Description |
+|-----------|------|---------|----------------------|-------------|
+| `data` | `str` | required | path to a dataset YAML | Ultralytics-style dataset config describing `path`, split locations, class count, and names. |
+| `epochs` | `int` | `50` | `>= 1` | Number of full passes over the training set. |
+| `imgsz` | `int` | `640` | `>= 1` | Square training resolution applied during preprocessing. |
+| `batch` | `int` | `16` | `>= 1` | Number of images per optimizer step. Larger values use more memory. |
+| `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
+| `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier for the linear scheduler. Training ends at `lr0 * lrf`. |
+| `optimizer` | `str` | `"AdamW"` | `"AdamW"`, `"SGD"` | Optimizer choice. `AdamW` is the default general-purpose option; `SGD` uses momentum `0.9`. |
+| `resume` | `bool` | `False` | `True`, `False` | Reserved for future checkpoint resume support. It is accepted for API compatibility but is not implemented yet. |
+| `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
+| `ema` | `bool` | `False` | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. |
+| `ema_decay` | `float` | `0.9999` | usually `0 < x < 1` | EMA smoothing factor. Higher values adapt more slowly; `0.9999` is the standard default for longer runs. |
+| `device` | `str \| None` | `None` | e.g. `"cpu"`, `"cuda"`, `"cuda:0"` | Optional override for the training device. If omitted, training uses the device selected when the `DFINE` object was created. |
+| `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
+| `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
+| `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
+
+### Interaction notes
+
+- `amp=True` is only active on CUDA. On CPU, nitid logs a warning and
+  continues in FP32.
+- `ema_decay` only matters when `ema=True`.
+- `device` in `train()` overrides the device selected in `DFINE(...)` for that
+  training run only.
+- The current public API does **not** expose `weight_decay` or `grad_clip` as
+  train arguments. Internally, `AdamW` uses `weight_decay=1e-4`, SGD uses
+  `momentum=0.9`, and gradient clipping is fixed at `max_norm=0.1` in
+  [`DFINETrainer`](../dfine/trainer.py).
 
 ## AMP — mixed-precision training
 
