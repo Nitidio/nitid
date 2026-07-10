@@ -5,6 +5,7 @@ import types
 
 import numpy as np
 import torch
+from PIL import Image
 
 
 def _random_frame(seed=42, shape=(480, 640, 3)):
@@ -75,6 +76,45 @@ def test_predict_boxes_within_image(tiny_checkpoint):
         assert (boxes[:, 1] >= 0).all()
         assert (boxes[:, 2] <= 640).all()
         assert (boxes[:, 3] <= 480).all()
+
+
+def test_predict_save_writes_annotated_image(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    image_path = tmp_path / "input.jpg"
+    Image.fromarray(_random_frame()).save(image_path)
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    results = model.predict(
+        str(image_path),
+        conf=0.0,
+        save=True,
+        project=str(tmp_path / "runs"),
+        name="detect-test",
+    )
+
+    save_path = tmp_path / "runs" / "detect-test" / "input.jpg"
+    assert save_path.exists()
+    assert save_path.stat().st_size > 0
+    assert results[0].save_path == str(save_path)
+
+
+def test_predict_save_generates_name_for_numpy_frame(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    frame = _random_frame()
+    results = model.predict(
+        frame,
+        conf=0.0,
+        save=True,
+        project=str(tmp_path / "runs"),
+        name="array-test",
+    )
+
+    save_path = tmp_path / "runs" / "array-test" / "image_000001.jpg"
+    assert save_path.exists()
+    assert results[0].save_path == str(save_path)
 
 
 # ---------------------------------------------------------------------------

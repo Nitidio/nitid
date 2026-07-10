@@ -34,11 +34,25 @@ results = model.predict(
     classes=None,     # filter to these class indices, e.g. [0, 2]
     stream=False,     # return generator instead of list
     augment=False,    # run test-time augmentation (horizontal flip)
+    save=False,       # save annotated images to project/name
+    project="runs/detect",
+    name="exp",
     iou=0.85,          # IoU threshold for TTA NMS
 )
 ```
 
 Returns `list[Results]` (or a generator when `stream=True`).
+
+When `save=True`, nitid also writes annotated images to `project/name` while
+still returning the normal `Results` objects:
+
+```python
+results = model.predict("image.jpg", save=True)
+# saved image: runs/detect/exp/image.jpg
+
+results = model.predict("image.jpg", save=True, project="runs/detect", name="street-test")
+# saved image: runs/detect/street-test/image.jpg
+```
 
 #### `Results`
 
@@ -48,6 +62,7 @@ Returns `list[Results]` (or a generator when `stream=True`).
 | `path`     | `str`           | Source path or descriptor |
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
+| `save_path` | `str \| None`  | Saved annotated image path when `save=True` |
 
 ```python
 r = results[0]
