@@ -171,6 +171,37 @@ def test_results_save(tmp_path, dummy_result):
     assert out_file.stat().st_size > 0
 
 
+def test_results_save_txt(tmp_path, dummy_result):
+    out_file = tmp_path / "labels" / "result.txt"
+    dummy_result.save_txt(out_file)
+
+    assert out_file.exists()
+    assert out_file.read_text(encoding="utf-8").splitlines() == [
+        "0 0.085938 0.229167 0.140625 0.375000",
+        "1 0.156250 0.322917 0.156250 0.395833",
+    ]
+
+
+def test_results_save_txt_with_conf(tmp_path, dummy_result):
+    out_file = tmp_path / "result.txt"
+    dummy_result.save_txt(out_file, save_conf=True)
+
+    assert out_file.read_text(encoding="utf-8").splitlines() == [
+        "0 0.085938 0.229167 0.140625 0.375000 0.900000",
+        "1 0.156250 0.322917 0.156250 0.395833 0.700000",
+    ]
+
+
+def test_results_save_txt_empty(tmp_path):
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = Results(orig_img=img, path="x.jpg", names={}, boxes=None)
+    out_file = tmp_path / "empty.txt"
+    result.save_txt(out_file)
+
+    assert out_file.exists()
+    assert out_file.read_text(encoding="utf-8") == ""
+
+
 def test_boxes_xywh(dummy_boxes):
     xywh = dummy_boxes.xywh
     assert xywh.shape == (2, 4)
