@@ -70,7 +70,20 @@ r.plot()            # → HWC BGR ndarray with boxes drawn
 r.save("out.jpg")   # write plotted image to disk
 r.show()            # display in a window (blocks until key press)
 r.to_json()         # → list[dict] with box/score/class per detection
+r.save_txt("predictions.txt")  # write YOLO-format labels to disk
 len(r)              # number of detections
+```
+
+`save_txt()` writes one detection per line:
+
+```text
+class_id x_center y_center width height
+```
+
+The box values are normalized from `0` to `1`, which matches the standard YOLO label format. Use `save_conf=True` to append the confidence score:
+
+```python
+r.save_txt("predictions.txt", save_conf=True)
 ```
 
 Stream predictions with `stream=True` to avoid buffering all frames in memory:

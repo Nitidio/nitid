@@ -5,6 +5,8 @@ Mirrors ultralytics.engine.results.Results / Boxes.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -51,6 +53,24 @@ class Results:
     def save(self, filename: str) -> None:
         """Save plotted image to disk."""
         cv2.imwrite(str(filename), self.plot())
+
+    def save_txt(self, path: str | Path, save_conf: bool = False) -> None:
+        """Save detections as YOLO-format text labels."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        lines: list[str] = []
+        if self.boxes is not None:
+            xywhn = self.boxes.xywhn
+            for i in range(len(self)):
+                cls = int(self.boxes.cls[i])
+                coords = [f"{float(x):.6f}" for x in xywhn[i].tolist()]
+                values = [str(cls), *coords]
+                if save_conf:
+                    values.append(f"{float(self.boxes.conf[i]):.6f}")
+                lines.append(" ".join(values))
+
+        path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
     def show(self) -> None:
         """Display image in a window (blocks until key press)."""
