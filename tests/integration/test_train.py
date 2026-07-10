@@ -162,6 +162,100 @@ def test_train_amp_disabled_on_cpu(tiny_checkpoint, tiny_dataset, tmp_path, capl
     assert len(metrics["history"]) == 1
 
 
+def test_train_resume_restores_history_and_continues_epochs(
+    tiny_checkpoint, tiny_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    run_dir = tmp_path / "resume_test"
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    first_metrics = model.train(
+        data=tiny_dataset,
+        epochs=1,
+        batch=2,
+        ema=True,
+        project=str(tmp_path),
+        name="resume_test",
+        verbose=False,
+    )
+
+    resumed_model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    resumed_metrics = resumed_model.train(
+        data=tiny_dataset,
+        epochs=2,
+        batch=2,
+        ema=True,
+        resume=True,
+        project=str(tmp_path),
+        name="resume_test",
+        verbose=False,
+    )
+
+    assert len(first_metrics["history"]) == 1
+    assert len(resumed_metrics["history"]) == 2
+    assert resumed_metrics["history"][0]["epoch"] == 1
+    assert resumed_metrics["history"][1]["epoch"] == 2
+    assert resumed_metrics["history"][0]["loss"] == first_metrics["history"][0]["loss"]
+
+    with (run_dir / "results.csv").open() as f:
+        rows = f.read().strip().splitlines()
+    assert len(rows) == 3  # header + 2 epoch rows
+
+    checkpoint = torch.load(run_dir / "last.pth", map_location="cpu", weights_only=False)
+    training_state = checkpoint["training_state"]
+    assert "optimizer" in training_state
+    assert "scheduler" in training_state
+    assert "history" in training_state
+    assert "raw_model" in training_state
+    assert "ema" in training_state
+    assert len(training_state["history"]) == 2
+
+    epoch_checkpoint = torch.load(run_dir / "epoch2.pth", map_location="cpu", weights_only=False)
+    best_checkpoint = torch.load(run_dir / "best.pth", map_location="cpu", weights_only=False)
+    assert epoch_checkpoint["training_state"] == {}
+    assert best_checkpoint["training_state"] == {}
+
+
+def test_train_resume_training_state_omits_raw_model_without_ema(
+    tiny_checkpoint, tiny_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    model.train(
+        data=tiny_dataset,
+        epochs=1,
+        batch=2,
+        ema=False,
+        project=str(tmp_path),
+        name="resume_no_ema",
+        verbose=False,
+    )
+
+    checkpoint = torch.load(
+        tmp_path / "resume_no_ema" / "last.pth", map_location="cpu", weights_only=False
+    )
+    training_state = checkpoint["training_state"]
+    assert "optimizer" in training_state
+    assert "raw_model" not in training_state
+
+
+def test_train_resume_requires_existing_checkpoint(tiny_checkpoint, tiny_dataset, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    with pytest.raises(FileNotFoundError, match="resume=True requested"):
+        model.train(
+            data=tiny_dataset,
+            epochs=2,
+            batch=2,
+            resume=True,
+            project=str(tmp_path),
+            name="missing_resume",
+            verbose=False,
+        )
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 def test_train_with_amp_cuda(tiny_checkpoint, tiny_dataset, tmp_path):
     """AMP training completes on CUDA without errors."""

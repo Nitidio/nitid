@@ -151,7 +151,38 @@ uv run dfine train \
 | `ema_decay`  | 0.9999       | EMA decay factor (ignored when `ema=False`) |
 | `project`    | `runs/train` | Output root directory |
 | `name`       | `exp`        | Run name |
-| `resume`     | `False`      | Reserved — not yet implemented |
+| `resume`     | `False`      | Restore the latest run state from `project/name/last.pth` |
+
+## Resume training
+
+nitid saves a `last.pth` checkpoint after every epoch. That checkpoint now
+contains the full training state needed to continue an interrupted run:
+
+- model weights used for training
+- optimizer state
+- scheduler state
+- AMP scaler state when AMP is enabled
+- EMA weights and decay when EMA is enabled
+- per-epoch metrics history
+
+To resume, keep the same `project` and `name` and set `resume=True`:
+
+```python
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=100,            # new total target epoch count
+    resume=True,
+    project="runs/train",
+    name="my_experiment",
+)
+```
+
+nitid restores state from `runs/train/my_experiment/last.pth` and continues at
+the next epoch. The saved run configuration for `data`, `imgsz`, `batch`,
+`lr0`, `lrf`, `optimizer`, `amp`, `ema`, and `ema_decay` is reused so the
+training session resumes consistently. If the checkpoint already reached or
+exceeded the requested `epochs`, training does not run again and the saved
+history is returned.
 
 ## AMP — mixed-precision training
 

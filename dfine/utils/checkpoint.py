@@ -36,7 +36,7 @@ def load_checkpoint(path: str | Path, device: str = "cpu"):
     if not path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {path}")
 
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    ckpt = load_checkpoint_state(path)
 
     if "config" not in ckpt:
         raise KeyError(
@@ -53,6 +53,15 @@ def load_checkpoint(path: str | Path, device: str = "cpu"):
     return model, cfg, names
 
 
+def load_checkpoint_state(path: str | Path) -> dict:
+    """Load and return the raw serialized checkpoint dict."""
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {path}")
+
+    return torch.load(path, map_location="cpu", weights_only=False)
+
+
 def save_checkpoint(
     path: str | Path,
     model,
@@ -60,6 +69,7 @@ def save_checkpoint(
     names: dict,
     epoch: int = 0,
     metrics: dict | None = None,
+    training_state: dict | None = None,
 ) -> None:
     """Save a dfine-wrap checkpoint with embedded config."""
     torch.save(
@@ -69,6 +79,7 @@ def save_checkpoint(
             "names": names,
             "epoch": epoch,
             "metrics": metrics or {},
+            "training_state": training_state or {},
         },
         str(path),
     )
