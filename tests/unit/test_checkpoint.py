@@ -26,8 +26,34 @@ def test_save_checkpoint_structure(tmp_path):
     assert "model" in ckpt
     assert "config" in ckpt
     assert "names" in ckpt
+    assert "training_state" in ckpt
     assert ckpt["epoch"] == 5
     assert ckpt["names"][0] == "person"
+
+
+def test_save_checkpoint_includes_optional_training_state(tmp_path):
+    import torch.nn as nn
+
+    class TinyModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.l = nn.Linear(2, 2)
+
+        def forward(self, x):
+            return self.l(x)
+
+    model = TinyModel()
+    path = tmp_path / "training_state.pth"
+    save_checkpoint(
+        path,
+        model,
+        cfg={"model": {"num_classes": 80}},
+        names={0: "person"},
+        training_state={"history": [{"epoch": 1, "loss": 1.23}]},
+    )
+
+    ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    assert ckpt["training_state"]["history"][0]["epoch"] == 1
 
 
 def test_load_checkpoint_missing_file(tmp_path):
