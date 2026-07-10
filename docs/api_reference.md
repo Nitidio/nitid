@@ -86,6 +86,7 @@ r.pandas()          # → pandas.DataFrame with xyxy/conf/class/name columns
 r.to_df()           # → same DataFrame as r.pandas()
 r.to_csv("out.csv") # write detections to CSV
 r.speed             # → {"preprocess": 4.2, "inference": 18.7, "postprocess": 2.1}
+r.save_json("predictions.json")  # write detections to disk
 len(r)              # number of detections
 ```
 
