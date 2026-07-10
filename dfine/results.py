@@ -5,6 +5,9 @@ Mirrors ultralytics.engine.results.Results / Boxes.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -51,6 +54,12 @@ class Results:
     def save(self, filename: str) -> None:
         """Save plotted image to disk."""
         cv2.imwrite(str(filename), self.plot())
+
+    def save_json(self, path: str | Path) -> None:
+        """Save detections as JSON."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self.to_json(), indent=2), encoding="utf-8")
 
     def show(self) -> None:
         """Display image in a window (blocks until key press)."""

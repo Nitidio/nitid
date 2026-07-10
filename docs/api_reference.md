@@ -70,6 +70,7 @@ r.plot()            # → HWC BGR ndarray with boxes drawn
 r.save("out.jpg")   # write plotted image to disk
 r.show()            # display in a window (blocks until key press)
 r.to_json()         # → list[dict] with box/score/class per detection
+r.save_json("predictions.json")  # write detections to disk
 len(r)              # number of detections
 ```
 
