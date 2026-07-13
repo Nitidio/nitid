@@ -4,6 +4,8 @@ Session-scoped fixtures for integration tests.
 tiny_checkpoint — small wrapped .pth built from random weights (no download).
 tiny_dataset    — minimal synthetic COCO dataset (blank images + JSON anns)
                   with a data YAML ready for train/val calls.
+tiny_yolo_dataset — minimal synthetic YOLO dataset using images/train + labels/train.
+tiny_yolo_splitfirst_dataset — minimal synthetic YOLO dataset using train/images + train/labels.
 """
 
 from pathlib import Path
@@ -97,6 +99,86 @@ def tiny_dataset(tmp_path_factory):
                 "path": str(root),
                 "train": "images/train",
                 "val": "images/val",
+                "nc": 2,
+                "names": {0: "person", 1: "car"},
+            },
+            f,
+        )
+
+    return str(data_yaml)
+
+
+def _write_yolo_split(root, split_rel: str, n_imgs: int, split_first: bool) -> None:
+    import numpy as np
+    from PIL import Image as _PILImage
+
+    if split_first:
+        img_dir = root / split_rel / "images"
+        label_dir = root / split_rel / "labels"
+    else:
+        img_dir = root / "images" / split_rel
+        label_dir = root / "labels" / split_rel
+
+    img_dir.mkdir(parents=True)
+    label_dir.mkdir(parents=True)
+
+    for i in range(1, n_imgs + 1):
+        fname = f"{i:06d}.jpg"
+        _PILImage.fromarray(np.random.randint(0, 256, (64, 64, 3), dtype=np.uint8)).save(
+            img_dir / fname
+        )
+
+        label_path = label_dir / f"{i:06d}.txt"
+        if i == 1:
+            label_path.write_text("0 0.5 0.5 0.3125 0.3125\n")
+        elif i == 2:
+            label_path.write_text("1 0.4 0.4 0.2 0.2\n")
+        elif i == 3:
+            label_path.write_text("")
+        # i == 4 intentionally has no label file
+
+
+@pytest.fixture(scope="session")
+def tiny_yolo_dataset(tmp_path_factory):
+    """Minimal YOLO txt dataset using the standard images/train + labels/train layout."""
+    import yaml
+
+    root = tmp_path_factory.mktemp("yolo_dataset")
+    _write_yolo_split(root, "train", 4, split_first=False)
+    _write_yolo_split(root, "val", 2, split_first=False)
+
+    data_yaml = root / "data.yml"
+    with open(data_yaml, "w") as f:
+        yaml.dump(
+            {
+                "path": str(root),
+                "train": "images/train",
+                "val": "images/val",
+                "nc": 2,
+                "names": {0: "person", 1: "car"},
+            },
+            f,
+        )
+
+    return str(data_yaml)
+
+
+@pytest.fixture(scope="session")
+def tiny_yolo_splitfirst_dataset(tmp_path_factory):
+    """Minimal YOLO txt dataset using the split-first train/images + train/labels layout."""
+    import yaml
+
+    root = tmp_path_factory.mktemp("yolo_splitfirst_dataset")
+    _write_yolo_split(root, "train", 4, split_first=True)
+    _write_yolo_split(root, "val", 2, split_first=True)
+
+    data_yaml = root / "data.yml"
+    with open(data_yaml, "w") as f:
+        yaml.dump(
+            {
+                "path": str(root),
+                "train": "train/images",
+                "val": "val/images",
                 "nc": 2,
                 "names": {0: "person", 1: "car"},
             },

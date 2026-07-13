@@ -10,7 +10,11 @@ uv sync --extra train
 
 ## Dataset format
 
-nitid expects **COCO JSON** annotations. Your dataset directory should look like:
+nitid accepts either **COCO JSON** annotations or **YOLO `.txt`** labels.
+
+### COCO JSON
+
+Your dataset directory can look like:
 
 ```
 my_dataset/
@@ -27,6 +31,36 @@ my_dataset/
 ```
 
 Annotation files follow the standard [COCO detection format](https://cocodataset.org/#format-data).
+
+### YOLO `.txt`
+
+Standard Ultralytics-style layout is also supported:
+
+```text
+my_dataset/
+  images/
+    train/
+    val/
+  labels/
+    train/
+    val/
+```
+
+Split-first layouts are supported too:
+
+```text
+my_dataset/
+  train/
+    images/
+    labels/
+  val/
+    images/
+    labels/
+```
+
+nitid detects the layout automatically and converts YOLO labels to cached COCO
+JSON internally for training and validation. The generated cache is stored in
+nitid's user cache directory rather than inside the dataset tree.
 
 ### Data YAML
 
@@ -53,6 +87,33 @@ Override with explicit keys if your layout differs:
 ```yaml
 train_ann: annotations/my_train.json
 val_ann:   annotations/my_val.json
+```
+
+For YOLO datasets, use the same YAML shape and point `train:` / `val:` at the
+image directories:
+
+```yaml
+path: /data/my_dataset
+train: images/train
+val:   images/val
+
+names:
+  0: person
+  1: car
+  2: bicycle
+```
+
+or, for split-first layouts:
+
+```yaml
+path: /data/my_dataset
+train: train/images
+val:   val/images
+
+names:
+  0: person
+  1: car
+  2: bicycle
 ```
 
 #### Category ID mapping
@@ -93,12 +154,38 @@ metrics = model.train(
     project="runs/train",
     name="my_experiment",
 )
-print(metrics)  # {"loss": <final_epoch_loss>}
+print(metrics)
+# {
+#   "loss": 1.234,
+#   "fitness": 0.567,
+#   "mAP50": 0.612,
+#   "mAP50-95": 0.401,
+#   "history": [
+#     {
+#       "epoch": 1,
+#       "loss": 2.345,
+#       "loss_bbox": 0.321,
+#       "loss_giou": 0.654,
+#       "loss_vfl": 0.712,
+#       "loss_fgl": 0.889,
+#       "precision": 0.51,
+#       "recall": 0.47,
+#       "mAP50": 0.28,
+#       "mAP50-95": 0.14,
+#       ...
+#     },
+#     ...
+#   ],
+# }
 ```
 
 Checkpoints are saved after every epoch to `runs/train/my_experiment/epoch{N}.pth`.
 Each checkpoint is a full nitid-wrapped `.pth` (config + names embedded) and can
 be loaded directly with `DFINE("epoch50.pth")`.
+
+The top-level values are the final epoch summary for backward compatibility.
+Use `metrics["history"]` to inspect per-epoch training and validation metrics,
+including `mAP50` and `mAP50-95`, from within Python.
 
 ### CLI
 
@@ -191,6 +278,9 @@ metrics = model.val(
     split="val",
     batch=16,
     conf=0.001,   # low threshold — include all detections in mAP computation
+    project="runs/val",
+    name="exp",
+    plots=True,
     verbose=True,
 )
 print(metrics)
@@ -199,6 +289,10 @@ print(metrics)
 #   "mAP50":    0.623,   # AP at IoU=0.50
 #   "AR1":      0.341,   # Average Recall at max 1 detection per image
 #   "AR100":    0.512,   # Average Recall at max 100 detections per image
+#   "precision": 0.701,
+#   "recall":    0.655,
+#   "f1":        0.677,
+#   "per_class": [...],
 # }
 ```
 
