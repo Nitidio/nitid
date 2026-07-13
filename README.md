@@ -72,6 +72,7 @@ model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
 )
+# returns final metrics plus per-epoch history in metrics["history"]
 ```
 
 ### Validation
@@ -79,7 +80,10 @@ model.train(
 ```python
 metrics = model.val(
     data="configs/datasets/my_dataset.yml",
+    project="runs/val",
+    name="exp",
 )
+# saves validation plots to runs/val/exp by default
 ```
 
 ### Export
@@ -110,7 +114,7 @@ For the full guide:
 
 ## Official Models
 
-> 💡 Passing `dfine_n`, `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` automatically downloads, wraps, and loads the corresponding official D-FINE checkpoint.
+> 💡 Passing `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` automatically downloads, wraps, and loads the corresponding official D-FINE checkpoint.
 
 | Model | COCO mAP<sup>50-95</sup> *(vs YOLO11)* | Speed<sup>T4 TRT10 FP16</sup> *(vs YOLO11)* | Params | FLOPs | Config | Official Checkpoint |
 |:------|---------------------------------------:|--------------------------------------------:|-------:|------:|:------:|:-------------------:|
@@ -178,6 +182,7 @@ EMA weights are used automatically when present, matching D-FINE's own inference
 | [docs/export.md](docs/export.md) | ONNX, TorchScript, TensorRT export |
 | [docs/api_reference.md](docs/api_reference.md) | Full `DFINE` class API reference |
 | [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 
 
 ## Development

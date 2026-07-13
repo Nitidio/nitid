@@ -106,10 +106,41 @@ from dfine import DFINE
 
 model = DFINE("dfine_l_wrapped.pth")
 results = model.predict("image.jpg", conf=0.5)
+results[0].save("out.jpg")
 ```
 
-Epoch checkpoints from `model.train(...)` are also saved as wrapped `.pth`
-files, so they can be loaded directly with `DFINE("epoch50.pth")`.
+The interface is intentionally close to D-FINE's own inference scripts, but with
+pre/post-processing handled for you. `results[0].boxes.xyxy` is in absolute pixel
+coordinates; no manual rescaling needed.
+
+You can also export detections directly into tabular data for analysis:
+
+```python
+result = results[0]
+df = result.pandas()       # pandas DataFrame
+same_df = result.to_df()   # alias for pandas()
+result.to_csv("out.csv")   # write detections to CSV
+```
+
+### 3. Fine-tune on your data
+
+Prepare a COCO-format dataset and a data YAML (see [fine_tuning.md](fine_tuning.md)):
+
+```python
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    batch=8,
+    lr0=1e-4,
+    optimizer="AdamW",
+)
+# final summary lives at the top level; per-epoch rows are in metrics["history"]
+```
+
+Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly with
+`DFINE("epoch50.pth")` — config and names travel with the weights.
+
+---
 
 ## Coming from Ultralytics
 
@@ -156,6 +187,13 @@ model.train(data="my_dataset.yml", epochs=50, batch=16)
 model.train(data="my_dataset.yml", epochs=50, amp=True, ema=True)
 
 metrics = model.val(data="my_dataset.yml")
+# {"mAP50-95": ..., "mAP50": ..., "AR1": ..., "AR100": ..., "precision": ..., "recall": ...}
+
+# Model info
+model.info()
+# [D-FINE] 31.4M params (31.4M trainable)  120.3 GFLOPs  98.6 MB
+
+# Export
 model.export(format="onnx")
 model.export(format="torchscript")
 model.export(format="tensorrt", half=True)
