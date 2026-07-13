@@ -53,7 +53,7 @@ uv sync --extra web
 
 ## Quick Start
 
-Create a model using any official D-FINE model name. nitid will automatically download, wrap, and load the corresponding checkpoint on first use.
+The canonical quickstart lives in [docs/quickstart.md](docs/quickstart.md); use the docs guide for the full walkthrough.
 
 ### Inference
 
@@ -61,11 +61,9 @@ Create a model using any official D-FINE model name. nitid will automatically do
 from dfine import DFINE
 
 model = DFINE("dfine_s")
-
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
-
 
 ### Training
 
@@ -76,9 +74,6 @@ model.train(
 )
 # returns final metrics plus per-epoch history in metrics["history"]
 ```
-
-See [docs/fine_tuning.md](docs/fine_tuning.md) for datasets, optimizers, AMP, EMA and all training options.
-
 
 ### Validation
 
@@ -91,7 +86,6 @@ metrics = model.val(
 # saves validation plots to runs/val/exp by default
 ```
 
-
 ### Export
 
 ```python
@@ -100,21 +94,22 @@ model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
 
-See [docs/export.md](docs/export.md) for TensorRT, FP16 and advanced export options.
 
 ### Command Line Interface
 
 ```bash
 uv run dfine predict model=dfine_s source=image.jpg
-
 uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
-
 uv run dfine val model=dfine_s data=my_dataset.yml
-
 uv run dfine export model=dfine_s format=onnx
 ```
 
-The API intentionally mirrors `ultralytics.YOLO`, making it easy to migrate existing projects.
+For the full guide:
+
+- Full quickstart: [docs/quickstart.md](docs/quickstart.md)
+- Fine-tuning and validation: [docs/fine_tuning.md](docs/fine_tuning.md)
+- Export: [docs/export.md](docs/export.md)
+- CLI: [docs/cli.md](docs/cli.md)
 
 
 ## Official Models
@@ -187,6 +182,7 @@ EMA weights are used automatically when present, matching D-FINE's own inference
 | [docs/export.md](docs/export.md) | ONNX, TorchScript, TensorRT export |
 | [docs/api_reference.md](docs/api_reference.md) | Full `DFINE` class API reference |
 | [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 
 
 ## Development

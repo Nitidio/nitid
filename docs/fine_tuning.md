@@ -10,7 +10,11 @@ uv sync --extra train
 
 ## Dataset format
 
-nitid expects **COCO JSON** annotations. Your dataset directory should look like:
+nitid accepts either **COCO JSON** annotations or **YOLO `.txt`** labels.
+
+### COCO JSON
+
+Your dataset directory can look like:
 
 ```
 my_dataset/
@@ -27,6 +31,36 @@ my_dataset/
 ```
 
 Annotation files follow the standard [COCO detection format](https://cocodataset.org/#format-data).
+
+### YOLO `.txt`
+
+Standard Ultralytics-style layout is also supported:
+
+```text
+my_dataset/
+  images/
+    train/
+    val/
+  labels/
+    train/
+    val/
+```
+
+Split-first layouts are supported too:
+
+```text
+my_dataset/
+  train/
+    images/
+    labels/
+  val/
+    images/
+    labels/
+```
+
+nitid detects the layout automatically and converts YOLO labels to cached COCO
+JSON internally for training and validation. The generated cache is stored in
+nitid's user cache directory rather than inside the dataset tree.
 
 ### Data YAML
 
@@ -53,6 +87,33 @@ Override with explicit keys if your layout differs:
 ```yaml
 train_ann: annotations/my_train.json
 val_ann:   annotations/my_val.json
+```
+
+For YOLO datasets, use the same YAML shape and point `train:` / `val:` at the
+image directories:
+
+```yaml
+path: /data/my_dataset
+train: images/train
+val:   images/val
+
+names:
+  0: person
+  1: car
+  2: bicycle
+```
+
+or, for split-first layouts:
+
+```yaml
+path: /data/my_dataset
+train: train/images
+val:   val/images
+
+names:
+  0: person
+  1: car
+  2: bicycle
 ```
 
 #### Category ID mapping
@@ -136,22 +197,29 @@ uv run dfine train \
     batch=16
 ```
 
-### Key parameters
+### Hyperparameter reference
 
-| Parameter    | Default      | Description |
-|--------------|--------------|-------------|
-| `epochs`     | 50           | Number of training epochs |
-| `batch`      | 16           | Batch size |
-| `imgsz`      | 640          | Input resolution (square) |
-| `lr0`        | 1e-4         | Initial learning rate |
-| `lrf`        | 0.01         | Final LR factor (linear decay: ends at `lr0 * lrf`) |
-| `optimizer`  | `"AdamW"`    | `"AdamW"` or `"SGD"` |
-| `amp`        | `False`      | Enable AMP mixed-precision (CUDA only) |
-| `ema`        | `False`      | Enable EMA weight averaging |
-| `ema_decay`  | 0.9999       | EMA decay factor (ignored when `ema=False`) |
-| `project`    | `runs/train` | Output root directory |
-| `name`       | `exp`        | Run name |
+The table below documents the full public `model.train(...)` surface as it
+exists today. Defaults match [`DFINE.train()`](../dfine/model.py).
+Use this table as the authoritative reference for train-time arguments.
+
+| Parameter | Type | Default | Valid range / values | Description |
+|-----------|------|---------|----------------------|-------------|
+| `data` | `str` | required | path to a dataset YAML | Ultralytics-style dataset config describing `path`, split locations, class count, and names. |
+| `epochs` | `int` | `50` | `>= 1` | Number of full passes over the training set. |
+| `imgsz` | `int` | `640` | `>= 1` | Square training resolution applied during preprocessing. |
+| `batch` | `int` | `16` | `>= 1` | Number of images per optimizer step. Larger values use more memory. |
+| `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
+| `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier for the linear scheduler. Training ends at `lr0 * lrf`. |
+| `optimizer` | `str` | `"AdamW"` | `"AdamW"`, `"SGD"` | Optimizer choice. `AdamW` is the default general-purpose option; `SGD` uses momentum `0.9`. |
 | `resume`     | `False`      | Restore the latest run state from `project/name/last.pth` |
+| `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
+| `ema` | `bool` | `False` | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. |
+| `ema_decay` | `float` | `0.9999` | usually `0 < x < 1` | EMA smoothing factor. Higher values adapt more slowly; `0.9999` is the standard default for longer runs. |
+| `device` | `str \| None` | `None` | e.g. `"cpu"`, `"cuda"`, `"cuda:0"` | Optional override for the training device. If omitted, training uses the device selected when the `DFINE` object was created. |
+| `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
+| `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
+| `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
 
 ## Resume training
 
@@ -183,6 +251,18 @@ the next epoch. The saved run configuration for `data`, `imgsz`, `batch`,
 training session resumes consistently. If the checkpoint already reached or
 exceeded the requested `epochs`, training does not run again and the saved
 history is returned.
+
+### Interaction notes
+
+- `amp=True` is only active on CUDA. On CPU, nitid logs a warning and
+  continues in FP32.
+- `ema_decay` only matters when `ema=True`.
+- `device` in `train()` overrides the device selected in `DFINE(...)` for that
+  training run only.
+- The current public API does **not** expose `weight_decay` or `grad_clip` as
+  train arguments. Internally, `AdamW` uses `weight_decay=1e-4`, SGD uses
+  `momentum=0.9`, and gradient clipping is fixed at `max_norm=0.1` in
+  [`DFINETrainer`](../dfine/trainer.py).
 
 ## AMP — mixed-precision training
 

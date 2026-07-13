@@ -33,8 +33,9 @@ results = model.predict(
     imgsz=640,        # inference size (square)
     classes=None,     # filter to these class indices, e.g. [0, 2]
     stream=False,     # return generator instead of list
+    vid_stride=1,     # process every Nth frame for video/webcam/stream sources
     augment=False,    # run test-time augmentation (horizontal flip)
-    save=False,       # save annotated images to project/name
+    save=False,       # save annotated outputs to project/name
     project="runs/detect",
     name="exp",
     iou=0.85,          # IoU threshold for TTA NMS
@@ -43,7 +44,10 @@ results = model.predict(
 
 Returns `list[Results]` (or a generator when `stream=True`).
 
-When `save=True`, nitid also writes annotated images to `project/name` while
+For video, webcam, and stream sources, `vid_stride=N` keeps every Nth frame in
+source order while skipping the intermediate frames.
+
+When `save=True`, nitid also writes annotated outputs to `project/name` while
 still returning the normal `Results` objects:
 
 ```python
@@ -52,7 +56,14 @@ results = model.predict("image.jpg", save=True)
 
 results = model.predict("image.jpg", save=True, project="runs/detect", name="street-test")
 # saved image: runs/detect/street-test/image.jpg
+
+results = model.predict("video.mp4", save=True, vid_stride=2)
+# saved video: runs/detect/exp/video.mp4
 ```
+
+For video-file sources, nitid saves an annotated `.mp4`. When `vid_stride=N`,
+the saved video contains the processed frames and its FPS is reduced by `N` so
+playback stays close to the original duration.
 
 #### `Results`
 
@@ -62,7 +73,8 @@ results = model.predict("image.jpg", save=True, project="runs/detect", name="str
 | `path`     | `str`           | Source path or descriptor |
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
-| `save_path` | `str \| None`  | Saved annotated image path when `save=True` |
+| `save_path` | `str \| None`  | Saved annotated image or video path when `save=True` |
+| `speed` | `dict[str, float]` | Timing in milliseconds for `preprocess`, `inference`, and `postprocess` |
 
 ```python
 r = results[0]
@@ -70,8 +82,16 @@ r.plot()            # → HWC BGR ndarray with boxes drawn
 r.save("out.jpg")   # write plotted image to disk
 r.show()            # display in a window (blocks until key press)
 r.to_json()         # → list[dict] with box/score/class per detection
+r.pandas()          # → pandas.DataFrame with xyxy/conf/class/name columns
+r.to_df()           # → same DataFrame as r.pandas()
+r.to_csv("out.csv") # write detections to CSV
+r.speed             # → {"preprocess": 4.2, "inference": 18.7, "postprocess": 2.1}
 len(r)              # number of detections
 ```
+
+The tabular export helpers use these columns:
+
+`x1`, `y1`, `x2`, `y2`, `confidence`, `class`, `name`
 
 Stream predictions with `stream=True` to avoid buffering all frames in memory:
 
