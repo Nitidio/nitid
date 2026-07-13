@@ -87,7 +87,20 @@ r.to_df()           # → same DataFrame as r.pandas()
 r.to_csv("out.csv") # write detections to CSV
 r.speed             # → {"preprocess": 4.2, "inference": 18.7, "postprocess": 2.1}
 r.save_json("predictions.json")  # write detections to disk
+r.save_txt("predictions.txt")  # write YOLO-format labels to disk
 len(r)              # number of detections
+```
+
+`save_txt()` writes one detection per line:
+
+```text
+class_id x_center y_center width height
+```
+
+The box values are normalized from `0` to `1`, which matches the standard YOLO label format. Use `save_conf=True` to append the confidence score:
+
+```python
+r.save_txt("predictions.txt", save_conf=True)
 ```
 
 The tabular export helpers use these columns:
