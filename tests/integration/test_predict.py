@@ -4,6 +4,7 @@ import itertools
 import types
 
 import numpy as np
+import pandas as pd
 import torch
 from PIL import Image
 
@@ -127,6 +128,34 @@ def test_predict_save_generates_name_for_numpy_frame(tiny_checkpoint, tmp_path):
     save_path = tmp_path / "runs" / "array-test" / "image_000001.jpg"
     assert save_path.exists()
     assert results[0].save_path == str(save_path)
+
+
+def test_predict_results_tabular_exports(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = model.predict(frame, conf=0.0)[0]
+
+    expected_columns = ["x1", "y1", "x2", "y2", "confidence", "class", "name"]
+
+    pandas_df = result.pandas()
+    alias_df = result.to_df()
+
+    assert isinstance(pandas_df, pd.DataFrame)
+    assert isinstance(alias_df, pd.DataFrame)
+    assert list(pandas_df.columns) == expected_columns
+    assert list(alias_df.columns) == expected_columns
+    assert len(pandas_df) == len(result)
+    assert pandas_df.equals(alias_df)
+
+    csv_path = tmp_path / "detections.csv"
+    result.to_csv(csv_path)
+
+    reloaded = pd.read_csv(csv_path)
+    assert csv_path.exists()
+    assert list(reloaded.columns) == expected_columns
+    assert len(reloaded) == len(result)
 
 
 # ---------------------------------------------------------------------------
