@@ -39,6 +39,141 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     assert (tmp_path / "test" / "f1_curve.png").exists()
 
 
+def test_train_callbacks_receive_lifecycle_events(tiny_checkpoint, tiny_dataset, tmp_path):
+    from dfine import DFINE
+
+    events = []
+
+    class Recorder:
+        def on_train_start(self, trainer):
+            events.append(("train_start", trainer.train_args["epochs"], len(trainer.history)))
+            assert trainer.save_dir == tmp_path / "callbacks"
+
+        def on_train_epoch_start(self, trainer):
+            assert trainer.current_row is None
+            assert trainer.current_val_metrics is None
+            assert trainer.metrics is None
+            events.append(("epoch_start", trainer.current_epoch))
+
+        def on_val_end(self, trainer):
+            assert trainer.current_val_metrics is not None
+            events.append(
+                ("val_end", trainer.current_epoch, "mAP50" in trainer.current_val_metrics)
+            )
+
+        def on_train_epoch_end(self, trainer):
+            assert trainer.current_row is not None
+            events.append(
+                ("epoch_end", trainer.current_row["epoch"], "fitness" in trainer.current_row)
+            )
+
+        def on_train_end(self, trainer):
+            assert trainer.metrics is not None
+            events.append(("train_end", len(trainer.metrics["history"]), trainer.metrics["loss"]))
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    metrics = model.train(
+        data=tiny_dataset,
+        epochs=1,
+        batch=2,
+        project=str(tmp_path),
+        name="callbacks",
+        verbose=False,
+        callbacks=Recorder(),
+    )
+
+    assert len(metrics["history"]) == 1
+    assert events[0] == ("train_start", 1, 0)
+    assert events[1] == ("epoch_start", 1)
+    assert events[2] == ("val_end", 1, True)
+    assert events[3] == ("epoch_end", 1, True)
+    assert events[4][0] == "train_end"
+    assert events[4][1] == 1
+    assert isinstance(events[4][2], float)
+
+
+def test_train_can_stop_early_from_callback(tiny_checkpoint, tiny_dataset, tmp_path):
+    from dfine import DFINE
+
+    class StopAfterFirstEpoch:
+        def on_train_epoch_end(self, trainer):
+            if trainer.current_epoch == 1:
+                trainer.stop = True
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    metrics = model.train(
+        data=tiny_dataset,
+        epochs=4,
+        batch=2,
+        project=str(tmp_path),
+        name="stop_early",
+        verbose=False,
+        callbacks=StopAfterFirstEpoch(),
+    )
+
+    assert len(metrics["history"]) == 1
+    assert metrics["history"][0]["epoch"] == 1
+
+
+def test_model_add_callback_registers_persistent_ultralytics_style_callback(
+    tiny_checkpoint, tiny_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    calls = []
+
+    def on_train_end(trainer):
+        calls.append(trainer.stop)
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    model.add_callback("on_train_end", on_train_end)
+    model.add_callback("on_train_end", on_train_end)
+    metrics = model.train(
+        data=tiny_dataset,
+        epochs=1,
+        batch=2,
+        project=str(tmp_path),
+        name="persistent_callbacks",
+        verbose=False,
+    )
+
+    assert len(metrics["history"]) == 1
+    assert calls == [False]
+
+
+def test_train_args_match_serialized_training_state(tiny_checkpoint, tiny_dataset, tmp_path):
+    from dfine import DFINE
+
+    observed_train_args = {}
+
+    class CaptureTrainArgs:
+        def on_train_start(self, trainer):
+            observed_train_args.update(trainer.train_args)
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    model.train(
+        data=tiny_dataset,
+        epochs=1,
+        batch=2,
+        resume=False,
+        project=str(tmp_path),
+        name="train_args_consistency",
+        verbose=False,
+        callbacks=CaptureTrainArgs(),
+    )
+
+    checkpoint = torch.load(
+        tmp_path / "train_args_consistency" / "last.pth",
+        map_location="cpu",
+        weights_only=False,
+    )
+    serialized_train_args = checkpoint["training_state"]["train_args"]
+
+    assert observed_train_args == serialized_train_args
+    assert serialized_train_args["resume"] is False
+    assert serialized_train_args["verbose"] is False
+
+
 def test_val_runs(tiny_checkpoint, tiny_dataset):
     from dfine import DFINE
 
