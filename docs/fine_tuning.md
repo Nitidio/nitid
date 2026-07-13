@@ -145,9 +145,9 @@ from dfine import DFINE
 
 model = DFINE("dfine_l")
 
-class PrintMetricsCallback:
-    def on_train_epoch_end(self, trainer, state):
-        row = state["row"]
+def print_epoch_end(trainer):
+    row = trainer.current_row
+    if row is not None:
         print(
             f"epoch={row['epoch']} loss={row['loss']:.4f} "
             f"mAP50-95={row['mAP50-95']:.4f}"
@@ -162,7 +162,7 @@ metrics = model.train(
     optimizer="AdamW",
     project="runs/train",
     name="my_experiment",
-    callbacks=PrintMetricsCallback(),
+    callbacks={"on_train_epoch_end": print_epoch_end},
 )
 print(metrics)
 # {
@@ -202,14 +202,43 @@ including `mAP50` and `mAP50-95`, from within Python.
 Training accepts an optional `callbacks=` argument for extending trainer
 behavior without patching the core loop. Pass either:
 
-- an object with one or more lifecycle-hook methods
-- a mapping from hook name to callable or list of callables
+- an object with one or more lifecycle-hook methods, each taking `trainer`
+- a mapping from hook name to callable or list of callables, each taking `trainer`
 
-Each callback receives `(trainer, state)`, where `trainer` is the active
-[`DFINETrainer`](../dfine/trainer.py) instance and `state` is a dictionary
-with the current run context. Common keys include `epoch`, `epochs`,
-`history`, `row`, `val_metrics`, `metrics`, `optimizer`, `scheduler`,
-`save_dir`, and the original train arguments.
+You can also register persistent callbacks on the model in an Ultralytics-like
+way:
+
+```python
+def stop_after_first_epoch(trainer):
+    if trainer.current_epoch == 1:
+        trainer.stop = True
+
+model.add_callback("on_train_epoch_end", stop_after_first_epoch)
+```
+
+Callbacks receive only the active
+[`DFINETrainer`](../dfine/trainer.py) instance, for consistency with the
+Ultralytics style. The most useful callback attributes are:
+
+| Attribute | Type | Meaning | Available |
+|-----------|------|---------|-----------|
+| `trainer.stop` | `bool` | Set to `True` to request a clean stop | all hooks |
+| `trainer.current_epoch` | `int` | 1-based epoch number currently in progress | epoch / val / end hooks |
+| `trainer.current_val_metrics` | `dict \| None` | Latest validation metrics | `on_val_end`, `on_train_epoch_end`, `on_train_end` |
+| `trainer.current_row` | `dict \| None` | Latest finalized per-epoch metrics row | `on_train_epoch_end`, `on_train_end` |
+| `trainer.current_fitness` | `float` | Latest epoch fitness | `on_train_epoch_end`, `on_train_end` |
+| `trainer.metrics` | `dict \| None` | Final return value from training | `on_train_end` |
+| `trainer.history` | `list[dict]` | Live per-epoch history accumulated so far | all hooks |
+| `trainer.save_dir` | `Path \| None` | Run artifact directory | all hooks |
+| `trainer.results_path` | `Path \| None` | CSV metrics file path | all hooks |
+| `trainer.optimizer` / `trainer.scheduler` / `trainer.criterion` / `trainer.scaler` / `trainer.ema_model` | runtime objects | Active training components | all hooks after setup |
+| `trainer.dataloader` | dataloader | Active train dataloader | all hooks after setup |
+| `trainer.train_args` | `dict[str, object]` | Resolved train arguments for this run | all hooks |
+| `trainer.start_epoch` | `int` | Resume start epoch | all hooks |
+
+These are live objects, not deep-copied snapshots. Reading them is safe and
+expected. Mutating `history`, `optimizer`, `scheduler`, or similar attributes
+changes the active training run.
 
 Supported hooks:
 
@@ -222,8 +251,10 @@ Supported hooks:
 Example using a mapping:
 
 ```python
-def log_to_tracker(trainer, state):
-    row = state["row"]
+def log_to_tracker(trainer):
+    row = trainer.current_row
+    if row is None:
+        return
     tracker.log(
         {
             "epoch": row["epoch"],
@@ -239,6 +270,9 @@ model.train(
     callbacks={"on_train_epoch_end": log_to_tracker},
 )
 ```
+
+To stop training from a callback, set `trainer.stop = True`. The trainer checks
+this flag at safe lifecycle boundaries and finalizes the run cleanly.
 
 ### CLI
 

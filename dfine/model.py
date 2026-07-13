@@ -5,7 +5,7 @@ DFINE — public entry point. Mirrors the ultralytics.YOLO interface.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Generator, Union
+from typing import Any, Callable, Generator, Union
 
 import numpy as np
 import torch.nn as nn
@@ -13,6 +13,7 @@ import torch.nn as nn
 from dfine.utils.device import resolve_device
 
 Source = Union[str, Path, int, np.ndarray, list]
+ModelCallback = Callable[..., object]
 
 
 class DFINE:
@@ -43,6 +44,7 @@ class DFINE:
         self._cfg: dict[str, Any]
         self._names: dict[int, str]
         self._path: str
+        self._callbacks: dict[str, list[ModelCallback]] = {}
         self._load(model)
 
     # ── Inference ──────────────────────────────────────────────────────────
@@ -115,6 +117,7 @@ class DFINE:
             cfg=self._cfg,
             device=device or self._device_str,
             names=self._names,
+            callbacks=self._callbacks,
         )
         return trainer.train(
             data=data,
@@ -133,6 +136,44 @@ class DFINE:
             verbose=verbose,
             callbacks=callbacks,
         )
+
+    def add_callback(self, event: str, callback: ModelCallback) -> None:
+        """Register a persistent callback on the model, similar to Ultralytics."""
+        from dfine.trainer import DFINETrainer
+
+        if event not in DFINETrainer.CALLBACK_EVENTS:
+            supported = ", ".join(DFINETrainer.CALLBACK_EVENTS)
+            raise ValueError(f"Unknown callback event '{event}'. Supported events: {supported}")
+        if not callable(callback):
+            raise TypeError(
+                f"Callback for '{event}' must be callable, got {type(callback).__name__}"
+            )
+        self._callbacks.setdefault(event, [])
+        callback_identity = self._callback_identity(callback)
+        if not any(
+            self._callback_identity(existing) == callback_identity
+            for existing in self._callbacks[event]
+        ):
+            self._callbacks[event].append(callback)
+
+    def clear_callbacks(self, event: str | None = None) -> None:
+        """Remove persistent callbacks registered via add_callback()."""
+        from dfine.trainer import DFINETrainer
+
+        if event is None:
+            self._callbacks.clear()
+            return
+        if event not in DFINETrainer.CALLBACK_EVENTS:
+            supported = ", ".join(DFINETrainer.CALLBACK_EVENTS)
+            raise ValueError(f"Unknown callback event '{event}'. Supported events: {supported}")
+        self._callbacks.pop(event, None)
+
+    def _callback_identity(self, callback: ModelCallback) -> object:
+        bound_self = getattr(callback, "__self__", None)
+        bound_func = getattr(callback, "__func__", None)
+        if bound_self is not None and bound_func is not None:
+            return (id(bound_self), id(bound_func))
+        return id(callback)
 
     # ── Validation ──────────────────────────────────────────────────────────
 
