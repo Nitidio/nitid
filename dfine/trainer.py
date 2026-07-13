@@ -16,13 +16,21 @@ from pathlib import Path
 import torch
 from tqdm.auto import tqdm
 
-from dfine.utils.checkpoint import save_checkpoint
+from dfine.utils.checkpoint import load_checkpoint_state, save_checkpoint
 from dfine.utils.logging import LOGGER
 
 
 def _as_float(value: object, default: float = 0.0) -> float:
     if isinstance(value, (int, float)):
         return float(value)
+    return default
+
+
+def _as_int(value: object, default: int = 0) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
     return default
 
 
@@ -127,6 +135,23 @@ class DFINETrainer:
         save_dir = Path(project) / name
         save_dir.mkdir(parents=True, exist_ok=True)
         results_path = save_dir / "results.csv"
+        resume_state: dict[str, object] | None = None
+        if resume:
+            resume_state = self._load_resume_state(save_dir)
+            data, imgsz, batch, lr0, lrf, optimizer, amp, ema, ema_decay = (
+                self._resolve_resume_args(
+                    resume_state=resume_state,
+                    data=data,
+                    imgsz=imgsz,
+                    batch=batch,
+                    lr0=lr0,
+                    lrf=lrf,
+                    optimizer=optimizer,
+                    amp=amp,
+                    ema=ema,
+                    ema_decay=ema_decay,
+                )
+            )
 
         dataloader = self._build_dataloader(data, imgsz, batch)
         opt = self._build_optimizer(optimizer, lr0)
@@ -148,8 +173,28 @@ class DFINETrainer:
         weight_dict = criterion.weight_dict
         history: list[dict[str, float | int]] = []
         best_fitness = float("-inf")
+        start_epoch = 0
 
-        for epoch in range(epochs):
+        if resume_state is not None:
+            history, best_fitness, start_epoch = self._restore_training_state(
+                resume_state=resume_state,
+                optimizer=opt,
+                scheduler=scheduler,
+                scaler=scaler,
+                ema_model=ema_model,
+                epochs=epochs,
+            )
+            self._ensure_results_file(results_path, history)
+
+        if start_epoch >= epochs:
+            LOGGER.warning(
+                "resume=True found checkpoint at epoch %s, which already meets/exceeds epochs=%s",
+                start_epoch,
+                epochs,
+            )
+            return self._finalize_metrics(history)
+
+        for epoch in range(start_epoch, epochs):
             epoch_start = time.perf_counter()
             epoch_loss = 0.0
             batch_count = 0
@@ -256,6 +301,29 @@ class DFINETrainer:
 
             # Save EMA weights when available — they are what gets loaded by DFINE(path)
             save_model = ema_model.ema if ema_model is not None else self.model
+            fitness = float(row.get("fitness", 0.0))
+            training_state = self._serialize_training_state(
+                optimizer=opt,
+                scheduler=scheduler,
+                scaler=scaler,
+                ema_model=ema_model,
+                history=history,
+                best_fitness=max(best_fitness, fitness),
+                train_args={
+                    "data": data,
+                    "epochs": epochs,
+                    "imgsz": imgsz,
+                    "batch": batch,
+                    "lr0": lr0,
+                    "lrf": lrf,
+                    "optimizer": optimizer,
+                    "amp": amp,
+                    "ema": ema,
+                    "ema_decay": ema_decay,
+                    "project": project,
+                    "name": name,
+                },
+            )
             save_checkpoint(
                 save_dir / f"epoch{epoch + 1}.pth",
                 save_model,
@@ -271,9 +339,9 @@ class DFINETrainer:
                 self.names,
                 epoch=epoch + 1,
                 metrics=row,
+                training_state=training_state,
             )
 
-            fitness = float(row.get("fitness", 0.0))
             if fitness >= best_fitness:
                 best_fitness = fitness
                 save_checkpoint(
@@ -288,17 +356,7 @@ class DFINETrainer:
             if verbose:
                 LOGGER.info(self._format_epoch_row(epoch + 1, epochs, row))
 
-        if history:
-            final_row = history[-1]
-            return {
-                "loss": float(final_row["loss"]),
-                "fitness": float(final_row.get("fitness", 0.0)),
-                "mAP50": float(final_row.get("mAP50", 0.0)),
-                "mAP50-95": float(final_row.get("mAP50-95", 0.0)),
-                "history": history,
-            }
-
-        return {"loss": 0.0, "fitness": 0.0, "mAP50": 0.0, "mAP50-95": 0.0, "history": []}
+        return self._finalize_metrics(history)
 
     def _build_dataloader(self, data: str, imgsz: int, batch: int):
         from dfine.utils.data import build_coco_dataloader
@@ -327,6 +385,189 @@ class DFINETrainer:
 
     def _build_ema(self, decay: float) -> ModelEMA:
         return ModelEMA(self.model, decay=decay)
+
+    def _load_resume_state(self, save_dir: Path) -> dict[str, object]:
+        checkpoint_path = save_dir / "last.pth"
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(
+                f"resume=True requested but no checkpoint was found at '{checkpoint_path}'"
+            )
+        return load_checkpoint_state(checkpoint_path)
+
+    def _resolve_resume_args(
+        self,
+        resume_state: dict[str, object],
+        data: str,
+        imgsz: int,
+        batch: int,
+        lr0: float,
+        lrf: float,
+        optimizer: str,
+        amp: bool,
+        ema: bool,
+        ema_decay: float,
+    ) -> tuple[str, int, int, float, float, str, bool, bool, float]:
+        training_state = resume_state.get("training_state")
+        if not isinstance(training_state, dict):
+            return data, imgsz, batch, lr0, lrf, optimizer, amp, ema, ema_decay
+
+        train_args = training_state.get("train_args")
+        if not isinstance(train_args, dict):
+            return data, imgsz, batch, lr0, lrf, optimizer, amp, ema, ema_decay
+
+        current_args: dict[str, object] = {
+            "data": data,
+            "imgsz": imgsz,
+            "batch": batch,
+            "lr0": lr0,
+            "lrf": lrf,
+            "optimizer": optimizer,
+            "amp": amp,
+            "ema": ema,
+            "ema_decay": ema_decay,
+        }
+        resolved = current_args.copy()
+
+        for key in current_args:
+            if key in train_args and train_args[key] != current_args[key]:
+                LOGGER.warning(
+                    "resume=True ignored %s=%r and restored saved value %r",
+                    key,
+                    current_args[key],
+                    train_args[key],
+                )
+                resolved[key] = train_args[key]
+
+        return (
+            str(resolved["data"]),
+            _as_int(resolved["imgsz"]),
+            _as_int(resolved["batch"]),
+            _as_float(resolved["lr0"]),
+            _as_float(resolved["lrf"]),
+            str(resolved["optimizer"]),
+            bool(resolved["amp"]),
+            bool(resolved["ema"]),
+            _as_float(resolved["ema_decay"]),
+        )
+
+    def _restore_training_state(
+        self,
+        resume_state: dict[str, object],
+        optimizer,
+        scheduler,
+        scaler,
+        ema_model: ModelEMA | None,
+        epochs: int,
+    ) -> tuple[list[dict[str, float | int]], float, int]:
+        training_state = resume_state.get("training_state")
+        if not isinstance(training_state, dict):
+            self.model.load_state_dict(resume_state["model"])
+            self.model.to(self.device)
+            return [], float("-inf"), _as_int(resume_state.get("epoch", 0))
+
+        raw_model_state = training_state.get("raw_model")
+        if raw_model_state is None:
+            raw_model_state = resume_state["model"]
+        self.model.load_state_dict(raw_model_state)
+        self.model.to(self.device)
+
+        optimizer_state = training_state.get("optimizer")
+        if isinstance(optimizer_state, dict):
+            optimizer.load_state_dict(optimizer_state)
+
+        scheduler_state = training_state.get("scheduler")
+        if isinstance(scheduler_state, dict):
+            scheduler.load_state_dict(scheduler_state)
+            if hasattr(scheduler, "total_iters"):
+                scheduler.total_iters = epochs
+
+        scaler_state = training_state.get("scaler")
+        if scaler is not None and isinstance(scaler_state, dict):
+            scaler.load_state_dict(scaler_state)
+
+        ema_state = training_state.get("ema")
+        if ema_model is not None and isinstance(ema_state, dict):
+            ema_weights = ema_state.get("state_dict")
+            if ema_weights is not None:
+                ema_model.ema.load_state_dict(ema_weights)
+            decay = ema_state.get("decay")
+            if isinstance(decay, (int, float)):
+                ema_model.decay = float(decay)
+
+        history_raw = training_state.get("history", [])
+        history = self._coerce_history(history_raw)
+        best_fitness = _as_float(training_state.get("best_fitness", float("-inf")), float("-inf"))
+        start_epoch = _as_int(resume_state.get("epoch", 0))
+        return history, best_fitness, start_epoch
+
+    def _serialize_training_state(
+        self,
+        optimizer,
+        scheduler,
+        scaler,
+        ema_model: ModelEMA | None,
+        history: list[dict[str, float | int]],
+        best_fitness: float,
+        train_args: dict[str, object],
+    ) -> dict[str, object]:
+        training_state: dict[str, object] = {
+            "optimizer": optimizer.state_dict(),
+            "scheduler": scheduler.state_dict(),
+            "history": history,
+            "best_fitness": best_fitness,
+            "train_args": train_args,
+        }
+        if scaler is not None:
+            training_state["scaler"] = scaler.state_dict()
+        if ema_model is not None:
+            training_state["raw_model"] = self.model.state_dict()
+            training_state["ema"] = {
+                "state_dict": ema_model.ema.state_dict(),
+                "decay": ema_model.decay,
+            }
+        return training_state
+
+    def _coerce_history(self, history_raw: object) -> list[dict[str, float | int]]:
+        history: list[dict[str, float | int]] = []
+        if not isinstance(history_raw, list):
+            return history
+
+        for row in history_raw:
+            if not isinstance(row, dict):
+                continue
+            normalized: dict[str, float | int] = {}
+            for key, value in row.items():
+                if isinstance(value, bool):
+                    normalized[str(key)] = int(value)
+                elif isinstance(value, int):
+                    normalized[str(key)] = value
+                elif isinstance(value, float):
+                    normalized[str(key)] = value
+            if normalized:
+                history.append(normalized)
+        return history
+
+    def _ensure_results_file(self, path: Path, history: list[dict[str, float | int]]) -> None:
+        if path.exists() or not history:
+            return
+
+        with path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=self._results_fieldnames(history[0]))
+            writer.writeheader()
+            writer.writerows(history)
+
+    def _finalize_metrics(self, history: list[dict[str, float | int]]) -> dict:
+        if history:
+            final_row = history[-1]
+            return {
+                "loss": float(final_row["loss"]),
+                "fitness": float(final_row.get("fitness", 0.0)),
+                "mAP50": float(final_row.get("mAP50", 0.0)),
+                "mAP50-95": float(final_row.get("mAP50-95", 0.0)),
+                "history": history,
+            }
+
+        return {"loss": 0.0, "fitness": 0.0, "mAP50": 0.0, "mAP50-95": 0.0, "history": []}
 
     def _validate_epoch(
         self,
@@ -364,11 +605,34 @@ class DFINETrainer:
 
     def _write_results_row(self, path: Path, row: dict[str, float | int]) -> None:
         exists = path.exists()
+        fieldnames = self._results_fieldnames(row)
         with path.open("a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             if not exists:
                 writer.writeheader()
             writer.writerow(row)
+
+    def _results_fieldnames(self, row: dict[str, float | int]) -> list[str]:
+        priority = [
+            "epoch",
+            "time",
+            "s_per_it",
+            "lr",
+            "imgsz",
+            "instances",
+            "memory_mb",
+            "loss",
+            *self._display_loss_keys,
+            "precision",
+            "recall",
+            "f1",
+            "mAP50",
+            "mAP50-95",
+            "fitness",
+        ]
+        ordered = [key for key in priority if key in row]
+        extras = sorted(key for key in row if key not in ordered)
+        return ordered + extras
 
     def _plot_results(self, save_dir: Path, history: list[dict[str, float | int]]) -> None:
         plt = __import__("importlib").import_module("matplotlib.pyplot")

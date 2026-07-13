@@ -136,7 +136,7 @@ metrics = model.train(
     lr0=1e-4,
     lrf=0.01,
     optimizer="AdamW",   # or "SGD"
-    resume=False,        # reserved for future checkpoint resuming
+    resume=False,        # resume from project/name/last.pth
     amp=False,           # FP16 mixed precision (CUDA only)
     ema=False,           # EMA weight averaging
     ema_decay=0.9999,
@@ -156,6 +156,9 @@ metrics = model.train(
 
 The top-level values summarize the final epoch. `metrics["history"]` contains
 one row per epoch with training loss terms and validation metrics.
+
+When `resume=True`, nitid restores the latest checkpoint from `project/name/last.pth`,
+including optimizer, scheduler, EMA, AMP scaler, and metrics history.
 
 ---
 

@@ -212,7 +212,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
 | `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier for the linear scheduler. Training ends at `lr0 * lrf`. |
 | `optimizer` | `str` | `"AdamW"` | `"AdamW"`, `"SGD"` | Optimizer choice. `AdamW` is the default general-purpose option; `SGD` uses momentum `0.9`. |
-| `resume` | `bool` | `False` | `True`, `False` | Reserved for future checkpoint resume support. It is accepted for API compatibility but is not implemented yet. |
+| `resume`     | `False`      | Restore the latest run state from `project/name/last.pth` |
 | `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
 | `ema` | `bool` | `False` | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. |
 | `ema_decay` | `float` | `0.9999` | usually `0 < x < 1` | EMA smoothing factor. Higher values adapt more slowly; `0.9999` is the standard default for longer runs. |
@@ -220,6 +220,37 @@ Use this table as the authoritative reference for train-time arguments.
 | `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
 | `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
+
+## Resume training
+
+nitid saves a `last.pth` checkpoint after every epoch. That checkpoint now
+contains the full training state needed to continue an interrupted run:
+
+- model weights used for training
+- optimizer state
+- scheduler state
+- AMP scaler state when AMP is enabled
+- EMA weights and decay when EMA is enabled
+- per-epoch metrics history
+
+To resume, keep the same `project` and `name` and set `resume=True`:
+
+```python
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=100,            # new total target epoch count
+    resume=True,
+    project="runs/train",
+    name="my_experiment",
+)
+```
+
+nitid restores state from `runs/train/my_experiment/last.pth` and continues at
+the next epoch. The saved run configuration for `data`, `imgsz`, `batch`,
+`lr0`, `lrf`, `optimizer`, `amp`, `ema`, and `ema_decay` is reused so the
+training session resumes consistently. If the checkpoint already reached or
+exceeded the requested `epochs`, training does not run again and the saved
+history is returned.
 
 ### Interaction notes
 
