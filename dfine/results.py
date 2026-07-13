@@ -5,10 +5,16 @@ Mirrors ultralytics.engine.results.Results / Boxes.
 
 from __future__ import annotations
 
+import json
+from os import PathLike
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class Results:
@@ -29,12 +35,14 @@ class Results:
         names: dict[int, str],
         boxes=None,
         save_path: str | None = None,
+        speed: dict[str, float] | None = None,
     ) -> None:
         self.orig_img = orig_img
         self.path = path
         self.names = names
         self.boxes = boxes
         self.save_path = save_path
+        self.speed = speed or {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
 
     def plot(
         self,
@@ -53,6 +61,12 @@ class Results:
     def save(self, filename: str) -> None:
         """Save plotted image to disk."""
         cv2.imwrite(str(filename), self.plot())
+
+    def save_json(self, path: str | Path) -> None:
+        """Save detections as JSON."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self.to_json(), indent=2), encoding="utf-8")
 
     def save_txt(self, path: str | Path, save_conf: bool = False) -> None:
         """Save detections as YOLO-format text labels."""
@@ -94,6 +108,43 @@ class Results:
                 }
             )
         return out
+
+    def pandas(self) -> pd.DataFrame:
+        """Return detections as a pandas DataFrame."""
+        return self.to_df()
+
+    def to_df(self) -> pd.DataFrame:
+        """Return detections as a pandas DataFrame."""
+        import pandas as pd
+
+        columns = ["x1", "y1", "x2", "y2", "confidence", "class", "name"]
+        return pd.DataFrame(self._tabular_rows(), columns=columns)
+
+    def to_csv(self, filename: str | PathLike[str], index: bool = False) -> None:
+        """Save detections as a CSV file."""
+        self.to_df().to_csv(filename, index=index)
+
+    def _tabular_rows(self) -> list[dict[str, object]]:
+        """Return detections in a tabular row format for DataFrame/CSV export."""
+        rows: list[dict[str, object]] = []
+        if self.boxes is None:
+            return rows
+
+        for i in range(len(self)):
+            xyxy = self.boxes.xyxy[i].tolist()
+            cls_id = int(self.boxes.cls[i])
+            rows.append(
+                {
+                    "x1": xyxy[0],
+                    "y1": xyxy[1],
+                    "x2": xyxy[2],
+                    "y2": xyxy[3],
+                    "confidence": round(float(self.boxes.conf[i]), 4),
+                    "class": cls_id,
+                    "name": self.names.get(cls_id, "unknown"),
+                }
+            )
+        return rows
 
     def __len__(self) -> int:
         return 0 if self.boxes is None else len(self.boxes)

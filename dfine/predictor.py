@@ -5,9 +5,11 @@ Called internally by DFINE.predict(). Not part of the public API.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Generator
 
+import cv2
 import torch
 
 from dfine.results import Boxes, Results
@@ -45,6 +47,7 @@ class DFINEPredictor:
         imgsz: int,
         classes: list[int] | None,
         stream: bool,
+        vid_stride: int,
         augment: bool,
         save: bool,
         project: str,
@@ -53,7 +56,7 @@ class DFINEPredictor:
         iou: float = 0.85,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
-        loader = LoadSource(source, imgsz=imgsz, device=self.device)
+        loader = LoadSource(source, imgsz=imgsz, device=self.device, vid_stride=vid_stride)
         save_dir = Path(project) / name if save else None
         if save_dir is not None:
             save_dir.mkdir(parents=True, exist_ok=True)
@@ -71,45 +74,89 @@ class DFINEPredictor:
     ) -> Generator:
         """Yield one Results object per frame/image."""
         seen: dict[str, int] = {}
-        for index, (tensor, orig_img, path) in enumerate(loader, start=1):
-            h, w = orig_img.shape[:2]
-            orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
-            with torch.no_grad():
-                raw = self.model(tensor)
-                detections = self._postprocessor(raw, orig_size)
-                merged_det = detections[0]
-                merged_det["num_orig"] = len(merged_det["boxes"])
+        video_writer: cv2.VideoWriter | None = None
+        video_output_path: Path | None = None
+        source_iter = iter(loader)
+        index = 0
+        try:
+            while True:
+                preprocess_start = time.perf_counter()
+                try:
+                    tensor, orig_img, path = next(source_iter)
+                except StopIteration:
+                    break
+                preprocess_ms = (time.perf_counter() - preprocess_start) * 1000
+                index += 1
 
-                if augment:
-                    # Run prediction on horizontally flipped image
-                    tensor_flipped = torch.flip(tensor, dims=[3])
-                    raw_flipped = self.model(tensor_flipped)
-                    detections_flipped = self._postprocessor(raw_flipped, orig_size)
-                    det_flipped = detections_flipped[0]
+                h, w = orig_img.shape[:2]
+                orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
+                inference_start = time.perf_counter()
+                with torch.no_grad():
+                    raw = self.model(tensor)
+                    detections = self._postprocessor(raw, orig_size)
+                    merged_det = detections[0]
+                    merged_det["num_orig"] = len(merged_det["boxes"])
 
-                    # Flip back xyxy pixel-space coordinates: x1_new = w - x2_old, x2_new = w - x1_old
-                    boxes_flipped_back = det_flipped["boxes"].clone()
-                    if len(boxes_flipped_back) > 0:
-                        x1 = w - boxes_flipped_back[:, 2]
-                        x2 = w - boxes_flipped_back[:, 0]
-                        boxes_flipped_back[:, 0] = x1
-                        boxes_flipped_back[:, 2] = x2
+                    if augment:
+                        # Run prediction on horizontally flipped image
+                        tensor_flipped = torch.flip(tensor, dims=[3])
+                        raw_flipped = self.model(tensor_flipped)
+                        detections_flipped = self._postprocessor(raw_flipped, orig_size)
+                        det_flipped = detections_flipped[0]
 
-                    # Combine detections
-                    merged_det = {
-                        "labels": torch.cat([merged_det["labels"], det_flipped["labels"]], dim=0),
-                        "boxes": torch.cat([merged_det["boxes"], boxes_flipped_back], dim=0),
-                        "scores": torch.cat([merged_det["scores"], det_flipped["scores"]], dim=0),
-                        "num_orig": merged_det["num_orig"],
-                    }
+                        # Flip the xyxy pixel-space coordinates back to the original view.
+                        boxes_flipped_back = det_flipped["boxes"].clone()
+                        if len(boxes_flipped_back) > 0:
+                            x1 = w - boxes_flipped_back[:, 2]
+                            x2 = w - boxes_flipped_back[:, 0]
+                            boxes_flipped_back[:, 0] = x1
+                            boxes_flipped_back[:, 2] = x2
 
-            result = self._postprocess(
-                merged_det, orig_img, path, conf, classes, augment=augment, iou=iou
-            )
-            if save_dir is not None:
-                save_path = self._save_result(result, save_dir, index, seen)
-                result.save_path = str(save_path)
-            yield result
+                        # Combine detections
+                        merged_det = {
+                            "labels": torch.cat(
+                                [merged_det["labels"], det_flipped["labels"]], dim=0
+                            ),
+                            "boxes": torch.cat([merged_det["boxes"], boxes_flipped_back], dim=0),
+                            "scores": torch.cat(
+                                [merged_det["scores"], det_flipped["scores"]], dim=0
+                            ),
+                            "num_orig": merged_det["num_orig"],
+                        }
+                inference_ms = (time.perf_counter() - inference_start) * 1000
+
+                postprocess_start = time.perf_counter()
+                result = self._postprocess(
+                    merged_det, orig_img, path, conf, classes, augment=augment, iou=iou
+                )
+                result.speed = {
+                    "preprocess": preprocess_ms,
+                    "inference": inference_ms,
+                    "postprocess": (time.perf_counter() - postprocess_start) * 1000,
+                }
+                if save_dir is not None:
+                    if loader.mode == "video":
+                        if video_writer is None:
+                            video_output_path = self._resolve_output_path(
+                                save_dir / f"{Path(path).stem}.mp4",
+                                seen,
+                            )
+                            video_writer = self._create_video_writer(
+                                video_output_path,
+                                frame_size=(w, h),
+                                source_fps=loader.video_fps,
+                                vid_stride=loader.vid_stride,
+                            )
+                        assert video_output_path is not None
+                        self._write_video_frame(video_writer, result)
+                        result.save_path = str(video_output_path)
+                    else:
+                        save_path = self._save_result(result, save_dir, index, seen)
+                        result.save_path = str(save_path)
+                yield result
+        finally:
+            if video_writer is not None:
+                video_writer.release()
 
     def _save_result(
         self,
@@ -119,7 +166,14 @@ class DFINEPredictor:
         seen: dict[str, int],
     ) -> Path:
         """Save an annotated prediction image and return the output path."""
-        out_path = save_dir / self._output_filename(result.path, index)
+        out_path = self._resolve_output_path(
+            save_dir / self._output_filename(result.path, index),
+            seen,
+        )
+        result.save(str(out_path))
+        return out_path
+
+    def _resolve_output_path(self, out_path: Path, seen: dict[str, int]) -> Path:
         count = seen.get(out_path.name, 0)
         seen[out_path.name] = count + 1
         if count:
@@ -129,8 +183,25 @@ class DFINEPredictor:
             count += 1
             out_path = out_path.with_name(f"{out_path.stem}_{count + 1}{out_path.suffix}")
 
-        result.save(str(out_path))
         return out_path
+
+    def _create_video_writer(
+        self,
+        output_path: Path,
+        frame_size: tuple[int, int],
+        source_fps: float | None,
+        vid_stride: int,
+    ) -> cv2.VideoWriter:
+        fps = (source_fps or 30.0) / float(vid_stride)
+        fps = max(fps, 1.0)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
+        writer = cv2.VideoWriter(str(output_path), fourcc, fps, frame_size)
+        if not writer.isOpened():
+            raise RuntimeError(f"Failed to open video writer for '{output_path}'")
+        return writer
+
+    def _write_video_frame(self, writer: cv2.VideoWriter, result: Results) -> None:
+        writer.write(result.plot())
 
     def _output_filename(self, path: str, index: int) -> str:
         """Choose a stable output filename for file, stream, screen, and array sources."""
