@@ -60,6 +60,7 @@ metrics = model.train(
     lr0=1e-4,
     optimizer="AdamW",
 )
+# final summary lives at the top level; per-epoch rows are in metrics["history"]
 ```
 
 Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly with
@@ -117,7 +118,7 @@ model.train(data="my_dataset.yml", epochs=50, amp=True, ema=True)  # with AMP + 
 
 # Evaluate
 metrics = model.val(data="my_dataset.yml")
-# {"mAP50-95": ..., "mAP50": ..., "AR1": ..., "AR100": ...}
+# {"mAP50-95": ..., "mAP50": ..., "AR1": ..., "AR100": ..., "precision": ..., "recall": ...}
 
 # Model info
 model.info()
