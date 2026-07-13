@@ -111,6 +111,7 @@ class DFINEExporter:
             wrapped_model,
             (dummy,),
             str(path),
+            dynamo=False,
             opset_version=opset,
             input_names=["images"],
             output_names=["labels", "boxes", "scores"],
