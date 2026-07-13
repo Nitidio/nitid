@@ -1,5 +1,7 @@
 """Unit tests for Results and Boxes."""
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -128,6 +130,25 @@ def test_results_to_csv(tmp_path, dummy_result):
         "class": 0,
         "name": "person",
     }
+
+
+def test_results_save_json(tmp_path, dummy_result):
+    out_file = tmp_path / "predictions" / "result.json"
+    dummy_result.save_json(out_file)
+
+    assert out_file.exists()
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert data == dummy_result.to_json()
+    assert data[0]["name"] == "person"
+
+
+def test_results_save_json_empty(tmp_path):
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = Results(orig_img=img, path="x.jpg", names={}, boxes=None)
+    out_file = tmp_path / "empty.json"
+    result.save_json(out_file)
+
+    assert json.loads(out_file.read_text(encoding="utf-8")) == []
 
 
 def test_results_plot_returns_ndarray(dummy_result):
