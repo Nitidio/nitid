@@ -130,11 +130,15 @@ Fine-tune a model:
 uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
 ```
 
+By default, training saves wrapped epoch checkpoints under `runs/train/exp/`.
+
 Validate a model:
 
 ```bash
 uv run dfine val model=dfine_s data=my_dataset.yml
 ```
+
+Validation reports COCO metrics to the terminal and does not create a run directory by default.
 
 Export a model:
 

@@ -3,6 +3,7 @@
 import json
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
@@ -73,6 +74,62 @@ def test_results_json_empty():
     img = np.zeros((480, 640, 3), dtype=np.uint8)
     r = Results(orig_img=img, path="x.jpg", names={}, boxes=None)
     assert r.to_json() == []
+
+
+def test_results_pandas_returns_dataframe(dummy_result):
+    df = dummy_result.pandas()
+
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == ["x1", "y1", "x2", "y2", "confidence", "class", "name"]
+    assert df.to_dict(orient="records") == [
+        {
+            "x1": 10.0,
+            "y1": 20.0,
+            "x2": 100.0,
+            "y2": 200.0,
+            "confidence": 0.9,
+            "class": 0,
+            "name": "person",
+        },
+        {
+            "x1": 50.0,
+            "y1": 60.0,
+            "x2": 150.0,
+            "y2": 250.0,
+            "confidence": 0.7,
+            "class": 1,
+            "name": "car",
+        },
+    ]
+
+
+def test_results_to_df_empty():
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    r = Results(orig_img=img, path="x.jpg", names={}, boxes=None)
+    df = r.to_df()
+
+    assert isinstance(df, pd.DataFrame)
+    assert df.empty
+    assert list(df.columns) == ["x1", "y1", "x2", "y2", "confidence", "class", "name"]
+
+
+def test_results_to_csv(tmp_path, dummy_result):
+    out_file = tmp_path / "detections.csv"
+
+    dummy_result.to_csv(out_file)
+
+    assert out_file.exists()
+    df = pd.read_csv(out_file)
+    assert list(df.columns) == ["x1", "y1", "x2", "y2", "confidence", "class", "name"]
+    assert df.to_dict(orient="records")[0] == {
+        "x1": 10.0,
+        "y1": 20.0,
+        "x2": 100.0,
+        "y2": 200.0,
+        "confidence": 0.9,
+        "class": 0,
+        "name": "person",
+    }
 
 
 def test_results_save_json(tmp_path, dummy_result):
