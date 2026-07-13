@@ -63,6 +63,7 @@ results = model.predict("image.jpg", save=True, project="runs/detect", name="str
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
 | `save_path` | `str \| None`  | Saved annotated image path when `save=True` |
+| `speed` | `dict[str, float]` | Timing in milliseconds for `preprocess`, `inference`, and `postprocess` |
 
 ```python
 r = results[0]
@@ -73,6 +74,7 @@ r.to_json()         # → list[dict] with box/score/class per detection
 r.pandas()          # → pandas.DataFrame with xyxy/conf/class/name columns
 r.to_df()           # → same DataFrame as r.pandas()
 r.to_csv("out.csv") # write detections to CSV
+r.speed             # → {"preprocess": 4.2, "inference": 18.7, "postprocess": 2.1}
 len(r)              # number of detections
 ```
 
