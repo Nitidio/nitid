@@ -104,7 +104,7 @@ class DFINE:
         name: str = "exp",
         verbose: bool = True,
     ) -> dict:
-        """Fine-tune on a custom dataset. Returns final metrics dict."""
+        """Fine-tune on a custom dataset. Returns final metrics plus per-epoch history."""
         from dfine.trainer import DFINETrainer
 
         trainer = DFINETrainer(
@@ -139,6 +139,9 @@ class DFINE:
         batch: int = 16,
         conf: float = 0.001,
         split: str = "val",
+        project: str = "runs/val",
+        name: str = "exp",
+        plots: bool = True,
         verbose: bool = True,
     ) -> dict:
         """Evaluate on val/test split. Returns mAP50, mAP50-95, etc."""
@@ -152,6 +155,8 @@ class DFINE:
             conf=conf,
             split=split,
             verbose=verbose,
+            save_dir=Path(project) / name if plots else None,
+            plots=plots,
         )
 
     # ── Export ──────────────────────────────────────────────────────────────

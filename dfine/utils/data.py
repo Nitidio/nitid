@@ -23,7 +23,9 @@ or split-first:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import math
 import os
@@ -123,7 +125,8 @@ class CocoFinetuneDataset(Dataset):
     ) -> None:
         from pycocotools.coco import COCO
 
-        self.coco = COCO(str(ann_file))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.coco = COCO(str(ann_file))
         self.img_dir = Path(img_dir)
         self.ids = sorted(self.coco.imgs)
         self.transform = T.Compose([T.Resize((imgsz, imgsz)), T.ToTensor()])
