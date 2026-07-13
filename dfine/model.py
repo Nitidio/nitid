@@ -105,6 +105,7 @@ class DFINE:
         project: str = "runs/train",
         name: str = "exp",
         verbose: bool = True,
+        callbacks: object | None = None,
     ) -> dict:
         """Fine-tune on a custom dataset. Returns final metrics plus per-epoch history."""
         from dfine.trainer import DFINETrainer
@@ -130,6 +131,7 @@ class DFINE:
             project=project,
             name=name,
             verbose=verbose,
+            callbacks=callbacks,
         )
 
     # ── Validation ──────────────────────────────────────────────────────────

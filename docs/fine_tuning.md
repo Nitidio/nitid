@@ -144,6 +144,15 @@ needed when you want a *different* ordering than sorted order.
 from dfine import DFINE
 
 model = DFINE("dfine_l")
+
+class PrintMetricsCallback:
+    def on_train_epoch_end(self, trainer, state):
+        row = state["row"]
+        print(
+            f"epoch={row['epoch']} loss={row['loss']:.4f} "
+            f"mAP50-95={row['mAP50-95']:.4f}"
+        )
+
 metrics = model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
@@ -153,6 +162,7 @@ metrics = model.train(
     optimizer="AdamW",
     project="runs/train",
     name="my_experiment",
+    callbacks=PrintMetricsCallback(),
 )
 print(metrics)
 # {
@@ -187,6 +197,49 @@ The top-level values are the final epoch summary for backward compatibility.
 Use `metrics["history"]` to inspect per-epoch training and validation metrics,
 including `mAP50` and `mAP50-95`, from within Python.
 
+### Trainer callbacks
+
+Training accepts an optional `callbacks=` argument for extending trainer
+behavior without patching the core loop. Pass either:
+
+- an object with one or more lifecycle-hook methods
+- a mapping from hook name to callable or list of callables
+
+Each callback receives `(trainer, state)`, where `trainer` is the active
+[`DFINETrainer`](../dfine/trainer.py) instance and `state` is a dictionary
+with the current run context. Common keys include `epoch`, `epochs`,
+`history`, `row`, `val_metrics`, `metrics`, `optimizer`, `scheduler`,
+`save_dir`, and the original train arguments.
+
+Supported hooks:
+
+- `on_train_start`
+- `on_train_epoch_start`
+- `on_val_end`
+- `on_train_epoch_end`
+- `on_train_end`
+
+Example using a mapping:
+
+```python
+def log_to_tracker(trainer, state):
+    row = state["row"]
+    tracker.log(
+        {
+            "epoch": row["epoch"],
+            "loss": row["loss"],
+            "mAP50": row["mAP50"],
+            "mAP50-95": row["mAP50-95"],
+        }
+    )
+
+model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    callbacks={"on_train_epoch_end": log_to_tracker},
+)
+```
+
 ### CLI
 
 ```bash
@@ -212,7 +265,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
 | `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier for the linear scheduler. Training ends at `lr0 * lrf`. |
 | `optimizer` | `str` | `"AdamW"` | `"AdamW"`, `"SGD"` | Optimizer choice. `AdamW` is the default general-purpose option; `SGD` uses momentum `0.9`. |
-| `resume`     | `False`      | Restore the latest run state from `project/name/last.pth` |
+| `resume` | `bool` | `False` | `True`, `False` | Restore the latest run state from `project/name/last.pth`. |
 | `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
 | `ema` | `bool` | `False` | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. |
 | `ema_decay` | `float` | `0.9999` | usually `0 < x < 1` | EMA smoothing factor. Higher values adapt more slowly; `0.9999` is the standard default for longer runs. |
@@ -220,6 +273,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
 | `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
+| `callbacks` | `object \| dict \| None` | `None` | callback object or hook mapping | Optional lifecycle hooks for custom logging, experiment tracking, or other training-time integrations. |
 
 ## Resume training
 

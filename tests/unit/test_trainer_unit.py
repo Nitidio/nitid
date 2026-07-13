@@ -144,3 +144,42 @@ def test_build_ema_returns_model_ema(trainer):
     ema = trainer._build_ema(decay=0.9999)
     assert isinstance(ema, ModelEMA)
     assert ema.decay == pytest.approx(0.9999)
+
+
+def test_add_callback_registers_and_runs(trainer):
+    calls = []
+
+    def on_train_start(trainer_instance, state):
+        calls.append((trainer_instance, state["epochs"]))
+
+    trainer.add_callback("on_train_start", on_train_start)
+    trainer._run_callbacks("on_train_start", {"epochs": 3})
+
+    assert calls == [(trainer, 3)]
+
+
+def test_add_callback_rejects_unknown_event(trainer):
+    with pytest.raises(ValueError, match="Unknown callback event"):
+        trainer.add_callback("on_batch_end", lambda *_: None)
+
+
+def test_add_callbacks_supports_mapping_and_objects(trainer):
+    calls = []
+
+    class Recorder:
+        def on_train_end(self, trainer_instance, state):
+            calls.append(("object", trainer_instance, state["name"]))
+
+    trainer.add_callbacks(
+        {
+            "on_train_start": lambda trainer_instance, state: calls.append(
+                ("mapping", trainer_instance, state["name"])
+            )
+        }
+    )
+    trainer.add_callbacks(Recorder())
+
+    trainer._run_callbacks("on_train_start", {"name": "demo"})
+    trainer._run_callbacks("on_train_end", {"name": "demo"})
+
+    assert calls == [("mapping", trainer, "demo"), ("object", trainer, "demo")]

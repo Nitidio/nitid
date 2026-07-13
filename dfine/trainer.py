@@ -11,6 +11,7 @@ import resource
 import sys
 import time
 from collections import defaultdict
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
 import torch
@@ -18,6 +19,8 @@ from tqdm.auto import tqdm
 
 from dfine.utils.checkpoint import load_checkpoint_state, save_checkpoint
 from dfine.utils.logging import LOGGER
+
+TrainerCallback = Callable[..., object]
 
 
 def _as_float(value: object, default: float = 0.0) -> float:
@@ -85,12 +88,31 @@ class DFINETrainer:
         the checkpoint so it loads directly with ``DFINE(path)``.
     """
 
-    def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
+    CALLBACK_EVENTS = (
+        "on_train_start",
+        "on_train_epoch_start",
+        "on_train_epoch_end",
+        "on_val_end",
+        "on_train_end",
+    )
+
+    def __init__(
+        self,
+        model,
+        cfg: dict,
+        device: str,
+        names: dict,
+        callbacks: object | None = None,
+    ) -> None:
         self.model = model
         self.cfg = cfg
         self.device = device
         self.names = names
         self._display_loss_keys = ("loss_bbox", "loss_giou", "loss_vfl", "loss_fgl")
+        self.callbacks: dict[str, list[TrainerCallback]] = {
+            event: [] for event in self.CALLBACK_EVENTS
+        }
+        self.add_callbacks(callbacks)
 
     def train(
         self,
@@ -108,6 +130,7 @@ class DFINETrainer:
         project: str,
         name: str,
         verbose: bool,
+        callbacks: object | None = None,
     ) -> dict:
         """
         Run the fine-tuning loop.
@@ -127,6 +150,7 @@ class DFINETrainer:
             project:    Root output directory.
             name:       Run name; checkpoints saved to ``<project>/<name>/``.
             verbose:    Print per-epoch loss.
+            callbacks:  Optional callback mapping or object with lifecycle-hook methods.
 
         Returns:
             Metrics dict containing final scalar metrics plus a ``history``
@@ -135,6 +159,7 @@ class DFINETrainer:
         save_dir = Path(project) / name
         save_dir.mkdir(parents=True, exist_ok=True)
         results_path = save_dir / "results.csv"
+        self.add_callbacks(callbacks)
         resume_state: dict[str, object] | None = None
         if resume:
             resume_state = self._load_resume_state(save_dir)
@@ -186,13 +211,43 @@ class DFINETrainer:
             )
             self._ensure_results_file(results_path, history)
 
+        callback_state: dict[str, object] = {
+            "data": data,
+            "epochs": epochs,
+            "imgsz": imgsz,
+            "batch": batch,
+            "lr0": lr0,
+            "lrf": lrf,
+            "optimizer_name": optimizer,
+            "resume": resume,
+            "amp": amp,
+            "ema": ema,
+            "ema_decay": ema_decay,
+            "project": project,
+            "name": name,
+            "save_dir": save_dir,
+            "results_path": results_path,
+            "dataloader": dataloader,
+            "optimizer": opt,
+            "scheduler": scheduler,
+            "criterion": criterion,
+            "scaler": scaler,
+            "ema_model": ema_model,
+            "history": history,
+            "start_epoch": start_epoch,
+        }
+        self._run_callbacks("on_train_start", callback_state)
+
         if start_epoch >= epochs:
             LOGGER.warning(
                 "resume=True found checkpoint at epoch %s, which already meets/exceeds epochs=%s",
                 start_epoch,
                 epochs,
             )
-            return self._finalize_metrics(history)
+            final_metrics = self._finalize_metrics(history)
+            callback_state["metrics"] = final_metrics
+            self._run_callbacks("on_train_end", callback_state)
+            return final_metrics
 
         for epoch in range(start_epoch, epochs):
             epoch_start = time.perf_counter()
@@ -205,6 +260,9 @@ class DFINETrainer:
                 torch.cuda.reset_peak_memory_stats()
 
             self.model.train()
+            callback_state["epoch"] = epoch + 1
+            callback_state["epoch_index"] = epoch
+            self._run_callbacks("on_train_epoch_start", callback_state)
             progress = tqdm(
                 dataloader,
                 total=len(dataloader),
@@ -280,6 +338,8 @@ class DFINETrainer:
                 save_dir=save_dir,
                 verbose=False,
             )
+            callback_state["val_metrics"] = val_metrics
+            self._run_callbacks("on_val_end", callback_state)
             primary_losses = self._primary_loss_stats(train_stats)
             scalar_val = self._compact_val_metrics(val_metrics)
 
@@ -353,10 +413,64 @@ class DFINETrainer:
                     metrics=row,
                 )
 
+            callback_state["row"] = row
+            callback_state["fitness"] = fitness
+            self._run_callbacks("on_train_epoch_end", callback_state)
+
             if verbose:
                 LOGGER.info(self._format_epoch_row(epoch + 1, epochs, row))
 
-        return self._finalize_metrics(history)
+        final_metrics = self._finalize_metrics(history)
+        callback_state["metrics"] = final_metrics
+        self._run_callbacks("on_train_end", callback_state)
+        return final_metrics
+
+    def add_callback(self, event: str, callback: TrainerCallback) -> None:
+        if event not in self.callbacks:
+            supported = ", ".join(self.CALLBACK_EVENTS)
+            raise ValueError(f"Unknown callback event '{event}'. Supported events: {supported}")
+        if not callable(callback):
+            raise TypeError(
+                f"Callback for '{event}' must be callable, got {type(callback).__name__}"
+            )
+        self.callbacks[event].append(callback)
+
+    def add_callbacks(self, callbacks: object | None) -> None:
+        if callbacks is None:
+            return
+
+        if isinstance(callbacks, Mapping):
+            for event, callback_group in callbacks.items():
+                for callback in self._normalize_callback_group(callback_group):
+                    self.add_callback(str(event), callback)
+            return
+
+        for event in self.CALLBACK_EVENTS:
+            callback_obj = getattr(callbacks, event, None)
+            if callback_obj is None:
+                continue
+            if not callable(callback_obj):
+                raise TypeError(
+                    f"Callback attribute '{event}' must be callable, got "
+                    f"{type(callback_obj).__name__}"
+                )
+            self.add_callback(event, callback_obj)
+
+    def _normalize_callback_group(self, callback_group: object) -> list[TrainerCallback]:
+        if callable(callback_group):
+            return [callback_group]
+
+        if isinstance(callback_group, Iterable) and not isinstance(callback_group, (str, bytes)):
+            callbacks = list(callback_group)
+            if not all(callable(callback) for callback in callbacks):
+                raise TypeError("Every callback in a callback group must be callable")
+            return callbacks
+
+        raise TypeError("Callbacks must be a callable or an iterable of callables")
+
+    def _run_callbacks(self, event: str, state: Mapping[str, object]) -> None:
+        for callback in self.callbacks[event]:
+            callback(self, dict(state))
 
     def _build_dataloader(self, data: str, imgsz: int, batch: int):
         from dfine.utils.data import build_coco_dataloader

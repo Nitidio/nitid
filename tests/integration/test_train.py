@@ -39,6 +39,49 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     assert (tmp_path / "test" / "f1_curve.png").exists()
 
 
+def test_train_callbacks_receive_lifecycle_events(tiny_checkpoint, tiny_dataset, tmp_path):
+    from dfine import DFINE
+
+    events = []
+
+    class Recorder:
+        def on_train_start(self, trainer, state):
+            events.append(("train_start", state["epochs"], len(state["history"])))
+            assert state["save_dir"] == tmp_path / "callbacks"
+
+        def on_train_epoch_start(self, trainer, state):
+            events.append(("epoch_start", state["epoch"], state["epoch_index"]))
+
+        def on_val_end(self, trainer, state):
+            events.append(("val_end", state["epoch"], "mAP50" in state["val_metrics"]))
+
+        def on_train_epoch_end(self, trainer, state):
+            events.append(("epoch_end", state["row"]["epoch"], "fitness" in state["row"]))
+
+        def on_train_end(self, trainer, state):
+            events.append(("train_end", len(state["metrics"]["history"]), state["metrics"]["loss"]))
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    metrics = model.train(
+        data=tiny_dataset,
+        epochs=1,
+        batch=2,
+        project=str(tmp_path),
+        name="callbacks",
+        verbose=False,
+        callbacks=Recorder(),
+    )
+
+    assert len(metrics["history"]) == 1
+    assert events[0] == ("train_start", 1, 0)
+    assert events[1] == ("epoch_start", 1, 0)
+    assert events[2] == ("val_end", 1, True)
+    assert events[3] == ("epoch_end", 1, True)
+    assert events[4][0] == "train_end"
+    assert events[4][1] == 1
+    assert isinstance(events[4][2], float)
+
+
 def test_val_runs(tiny_checkpoint, tiny_dataset):
     from dfine import DFINE
 
