@@ -2,6 +2,7 @@
 
 import json
 
+import cv2
 import numpy as np
 import pandas as pd
 import pytest
@@ -22,6 +23,14 @@ def dummy_boxes():
 def dummy_result(dummy_boxes):
     img = np.zeros((480, 640, 3), dtype=np.uint8)
     return Results(orig_img=img, path="test.jpg", names={0: "person", 1: "car"}, boxes=dummy_boxes)
+
+
+@pytest.fixture
+def crop_result(dummy_boxes):
+    img = np.arange(480 * 640 * 3, dtype=np.uint8).reshape(480, 640, 3)
+    return Results(
+        orig_img=img, path="street.jpg", names={0: "person", 1: "car"}, boxes=dummy_boxes
+    )
 
 
 def test_boxes_xyxy(dummy_boxes):
@@ -200,6 +209,68 @@ def test_results_save_txt_empty(tmp_path):
 
     assert out_file.exists()
     assert out_file.read_text(encoding="utf-8") == ""
+
+
+def test_results_crop_returns_cropped_images(crop_result):
+    crops = crop_result.crop()
+
+    assert len(crops) == 2
+    assert crops[0]["name"] == "person"
+    assert crops[0]["class"] == 0
+    assert crops[0]["confidence"] == 0.9
+    assert crops[0]["box"] == {"x1": 10, "y1": 20, "x2": 100, "y2": 200}
+    np.testing.assert_array_equal(crops[0]["im"], crop_result.orig_img[20:200, 10:100])
+    assert crops[0]["im"].shape == (180, 90, 3)
+    assert crops[0]["save_path"] is None
+
+
+def test_results_crop_saves_into_class_folders(tmp_path, crop_result):
+    crops = crop_result.crop(save_dir=tmp_path / "crops")
+
+    person_path = tmp_path / "crops" / "person" / "street.jpg"
+    car_path = tmp_path / "crops" / "car" / "street.jpg"
+
+    assert person_path.exists()
+    assert car_path.exists()
+    assert crops[0]["save_path"] == str(person_path)
+    assert crops[1]["save_path"] == str(car_path)
+    assert cv2.imread(str(person_path)).shape == (180, 90, 3)
+    assert cv2.imread(str(car_path)).shape == (190, 100, 3)
+
+
+def test_results_crop_saves_repeated_classes_without_overwriting(tmp_path):
+    data = torch.tensor(
+        [[10.0, 20.0, 100.0, 200.0, 0.9, 0.0], [50.0, 60.0, 150.0, 250.0, 0.7, 0.0]]
+    )
+    boxes = Boxes(data, orig_shape=(480, 640))
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = Results(orig_img=img, path="street.jpg", names={0: "person"}, boxes=boxes)
+
+    crops = result.crop(save_dir=tmp_path / "crops")
+
+    assert (tmp_path / "crops" / "person" / "street_0.jpg").exists()
+    assert (tmp_path / "crops" / "person" / "street_1.jpg").exists()
+    assert crops[0]["save_path"] == str(tmp_path / "crops" / "person" / "street_0.jpg")
+    assert crops[1]["save_path"] == str(tmp_path / "crops" / "person" / "street_1.jpg")
+
+
+def test_results_crop_clips_boxes_to_image_bounds():
+    data = torch.tensor([[-5.2, -3.0, 20.1, 30.9, 0.8, 0.0]])
+    boxes = Boxes(data, orig_shape=(40, 50))
+    img = np.zeros((40, 50, 3), dtype=np.uint8)
+    result = Results(orig_img=img, path="x.jpg", names={0: "person"}, boxes=boxes)
+
+    crops = result.crop()
+
+    assert crops[0]["box"] == {"x1": 0, "y1": 0, "x2": 21, "y2": 31}
+    assert crops[0]["im"].shape == (31, 21, 3)
+
+
+def test_results_crop_empty():
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = Results(orig_img=img, path="x.jpg", names={}, boxes=None)
+
+    assert result.crop() == []
 
 
 def test_boxes_xywh(dummy_boxes):

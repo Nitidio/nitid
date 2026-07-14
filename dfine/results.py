@@ -86,6 +86,69 @@ class Results:
 
         path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
+    def crop(
+        self,
+        save_dir: str | Path | None = None,
+        file_name: str | Path | None = None,
+    ) -> list[dict[str, object]]:
+        """Return detection crops and optionally save them into class folders."""
+        if self.boxes is None:
+            return []
+
+        save_root = Path(save_dir) if save_dir is not None else None
+        source_name = Path(file_name or self.path or "im.jpg")
+        if not source_name.suffix:
+            source_name = source_name.with_suffix(".jpg")
+
+        h, w = self.orig_img.shape[:2]
+        crops: list[dict[str, object]] = []
+        class_totals: dict[str, int] = {}
+        class_seen: dict[str, int] = {}
+
+        for cls_id in self.boxes.cls.tolist():
+            name = self.names.get(int(cls_id), "unknown")
+            class_totals[name] = class_totals.get(name, 0) + 1
+
+        for i in range(len(self)):
+            xyxy = self.boxes.xyxy[i].detach().cpu().numpy()
+            x1 = max(0, min(w, int(np.floor(xyxy[0]))))
+            y1 = max(0, min(h, int(np.floor(xyxy[1]))))
+            x2 = max(0, min(w, int(np.ceil(xyxy[2]))))
+            y2 = max(0, min(h, int(np.ceil(xyxy[3]))))
+
+            crop_img = self.orig_img[y1:y2, x1:x2].copy()
+            cls_id = int(self.boxes.cls[i])
+            name = self.names.get(cls_id, "unknown")
+            confidence = round(float(self.boxes.conf[i]), 4)
+            save_path: str | None = None
+
+            if save_root is not None and crop_img.size:
+                class_seen[name] = class_seen.get(name, 0) + 1
+                stem = source_name.stem
+                suffix = source_name.suffix or ".jpg"
+                crop_file = (
+                    f"{stem}_{class_seen[name] - 1}{suffix}"
+                    if class_totals[name] > 1
+                    else f"{stem}{suffix}"
+                )
+                path = save_root / name / crop_file
+                path.parent.mkdir(parents=True, exist_ok=True)
+                cv2.imwrite(str(path), crop_img)
+                save_path = str(path)
+
+            crops.append(
+                {
+                    "im": crop_img,
+                    "box": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                    "confidence": confidence,
+                    "class": cls_id,
+                    "name": name,
+                    "save_path": save_path,
+                }
+            )
+
+        return crops
+
     def show(self) -> None:
         """Display image in a window (blocks until key press)."""
         cv2.imshow(str(self.path), self.plot())
