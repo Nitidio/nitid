@@ -88,7 +88,31 @@ r.to_csv("out.csv") # write detections to CSV
 r.speed             # → {"preprocess": 4.2, "inference": 18.7, "postprocess": 2.1}
 r.save_json("predictions.json")  # write detections to disk
 r.save_txt("predictions.txt")  # write YOLO-format labels to disk
+r.crop()            # → list[dict] with cropped object images and metadata
+r.crop(save_dir="crops")  # save crops into class-name folders
 len(r)              # number of detections
+```
+
+`crop()` returns one dictionary per detection:
+
+```python
+crop = r.crop()[0]
+crop["im"]          # cropped HWC BGR ndarray
+crop["box"]         # {"x1": ..., "y1": ..., "x2": ..., "y2": ...}
+crop["confidence"]  # detection confidence
+crop["class"]       # class id
+crop["name"]        # class name
+crop["save_path"]   # saved image path, or None when not saving
+```
+
+When `save_dir` is provided, crops are written in a YOLO-like class-folder layout:
+
+```text
+crops/
+  person/
+    image.jpg
+  bus/
+    image.jpg
 ```
 
 `save_txt()` writes one detection per line:
