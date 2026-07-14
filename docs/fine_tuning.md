@@ -200,7 +200,7 @@ uv run dfine train \
 ### Hyperparameter reference
 
 The table below documents the full public `model.train(...)` surface as it
-exists today. Defaults match [`DFINE.train()`](../dfine/model.py).
+exists today. Defaults match [`DFINE.train()`](https://github.com/Vaelsys/nitid/blob/develop/dfine/model.py).
 Use this table as the authoritative reference for train-time arguments.
 
 | Parameter | Type | Default | Valid range / values | Description |
@@ -262,7 +262,7 @@ history is returned.
 - The current public API does **not** expose `weight_decay` or `grad_clip` as
   train arguments. Internally, `AdamW` uses `weight_decay=1e-4`, SGD uses
   `momentum=0.9`, and gradient clipping is fixed at `max_norm=0.1` in
-  [`DFINETrainer`](../dfine/trainer.py).
+  [`DFINETrainer`](https://github.com/Vaelsys/nitid/blob/develop/dfine/trainer.py).
 
 ## AMP — mixed-precision training
 
