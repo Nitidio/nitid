@@ -37,6 +37,14 @@ def test_build_optimizer_sgd(trainer):
     assert opt.param_groups[0]["lr"] == pytest.approx(5e-3)
 
 
+def test_build_optimizer_splits_bias_group(trainer):
+    opt = trainer._build_optimizer("AdamW", lr=1e-3)
+    assert len(opt.param_groups) == 2
+    assert opt.param_groups[0]["is_bias_group"] is False
+    assert opt.param_groups[1]["is_bias_group"] is True
+    assert opt.param_groups[1]["weight_decay"] == pytest.approx(0.0)
+
+
 def test_build_optimizer_invalid(trainer):
     with pytest.raises(ValueError, match="Unknown optimizer"):
         trainer._build_optimizer("LAMB", lr=1e-3)
@@ -48,15 +56,104 @@ def test_build_scheduler(trainer):
     assert isinstance(scheduler, torch.optim.lr_scheduler.LinearLR)
 
 
+def test_build_scheduler_cosine(trainer):
+    opt = trainer._build_optimizer("AdamW", lr=1e-3)
+    scheduler = trainer._build_scheduler(opt, epochs=10, lrf=0.1, cos_lr=True)
+    assert isinstance(scheduler, torch.optim.lr_scheduler.CosineAnnealingLR)
+
+
+def test_build_scheduler_warmup_cosine(trainer):
+    opt = trainer._build_optimizer("AdamW", lr=1e-3)
+    scheduler = trainer._build_scheduler(opt, epochs=10, lrf=0.1, cos_lr=True)
+    assert isinstance(scheduler, torch.optim.lr_scheduler.CosineAnnealingLR)
+
+
 def test_scheduler_end_lr(trainer):
     """After `epochs` steps the LR should reach lr0 * lrf."""
     lr0, lrf, epochs = 1e-2, 0.01, 5
     opt = trainer._build_optimizer("AdamW", lr=lr0)
     scheduler = trainer._build_scheduler(opt, epochs=epochs, lrf=lrf)
     for _ in range(epochs):
+        opt.step()
         scheduler.step()
     final_lr = opt.param_groups[0]["lr"]
     assert final_lr == pytest.approx(lr0 * lrf, rel=1e-3)
+
+
+def test_cosine_scheduler_end_lr(trainer):
+    """Cosine schedule should also end at lr0 * lrf."""
+    lr0, lrf, epochs = 1e-2, 0.1, 6
+    opt = trainer._build_optimizer("AdamW", lr=lr0)
+    scheduler = trainer._build_scheduler(opt, epochs=epochs, lrf=lrf, cos_lr=True)
+    for _ in range(epochs):
+        opt.step()
+        scheduler.step()
+    final_lr = opt.param_groups[0]["lr"]
+    assert final_lr == pytest.approx(lr0 * lrf, rel=1e-3)
+
+
+def test_warmup_cosine_scheduler_progression(trainer):
+    """Manual warmup should ramp up first, then cosine decay should finish at lr0 * lrf."""
+    lr0, lrf, epochs, warmup_epochs = 1e-2, 0.1, 8, 3
+    opt = trainer._build_optimizer("AdamW", lr=lr0)
+    scheduler = trainer._build_scheduler(opt, epochs=epochs - warmup_epochs, lrf=lrf, cos_lr=True)
+
+    warmup_iters = warmup_epochs * 2
+    lrs = []
+    for i in range(warmup_iters):
+        trainer._apply_warmup(
+            optimizer=opt,
+            warmup_iter=i,
+            total_warmup_iters=warmup_iters,
+            lr0=lr0,
+            warmup_momentum=0.8,
+            warmup_bias_lr=0.1,
+        )
+        lrs.append(opt.param_groups[0]["lr"])
+
+    assert lrs[0] > 0.0
+    assert lrs[-1] == pytest.approx(lr0, rel=1e-3)
+
+    for _ in range(epochs - warmup_epochs):
+        opt.step()
+        scheduler.step()
+
+    assert opt.param_groups[0]["lr"] == pytest.approx(lr0 * lrf, rel=1e-3)
+
+
+def test_warmup_bias_lr_and_momentum(trainer):
+    opt = trainer._build_optimizer("SGD", lr=1e-2)
+    trainer._apply_warmup(
+        optimizer=opt,
+        warmup_iter=0,
+        total_warmup_iters=4,
+        lr0=1e-2,
+        warmup_momentum=0.8,
+        warmup_bias_lr=0.1,
+    )
+
+    weight_group = next(group for group in opt.param_groups if not group["is_bias_group"])
+    bias_group = next(group for group in opt.param_groups if group["is_bias_group"])
+    assert weight_group["lr"] < bias_group["lr"]
+    assert 0.8 < weight_group["momentum"] < 0.9
+
+    trainer._apply_warmup(
+        optimizer=opt,
+        warmup_iter=3,
+        total_warmup_iters=4,
+        lr0=1e-2,
+        warmup_momentum=0.8,
+        warmup_bias_lr=0.1,
+    )
+    assert weight_group["lr"] == pytest.approx(1e-2, rel=1e-3)
+    assert bias_group["lr"] == pytest.approx(1e-2, rel=1e-3)
+    assert weight_group["momentum"] == pytest.approx(0.9, rel=1e-3)
+
+
+def test_compute_warmup_iters_has_small_dataset_floor(trainer):
+    assert trainer._compute_warmup_iters(warmup_epochs=3.0, total_batches=8) == 100
+    assert trainer._compute_warmup_iters(warmup_epochs=0.0, total_batches=8) == 0
+    assert trainer._compute_warmup_iters(warmup_epochs=0.5, total_batches=300) == 150
 
 
 # ── ModelEMA ─────────────────────────────────────────────────────────────────
