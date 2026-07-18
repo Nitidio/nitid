@@ -108,6 +108,7 @@ class DFINE:
         name: str = "exp",
         verbose: bool = True,
         callbacks: object | None = None,
+        wandb: bool | dict[str, Any] = False,
     ) -> dict:
         """Fine-tune on a custom dataset. Returns final metrics plus per-epoch history."""
         from dfine.trainer import DFINETrainer
@@ -119,23 +120,28 @@ class DFINE:
             names=self._names,
             callbacks=self._callbacks,
         )
-        return trainer.train(
-            data=data,
-            epochs=epochs,
-            imgsz=imgsz,
-            batch=batch,
-            lr0=lr0,
-            lrf=lrf,
-            optimizer=optimizer,
-            resume=resume,
-            amp=amp,
-            ema=ema,
-            ema_decay=ema_decay,
-            project=project,
-            name=name,
-            verbose=verbose,
-            callbacks=callbacks,
-        )
+        try:
+            return trainer.train(
+                data=data,
+                epochs=epochs,
+                imgsz=imgsz,
+                batch=batch,
+                lr0=lr0,
+                lrf=lrf,
+                optimizer=optimizer,
+                resume=resume,
+                amp=amp,
+                ema=ema,
+                ema_decay=ema_decay,
+                project=project,
+                name=name,
+                verbose=verbose,
+                callbacks=callbacks,
+                wandb=wandb,
+            )
+        except BaseException as error:
+            trainer._handle_train_error(error)
+            raise
 
     def add_callback(self, event: str, callback: ModelCallback) -> None:
         """Register a persistent callback on the model, similar to Ultralytics."""

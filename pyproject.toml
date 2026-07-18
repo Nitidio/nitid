@@ -45,6 +45,10 @@ train = [
     "pycocotools>=2.0",
 ]
 
+wandb = [
+    "wandb>=0.17",
+]
+
 web = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",

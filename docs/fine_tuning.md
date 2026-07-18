@@ -228,7 +228,9 @@ Ultralytics style. The most useful callback attributes are:
 | `trainer.current_row` | `dict \| None` | Latest finalized per-epoch metrics row | `on_train_epoch_end`, `on_train_end` |
 | `trainer.current_fitness` | `float` | Latest epoch fitness | `on_train_epoch_end`, `on_train_end` |
 | `trainer.metrics` | `dict \| None` | Final return value from training | `on_train_end` |
+| `trainer.error` | `BaseException \| None` | Exception that interrupted training | `on_train_error` |
 | `trainer.history` | `list[dict]` | Live per-epoch history accumulated so far | all hooks |
+| `trainer.tracking_state` | `dict[str, object]` | Tracker metadata persisted in `last.pth` | all hooks |
 | `trainer.save_dir` | `Path \| None` | Run artifact directory | all hooks |
 | `trainer.results_path` | `Path \| None` | CSV metrics file path | all hooks |
 | `trainer.optimizer` / `trainer.scheduler` / `trainer.criterion` / `trainer.scaler` / `trainer.ema_model` | runtime objects | Active training components | all hooks after setup |
@@ -247,6 +249,95 @@ Supported hooks:
 - `on_val_end`
 - `on_train_epoch_end`
 - `on_train_end`
+- `on_train_error`
+
+`on_train_error` runs when training exits with an exception. Cleanup callbacks
+should use this hook; the original training exception is always re-raised.
+
+### Weights & Biases
+
+Install the optional integration dependency:
+
+```bash
+pip install "nitid[wandb]"
+# or, from a source checkout
+uv sync --extra wandb
+```
+
+Enable logging directly from `train()`, in the same style as Ultralytics:
+
+```python
+from dfine import DFINE
+
+model = DFINE("dfine_s.pth")
+model.train(
+    data="data.yaml",
+    epochs=50,
+    project="runs/train",
+    name="dfine-s-baseline",
+    wandb=True,
+)
+```
+
+`wandb=True` uses the WandB project `nitid` and uses the training `name` as the
+WandB run name. For additional WandB configuration, pass a mapping instead:
+
+```python
+model.train(
+    data="data.yaml",
+    epochs=50,
+    name="dfine-s-baseline",
+    wandb={
+        "project": "nitid-detection",
+        "entity": "my-team",
+        "tags": ["dfine-s", "coco"],
+    },
+)
+```
+
+The integration records the resolved training hyperparameters at run start and
+logs the complete per-epoch row (total and component losses, learning rate,
+validation metrics, timing, and memory). At successful completion it uploads
+`last.pth` and `best.pth` once as versioned model artifacts and writes final
+scalar metrics to the run summary. Set `log_checkpoints=False` if checkpoint
+artifacts are not needed.
+
+Periodic epoch artifacts are opt-in to avoid uploading several full model files
+after every epoch:
+
+```python
+model.train(
+    data="data.yaml",
+    wandb={"checkpoint_interval": 10},  # also upload epoch10.pth, epoch20.pth, ...
+)
+```
+
+The WandB run ID is stored in `last.pth`. Calling `train(resume=True,
+wandb=True)` reconnects to that run with `resume="allow"`, keeping the metrics
+in one continuous WandB run. If training fails, nitid finishes the WandB run
+with a failed exit status before re-raising the original exception.
+
+For local testing without an account or network connection, use offline mode:
+
+```python
+model.train(
+    data="data.yaml",
+    epochs=1,
+    wandb={"project": "nitid-local", "mode": "offline"},
+)
+```
+
+Offline runs are stored in the local `wandb/` directory and can be uploaded
+later with `wandb sync`.
+
+The callback API remains available when direct lifecycle control is useful:
+
+```python
+from dfine.integrations import WandbCallback
+
+tracker = WandbCallback(project="nitid-detection")
+model.train(data="data.yaml", callbacks=tracker)
+```
 
 Example using a mapping:
 

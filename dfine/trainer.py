@@ -13,6 +13,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
+from typing import Any
 
 import torch
 from tqdm.auto import tqdm
@@ -95,7 +96,8 @@ class DFINETrainer:
         ``current_val_metrics``, ``current_row``, ``current_fitness``,
         ``metrics``, ``history``, ``save_dir``, ``results_path``,
         ``optimizer``, ``scheduler``, ``criterion``, ``scaler``, ``ema_model``,
-        ``dataloader``, ``train_args``, and ``start_epoch``.
+        ``dataloader``, ``train_args``, ``tracking_state``, ``error``, and
+        ``start_epoch``.
       - These attributes are live objects, not deep-copied snapshots.
         Mutating them affects the active training run.
     """
@@ -106,6 +108,7 @@ class DFINETrainer:
         "on_train_epoch_end",
         "on_val_end",
         "on_train_end",
+        "on_train_error",
     )
 
     def __init__(
@@ -126,7 +129,9 @@ class DFINETrainer:
         self.current_row: dict[str, float | int] | None = None
         self.current_fitness = 0.0
         self.metrics: dict | None = None
+        self.error: BaseException | None = None
         self.history: list[dict[str, float | int]] = []
+        self.tracking_state: dict[str, object] = {}
         self.save_dir: Path | None = None
         self.results_path: Path | None = None
         self.dataloader: object | None = None
@@ -160,6 +165,7 @@ class DFINETrainer:
         name: str,
         verbose: bool,
         callbacks: object | None = None,
+        wandb: bool | Mapping[str, Any] = False,
     ) -> dict:
         """
         Run the fine-tuning loop.
@@ -180,6 +186,7 @@ class DFINETrainer:
             name:       Run name; checkpoints saved to ``<project>/<name>/``.
             verbose:    Print per-epoch loss.
             callbacks:  Optional callback mapping or object with lifecycle-hook methods.
+            wandb:      Enable WandB with ``True``, or pass WandB callback options.
 
         Returns:
             Metrics dict containing final scalar metrics plus a ``history``
@@ -194,11 +201,14 @@ class DFINETrainer:
         self.current_row = None
         self.current_fitness = 0.0
         self.metrics = None
+        self.error = None
         self.history = []
+        self.tracking_state = {}
         self.save_dir = save_dir
         self.results_path = results_path
         self._reset_callbacks()
         self.add_callbacks(callbacks)
+        self._add_wandb_callback(wandb)
         resume_state: dict[str, object] | None = None
         if resume:
             resume_state = self._load_resume_state(save_dir)
@@ -465,6 +475,20 @@ class DFINETrainer:
     def add_callback(self, event: str, callback: TrainerCallback) -> None:
         self._add_callback_to_registry(self.callbacks, event, callback)
 
+    def _add_wandb_callback(self, wandb: bool | Mapping[str, Any]) -> None:
+        if wandb is False:
+            return
+        if wandb is True:
+            options: dict[str, Any] = {}
+        elif isinstance(wandb, Mapping):
+            options = dict(wandb)
+        else:
+            raise TypeError("wandb must be a bool or a mapping of WandB options")
+
+        from dfine.integrations import WandbCallback
+
+        self.add_callbacks(WandbCallback(**options))
+
     def add_callbacks(self, callbacks: object | None) -> None:
         self._register_callbacks(callbacks, self.callbacks)
 
@@ -541,6 +565,14 @@ class DFINETrainer:
     def _run_callbacks(self, event: str) -> None:
         for callback in self.callbacks[event]:
             callback(self)
+
+    def _handle_train_error(self, error: BaseException) -> None:
+        """Notify error callbacks while preserving the original training exception."""
+        self.error = error
+        try:
+            self._run_callbacks("on_train_error")
+        except Exception:
+            LOGGER.exception("A callback failed while handling a training error")
 
     def _build_dataloader(self, data: str, imgsz: int, batch: int):
         from dfine.utils.data import build_coco_dataloader
@@ -714,6 +746,9 @@ class DFINETrainer:
 
         history_raw = training_state.get("history", [])
         history = self._coerce_history(history_raw)
+        tracking_state = training_state.get("tracking_state")
+        if isinstance(tracking_state, dict):
+            self.tracking_state = tracking_state.copy()
         best_fitness = _as_float(training_state.get("best_fitness", float("-inf")), float("-inf"))
         start_epoch = _as_int(resume_state.get("epoch", 0))
         return history, best_fitness, start_epoch
@@ -734,6 +769,7 @@ class DFINETrainer:
             "history": history,
             "best_fitness": best_fitness,
             "train_args": train_args,
+            "tracking_state": self.tracking_state,
         }
         if scaler is not None:
             training_state["scaler"] = scaler.state_dict()

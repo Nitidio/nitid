@@ -131,6 +131,11 @@ uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
 ```
 
 By default, training saves wrapped epoch checkpoints under `runs/train/exp/`.
+Add `wandb=true` to log the run to the default `nitid` WandB project:
+
+```bash
+uv run dfine train model=dfine_s data=my_dataset.yml epochs=50 wandb=true
+```
 
 Validate a model:
 

@@ -201,3 +201,87 @@ def test_add_callbacks_deduplicates_registered_callbacks(trainer):
     trainer._run_callbacks("on_train_start")
 
     assert calls == [(trainer, "demo")]
+
+
+def test_add_wandb_callback_supports_ultralytics_style_boolean(trainer):
+    trainer._add_wandb_callback(True)
+
+    assert len(trainer.callbacks["on_train_start"]) == 1
+    callback = trainer.callbacks["on_train_start"][0].__self__
+    assert callback.project == "nitid"
+
+
+def test_add_wandb_callback_accepts_options(trainer):
+    trainer._add_wandb_callback({"project": "detectors", "mode": "offline"})
+
+    callback = trainer.callbacks["on_train_start"][0].__self__
+    assert callback.project == "detectors"
+    assert callback.mode == "offline"
+
+
+def test_add_wandb_callback_rejects_invalid_value(trainer):
+    with pytest.raises(TypeError, match="wandb must be a bool or a mapping"):
+        trainer._add_wandb_callback("yes")
+
+
+def test_handle_train_error_notifies_callbacks_and_preserves_error(trainer):
+    error = RuntimeError("training failed")
+    observed = []
+
+    def on_train_error(trainer_instance):
+        observed.append(trainer_instance.error)
+
+    trainer.add_callback("on_train_error", on_train_error)
+    trainer._handle_train_error(error)
+
+    assert trainer.error is error
+    assert observed == [error]
+
+
+def test_tracking_state_is_serialized(trainer):
+    optimizer = trainer._build_optimizer("AdamW", lr=1e-3)
+    scheduler = trainer._build_scheduler(optimizer, epochs=2, lrf=0.1)
+    trainer.tracking_state = {"wandb": {"run_id": "abc123"}}
+
+    state = trainer._serialize_training_state(
+        optimizer=optimizer,
+        scheduler=scheduler,
+        scaler=None,
+        ema_model=None,
+        history=[],
+        best_fitness=0.0,
+        train_args={},
+    )
+
+    assert state["tracking_state"] == {"wandb": {"run_id": "abc123"}}
+
+
+def test_public_train_runs_error_callbacks_and_reraises_original(monkeypatch, tiny_model):
+    from dfine.model import DFINE
+
+    original_error = RuntimeError("bad batch")
+    handled = []
+
+    class FailingTrainer:
+        def __init__(self, **kwargs):
+            pass
+
+        def train(self, **kwargs):
+            raise original_error
+
+        def _handle_train_error(self, error):
+            handled.append(error)
+
+    monkeypatch.setattr("dfine.trainer.DFINETrainer", FailingTrainer)
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {}
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+
+    with pytest.raises(RuntimeError) as caught:
+        model.train(data="dataset.yaml")
+
+    assert caught.value is original_error
+    assert handled == [original_error]
