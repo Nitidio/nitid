@@ -158,7 +158,8 @@ metrics = model.train(
     project="runs/train",
     name="exp",
     verbose=True,
-    wandb=False,        # True or a mapping of WandB options
+    wandb=False,         # True or a mapping of WandB options
+    mlflow=False,        # True or a mapping of MLflow options
 )
 # metrics = {
 #   "loss": ...,
@@ -173,8 +174,8 @@ The top-level values summarize the final epoch. `metrics["history"]` contains
 one row per epoch with training loss terms and validation metrics.
 
 When `resume=True`, nitid restores the latest checkpoint from `project/name/last.pth`,
-including optimizer, scheduler, EMA, AMP scaler, metrics history, and the WandB
-run ID when tracking is enabled.
+including optimizer, scheduler, EMA, AMP scaler, metrics history, and tracker
+run IDs when WandB or MLflow is enabled.
 
 ---
 

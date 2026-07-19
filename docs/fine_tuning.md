@@ -339,6 +339,84 @@ tracker = WandbCallback(project="nitid-detection")
 model.train(data="data.yaml", callbacks=tracker)
 ```
 
+### MLflow
+
+Install the optional dependency:
+
+```bash
+pip install "nitid[mlflow]"
+# or, from a source checkout
+uv sync --extra mlflow
+```
+
+Enable MLflow directly on training:
+
+```python
+from dfine import DFINE
+
+model = DFINE("dfine_s.pth")
+model.train(
+    data="data.yaml",
+    epochs=50,
+    project="runs/train",
+    name="dfine-s-baseline",
+    mlflow=True,
+)
+```
+
+This follows the Ultralytics MLflow conventions:
+
+- the tracking URI defaults to `runs/mlflow`
+- the experiment defaults to the training `project`
+- the MLflow run name defaults to the training `name`
+- an already-active MLflow run is reused and is not closed by nitid
+- resolved training parameters are logged when training starts
+- losses, learning rate, validation metrics, timing, and memory are logged each epoch
+- checkpoints, CSV results, YAML files, and generated plots are logged at training end
+- initialization and logging failures warn and disable tracking instead of stopping training
+
+The same environment variables supported by Ultralytics take precedence over
+the defaults and Python options:
+
+| Variable | Purpose |
+|----------|---------|
+| `MLFLOW_TRACKING_URI` | Local store or remote tracking-server URI |
+| `MLFLOW_EXPERIMENT_NAME` | Experiment name |
+| `MLFLOW_RUN` | Run name |
+| `MLFLOW_KEEP_RUN_ACTIVE` | Keep a nitid-created run open when set to `1`, `true`, `yes`, `on`, `y`, or `t` (case-insensitive) |
+
+For a fully local workflow, no server is required:
+
+```python
+model.train(data="data.yaml", epochs=2, mlflow=True)
+```
+
+Inspect those results through the MLflow UI:
+
+```bash
+mlflow server --backend-store-uri runs/mlflow
+```
+
+Then open `http://127.0.0.1:5000`. To use a different local store without
+environment variables, pass an options mapping:
+
+```python
+model.train(
+    data="data.yaml",
+    mlflow={
+        "tracking_uri": "runs/custom-mlflow",
+        "experiment_name": "nitid-detection",
+        "run_name": "dfine-s-baseline",
+        "keep_run_active": False,
+        "autolog": True,
+    },
+)
+```
+
+The MLflow run ID is persisted in `last.pth`, so `resume=True, mlflow=True`
+continues the same run. A training exception marks a nitid-created run as
+failed. Advanced users may also pass `MLflowCallback` through `callbacks=`.
+
 Example using a mapping:
 
 ```python
@@ -399,6 +477,8 @@ Use this table as the authoritative reference for train-time arguments.
 | `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
 | `callbacks` | `object \| dict \| None` | `None` | callback object or hook mapping | Optional lifecycle hooks for custom logging, experiment tracking, or other training-time integrations. |
+| `wandb` | `bool \| dict` | `False` | `True`, `False`, or WandB options | Enables the optional Weights & Biases integration. |
+| `mlflow` | `bool \| dict` | `False` | `True`, `False`, or MLflow options | Enables the optional Ultralytics-style MLflow integration. |
 
 ## Resume training
 

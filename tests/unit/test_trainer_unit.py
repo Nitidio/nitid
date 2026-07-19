@@ -224,6 +224,25 @@ def test_add_wandb_callback_rejects_invalid_value(trainer):
         trainer._add_wandb_callback("yes")
 
 
+def test_add_mlflow_callback_supports_boolean_and_options(trainer):
+    trainer._add_mlflow_callback(True)
+    default_callback = trainer.callbacks["on_train_start"][0].__self__
+    assert default_callback.tracking_uri is None
+
+    configured_trainer = DFINETrainer(model=trainer.model, cfg={}, device="cpu", names={})
+    configured_trainer._add_mlflow_callback(
+        {"tracking_uri": "runs/custom-mlflow", "experiment_name": "detectors"}
+    )
+    configured_callback = configured_trainer.callbacks["on_train_start"][0].__self__
+    assert configured_callback.tracking_uri == "runs/custom-mlflow"
+    assert configured_callback.experiment_name == "detectors"
+
+
+def test_add_mlflow_callback_rejects_invalid_value(trainer):
+    with pytest.raises(TypeError, match="mlflow must be a bool or a mapping"):
+        trainer._add_mlflow_callback("yes")
+
+
 def test_handle_train_error_notifies_callbacks_and_preserves_error(trainer):
     error = RuntimeError("training failed")
     observed = []

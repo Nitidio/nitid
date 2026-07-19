@@ -166,6 +166,7 @@ class DFINETrainer:
         verbose: bool,
         callbacks: object | None = None,
         wandb: bool | Mapping[str, Any] = False,
+        mlflow: bool | Mapping[str, Any] = False,
     ) -> dict:
         """
         Run the fine-tuning loop.
@@ -187,6 +188,7 @@ class DFINETrainer:
             verbose:    Print per-epoch loss.
             callbacks:  Optional callback mapping or object with lifecycle-hook methods.
             wandb:      Enable WandB with ``True``, or pass WandB callback options.
+            mlflow:     Enable MLflow with ``True``, or pass MLflow callback options.
 
         Returns:
             Metrics dict containing final scalar metrics plus a ``history``
@@ -209,6 +211,7 @@ class DFINETrainer:
         self._reset_callbacks()
         self.add_callbacks(callbacks)
         self._add_wandb_callback(wandb)
+        self._add_mlflow_callback(mlflow)
         resume_state: dict[str, object] | None = None
         if resume:
             resume_state = self._load_resume_state(save_dir)
@@ -488,6 +491,20 @@ class DFINETrainer:
         from dfine.integrations import WandbCallback
 
         self.add_callbacks(WandbCallback(**options))
+
+    def _add_mlflow_callback(self, mlflow: bool | Mapping[str, Any]) -> None:
+        if mlflow is False:
+            return
+        if mlflow is True:
+            options: dict[str, Any] = {}
+        elif isinstance(mlflow, Mapping):
+            options = dict(mlflow)
+        else:
+            raise TypeError("mlflow must be a bool or a mapping of MLflow options")
+
+        from dfine.integrations import MLflowCallback
+
+        self.add_callbacks(MLflowCallback(**options))
 
     def add_callbacks(self, callbacks: object | None) -> None:
         self._register_callbacks(callbacks, self.callbacks)

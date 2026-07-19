@@ -109,6 +109,7 @@ class DFINE:
         verbose: bool = True,
         callbacks: object | None = None,
         wandb: bool | dict[str, Any] = False,
+        mlflow: bool | dict[str, Any] = False,
     ) -> dict:
         """Fine-tune on a custom dataset. Returns final metrics plus per-epoch history."""
         from dfine.trainer import DFINETrainer
@@ -138,6 +139,7 @@ class DFINE:
                 verbose=verbose,
                 callbacks=callbacks,
                 wandb=wandb,
+                mlflow=mlflow,
             )
         except BaseException as error:
             trainer._handle_train_error(error)
