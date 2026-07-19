@@ -232,7 +232,9 @@ Ultralytics style. The most useful callback attributes are:
 | `trainer.current_row` | `dict \| None` | Latest finalized per-epoch metrics row | `on_train_epoch_end`, `on_train_end` |
 | `trainer.current_fitness` | `float` | Latest epoch fitness | `on_train_epoch_end`, `on_train_end` |
 | `trainer.metrics` | `dict \| None` | Final return value from training | `on_train_end` |
+| `trainer.error` | `BaseException \| None` | Exception that interrupted training | `on_train_error` |
 | `trainer.history` | `list[dict]` | Live per-epoch history accumulated so far | all hooks |
+| `trainer.tracking_state` | `dict[str, object]` | Tracker metadata persisted in `last.pth` | all hooks |
 | `trainer.save_dir` | `Path \| None` | Run artifact directory | all hooks |
 | `trainer.results_path` | `Path \| None` | CSV metrics file path | all hooks |
 | `trainer.optimizer` / `trainer.scheduler` / `trainer.criterion` / `trainer.scaler` / `trainer.ema_model` | runtime objects | Active training components | all hooks after setup |
@@ -251,6 +253,173 @@ Supported hooks:
 - `on_val_end`
 - `on_train_epoch_end`
 - `on_train_end`
+- `on_train_error`
+
+`on_train_error` runs when training exits with an exception. Cleanup callbacks
+should use this hook; the original training exception is always re-raised.
+
+### Weights & Biases
+
+Install the optional integration dependency:
+
+```bash
+pip install "nitid[wandb]"
+# or, from a source checkout
+uv sync --extra wandb
+```
+
+Enable logging directly from `train()`, in the same style as Ultralytics:
+
+```python
+from dfine import DFINE
+
+model = DFINE("dfine_s.pth")
+model.train(
+    data="data.yaml",
+    epochs=50,
+    project="runs/train",
+    name="dfine-s-baseline",
+    wandb=True,
+)
+```
+
+`wandb=True` uses the WandB project `nitid` and uses the training `name` as the
+WandB run name. For additional WandB configuration, pass a mapping instead:
+
+```python
+model.train(
+    data="data.yaml",
+    epochs=50,
+    name="dfine-s-baseline",
+    wandb={
+        "project": "nitid-detection",
+        "entity": "my-team",
+        "tags": ["dfine-s", "coco"],
+    },
+)
+```
+
+The integration records the resolved training hyperparameters at run start and
+logs the complete per-epoch row (total and component losses, learning rate,
+validation metrics, timing, and memory). At successful completion it uploads
+`last.pth` and `best.pth` once as versioned model artifacts and writes final
+scalar metrics to the run summary. Set `log_checkpoints=False` if checkpoint
+artifacts are not needed.
+
+Periodic epoch artifacts are opt-in to avoid uploading several full model files
+after every epoch:
+
+```python
+model.train(
+    data="data.yaml",
+    wandb={"checkpoint_interval": 10},  # also upload epoch10.pth, epoch20.pth, ...
+)
+```
+
+The WandB run ID is stored in `last.pth`. Calling `train(resume=True,
+wandb=True)` reconnects to that run with `resume="allow"`, keeping the metrics
+in one continuous WandB run. If training fails, nitid finishes the WandB run
+with a failed exit status before re-raising the original exception.
+
+For local testing without an account or network connection, use offline mode:
+
+```python
+model.train(
+    data="data.yaml",
+    epochs=1,
+    wandb={"project": "nitid-local", "mode": "offline"},
+)
+```
+
+Offline runs are stored in the local `wandb/` directory and can be uploaded
+later with `wandb sync`.
+
+The callback API remains available when direct lifecycle control is useful:
+
+```python
+from dfine.integrations import WandbCallback
+
+tracker = WandbCallback(project="nitid-detection")
+model.train(data="data.yaml", callbacks=tracker)
+```
+
+### MLflow
+
+Install the optional dependency:
+
+```bash
+pip install "nitid[mlflow]"
+# or, from a source checkout
+uv sync --extra mlflow
+```
+
+Enable MLflow directly on training:
+
+```python
+from dfine import DFINE
+
+model = DFINE("dfine_s.pth")
+model.train(
+    data="data.yaml",
+    epochs=50,
+    project="runs/train",
+    name="dfine-s-baseline",
+    mlflow=True,
+)
+```
+
+This follows the Ultralytics MLflow conventions:
+
+- the tracking URI defaults to `runs/mlflow`
+- the experiment defaults to the training `project`
+- the MLflow run name defaults to the training `name`
+- an already-active MLflow run is reused and is not closed by nitid
+- resolved training parameters are logged when training starts
+- losses, learning rate, validation metrics, timing, and memory are logged each epoch
+- checkpoints, CSV results, YAML files, and generated plots are logged at training end
+- initialization and logging failures warn and disable tracking instead of stopping training
+
+The same environment variables supported by Ultralytics take precedence over
+the defaults and Python options:
+
+| Variable | Purpose |
+|----------|---------|
+| `MLFLOW_TRACKING_URI` | Local store or remote tracking-server URI |
+| `MLFLOW_EXPERIMENT_NAME` | Experiment name |
+| `MLFLOW_RUN` | Run name |
+| `MLFLOW_KEEP_RUN_ACTIVE` | Keep a nitid-created run open when set to `1`, `true`, `yes`, `on`, `y`, or `t` (case-insensitive) |
+
+For a fully local workflow, no server is required:
+
+```python
+model.train(data="data.yaml", epochs=2, mlflow=True)
+```
+
+Inspect those results through the MLflow UI:
+
+```bash
+mlflow server --backend-store-uri runs/mlflow
+```
+
+Then open `http://127.0.0.1:5000`. To use a different local store without
+environment variables, pass an options mapping:
+
+```python
+model.train(
+    data="data.yaml",
+    mlflow={
+        "tracking_uri": "runs/custom-mlflow",
+        "experiment_name": "nitid-detection",
+        "run_name": "dfine-s-baseline",
+        "keep_run_active": False,
+        "autolog": True,
+    },
+)
+```
+
+The MLflow run ID is persisted in `last.pth`, so `resume=True, mlflow=True`
+continues the same run. A training exception marks a nitid-created run as
+failed. Advanced users may also pass `MLflowCallback` through `callbacks=`.
 
 Example using a mapping:
 
@@ -316,6 +485,8 @@ Use this table as the authoritative reference for train-time arguments.
 | `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
 | `callbacks` | `object \| dict \| None` | `None` | callback object or hook mapping | Optional lifecycle hooks for custom logging, experiment tracking, or other training-time integrations. |
+| `wandb` | `bool \| dict` | `False` | `True`, `False`, or WandB options | Enables the optional Weights & Biases integration. |
+| `mlflow` | `bool \| dict` | `False` | `True`, `False`, or MLflow options | Enables the optional Ultralytics-style MLflow integration. |
 
 ## Resume training
 

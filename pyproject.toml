@@ -45,6 +45,14 @@ train = [
     "pycocotools>=2.0",
 ]
 
+wandb = [
+    "wandb>=0.17",
+]
+
+mlflow = [
+    "mlflow>=2.14,<3",
+]
+
 web = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
