@@ -100,6 +100,10 @@ class DFINETrainer:
         batch: int,
         lr0: float,
         lrf: float,
+        cos_lr: bool,
+        warmup_epochs: float,
+        warmup_momentum: float,
+        warmup_bias_lr: float,
         optimizer: str,
         resume: bool,
         amp: bool,
@@ -118,9 +122,13 @@ class DFINETrainer:
             imgsz:      Input image size (square).
             batch:      Batch size.
             lr0:        Initial learning rate.
-            lrf:        Final LR as a fraction of lr0 (linear decay).
+            lrf:        Final LR as a fraction of lr0 at the end of training.
+            cos_lr:     Use cosine LR decay instead of linear decay.
+            warmup_epochs: Number of warmup epochs before the main decay schedule.
+            warmup_momentum: Warmup starting momentum/beta1 value.
+            warmup_bias_lr: Warmup starting LR for bias parameters.
             optimizer:  ``"AdamW"`` or ``"SGD"``.
-            resume:     Reserved for future use (checkpoint resume).
+            resume:     Restore the latest run state from ``<project>/<name>/last.pth``.
             amp:        Enable AMP mixed-precision (CUDA only).
             ema:        Enable EMA weight averaging.
             ema_decay:  EMA decay factor (ignored when ``ema=False``).
@@ -138,24 +146,42 @@ class DFINETrainer:
         resume_state: dict[str, object] | None = None
         if resume:
             resume_state = self._load_resume_state(save_dir)
-            data, imgsz, batch, lr0, lrf, optimizer, amp, ema, ema_decay = (
-                self._resolve_resume_args(
-                    resume_state=resume_state,
-                    data=data,
-                    imgsz=imgsz,
-                    batch=batch,
-                    lr0=lr0,
-                    lrf=lrf,
-                    optimizer=optimizer,
-                    amp=amp,
-                    ema=ema,
-                    ema_decay=ema_decay,
-                )
+            (
+                data,
+                imgsz,
+                batch,
+                lr0,
+                lrf,
+                cos_lr,
+                warmup_epochs,
+                warmup_momentum,
+                warmup_bias_lr,
+                optimizer,
+                amp,
+                ema,
+                ema_decay,
+            ) = self._resolve_resume_args(
+                resume_state=resume_state,
+                data=data,
+                imgsz=imgsz,
+                batch=batch,
+                lr0=lr0,
+                lrf=lrf,
+                cos_lr=cos_lr,
+                warmup_epochs=warmup_epochs,
+                warmup_momentum=warmup_momentum,
+                warmup_bias_lr=warmup_bias_lr,
+                optimizer=optimizer,
+                amp=amp,
+                ema=ema,
+                ema_decay=ema_decay,
             )
 
         dataloader = self._build_dataloader(data, imgsz, batch)
         opt = self._build_optimizer(optimizer, lr0)
-        scheduler = self._build_scheduler(opt, epochs, lrf)
+        warmup_epoch_count = max(float(warmup_epochs), 0.0)
+        decay_epochs = max(epochs - int(warmup_epoch_count), 1)
+        scheduler = self._build_scheduler(opt, epochs=decay_epochs, lrf=lrf, cos_lr=cos_lr)
         criterion = self._build_criterion()
 
         # AMP: only meaningful on CUDA
@@ -194,6 +220,9 @@ class DFINETrainer:
             )
             return self._finalize_metrics(history)
 
+        total_batches = len(dataloader)
+        warmup_iters = self._compute_warmup_iters(warmup_epoch_count, total_batches)
+
         for epoch in range(start_epoch, epochs):
             epoch_start = time.perf_counter()
             epoch_loss = 0.0
@@ -214,7 +243,18 @@ class DFINETrainer:
                 disable=not verbose,
             )
 
-            for images, targets in progress:
+            for batch_idx, (images, targets) in enumerate(progress):
+                ni = epoch * total_batches + batch_idx
+                if warmup_iters > 0 and ni < warmup_iters:
+                    self._apply_warmup(
+                        optimizer=opt,
+                        warmup_iter=ni,
+                        total_warmup_iters=warmup_iters,
+                        lr0=lr0,
+                        warmup_momentum=warmup_momentum,
+                        warmup_bias_lr=warmup_bias_lr,
+                    )
+
                 images = images.to(self.device)
                 targets = [
                     {
@@ -264,7 +304,8 @@ class DFINETrainer:
                         postfix[key] = f"{value:.4f}"
                     progress.set_postfix(postfix)
 
-            scheduler.step()
+            if epoch + 1 > warmup_epoch_count:
+                scheduler.step()
             epoch_time = time.perf_counter() - epoch_start
             train_loss = epoch_loss / max(batch_count, 1)
             train_stats = {key: total / max(batch_count, 1) for key, total in loss_sums.items()}
@@ -309,20 +350,24 @@ class DFINETrainer:
                 ema_model=ema_model,
                 history=history,
                 best_fitness=max(best_fitness, fitness),
-                train_args={
-                    "data": data,
-                    "epochs": epochs,
-                    "imgsz": imgsz,
-                    "batch": batch,
-                    "lr0": lr0,
-                    "lrf": lrf,
-                    "optimizer": optimizer,
-                    "amp": amp,
-                    "ema": ema,
-                    "ema_decay": ema_decay,
-                    "project": project,
-                    "name": name,
-                },
+                train_args=self._build_train_args(
+                    data=data,
+                    epochs=epochs,
+                    imgsz=imgsz,
+                    batch=batch,
+                    lr0=lr0,
+                    lrf=lrf,
+                    cos_lr=cos_lr,
+                    warmup_epochs=warmup_epochs,
+                    warmup_momentum=warmup_momentum,
+                    warmup_bias_lr=warmup_bias_lr,
+                    optimizer=optimizer,
+                    amp=amp,
+                    ema=ema,
+                    ema_decay=ema_decay,
+                    project=project,
+                    name=name,
+                ),
             )
             save_checkpoint(
                 save_dir / f"epoch{epoch + 1}.pth",
@@ -364,19 +409,78 @@ class DFINETrainer:
         return build_coco_dataloader(data, split="train", imgsz=imgsz, batch_size=batch)
 
     def _build_optimizer(self, name: str, lr: float):
-        # All parameters share the same lr; D-FINE's param-group logic
-        # (backbone vs encoder/decoder) is reserved for a future iteration.
-        if name == "AdamW":
-            return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-4)
-        if name == "SGD":
-            return torch.optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
-        raise ValueError(f"Unknown optimizer: {name}")
+        # Keep a dedicated bias group so warmup_bias_lr can match Ultralytics-style warmup.
+        weights: list[torch.nn.Parameter] = []
+        biases: list[torch.nn.Parameter] = []
+        for param_name, param in self.model.named_parameters():
+            if not param.requires_grad:
+                continue
+            if param_name.endswith(".bias"):
+                biases.append(param)
+            else:
+                weights.append(param)
 
-    def _build_scheduler(self, opt, epochs: int, lrf: float):
-        # Linear decay: lr starts at lr0, ends at lr0*lrf after `epochs` steps.
-        return torch.optim.lr_scheduler.LinearLR(
-            opt, start_factor=1.0, end_factor=lrf, total_iters=epochs
-        )
+        param_groups: list[dict[str, object]] = []
+        if weights:
+            param_groups.append(
+                {
+                    "params": weights,
+                    "lr": lr,
+                    "initial_lr": lr,
+                    "is_bias_group": False,
+                    "weight_decay": 1e-4 if name == "AdamW" else 0.0,
+                }
+            )
+        if biases:
+            param_groups.append(
+                {
+                    "params": biases,
+                    "lr": lr,
+                    "initial_lr": lr,
+                    "is_bias_group": True,
+                    "weight_decay": 0.0,
+                }
+            )
+
+        optimizer: torch.optim.Optimizer
+        if name == "AdamW":
+            optimizer = torch.optim.AdamW(param_groups, lr=lr, weight_decay=1e-4)
+        elif name == "SGD":
+            optimizer = torch.optim.SGD(param_groups, lr=lr, momentum=0.9)
+        else:
+            raise ValueError(f"Unknown optimizer: {name}")
+
+        for group in optimizer.param_groups:
+            if "momentum" in group:
+                group["target_momentum"] = float(group["momentum"])
+            if "betas" in group:
+                beta1, beta2 = group["betas"]
+                group["target_beta1"] = float(beta1)
+                group["target_beta2"] = float(beta2)
+        return optimizer
+
+    def _build_scheduler(
+        self,
+        opt,
+        epochs: int,
+        lrf: float,
+        cos_lr: bool = False,
+    ):
+        base_scheduler: object
+        epochs = max(int(epochs), 1)
+        base_lr = float(opt.param_groups[0]["lr"])
+
+        if cos_lr:
+            base_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                opt,
+                T_max=epochs,
+                eta_min=base_lr * lrf,
+            )
+        else:
+            base_scheduler = torch.optim.lr_scheduler.LinearLR(
+                opt, start_factor=1.0, end_factor=lrf, total_iters=epochs
+            )
+        return base_scheduler
 
     def _build_criterion(self):
         from dfine.nn.criterion import build_criterion
@@ -402,18 +506,50 @@ class DFINETrainer:
         batch: int,
         lr0: float,
         lrf: float,
+        cos_lr: bool,
+        warmup_epochs: float,
+        warmup_momentum: float,
+        warmup_bias_lr: float,
         optimizer: str,
         amp: bool,
         ema: bool,
         ema_decay: float,
-    ) -> tuple[str, int, int, float, float, str, bool, bool, float]:
+    ) -> tuple[str, int, int, float, float, bool, float, float, float, str, bool, bool, float]:
         training_state = resume_state.get("training_state")
         if not isinstance(training_state, dict):
-            return data, imgsz, batch, lr0, lrf, optimizer, amp, ema, ema_decay
+            return (
+                data,
+                imgsz,
+                batch,
+                lr0,
+                lrf,
+                cos_lr,
+                warmup_epochs,
+                warmup_momentum,
+                warmup_bias_lr,
+                optimizer,
+                amp,
+                ema,
+                ema_decay,
+            )
 
         train_args = training_state.get("train_args")
         if not isinstance(train_args, dict):
-            return data, imgsz, batch, lr0, lrf, optimizer, amp, ema, ema_decay
+            return (
+                data,
+                imgsz,
+                batch,
+                lr0,
+                lrf,
+                cos_lr,
+                warmup_epochs,
+                warmup_momentum,
+                warmup_bias_lr,
+                optimizer,
+                amp,
+                ema,
+                ema_decay,
+            )
 
         current_args: dict[str, object] = {
             "data": data,
@@ -421,6 +557,10 @@ class DFINETrainer:
             "batch": batch,
             "lr0": lr0,
             "lrf": lrf,
+            "cos_lr": cos_lr,
+            "warmup_epochs": warmup_epochs,
+            "warmup_momentum": warmup_momentum,
+            "warmup_bias_lr": warmup_bias_lr,
             "optimizer": optimizer,
             "amp": amp,
             "ema": ema,
@@ -444,6 +584,10 @@ class DFINETrainer:
             _as_int(resolved["batch"]),
             _as_float(resolved["lr0"]),
             _as_float(resolved["lrf"]),
+            bool(resolved["cos_lr"]),
+            _as_float(resolved["warmup_epochs"]),
+            _as_float(resolved["warmup_momentum"]),
+            _as_float(resolved["warmup_bias_lr"]),
             str(resolved["optimizer"]),
             bool(resolved["amp"]),
             bool(resolved["ema"]),
@@ -478,8 +622,11 @@ class DFINETrainer:
         scheduler_state = training_state.get("scheduler")
         if isinstance(scheduler_state, dict):
             scheduler.load_state_dict(scheduler_state)
-            if hasattr(scheduler, "total_iters"):
-                scheduler.total_iters = epochs
+            self._update_scheduler_horizons(
+                scheduler=scheduler,
+                epochs=epochs,
+                train_args=training_state.get("train_args"),
+            )
 
         scaler_state = training_state.get("scaler")
         if scaler is not None and isinstance(scaler_state, dict):
@@ -499,6 +646,91 @@ class DFINETrainer:
         best_fitness = _as_float(training_state.get("best_fitness", float("-inf")), float("-inf"))
         start_epoch = _as_int(resume_state.get("epoch", 0))
         return history, best_fitness, start_epoch
+
+    def _build_train_args(
+        self,
+        data: str,
+        epochs: int,
+        imgsz: int,
+        batch: int,
+        lr0: float,
+        lrf: float,
+        cos_lr: bool,
+        warmup_epochs: float,
+        warmup_momentum: float,
+        warmup_bias_lr: float,
+        optimizer: str,
+        amp: bool,
+        ema: bool,
+        ema_decay: float,
+        project: str,
+        name: str,
+    ) -> dict[str, object]:
+        return {
+            "data": data,
+            "epochs": epochs,
+            "imgsz": imgsz,
+            "batch": batch,
+            "lr0": lr0,
+            "lrf": lrf,
+            "cos_lr": cos_lr,
+            "warmup_epochs": warmup_epochs,
+            "warmup_momentum": warmup_momentum,
+            "warmup_bias_lr": warmup_bias_lr,
+            "optimizer": optimizer,
+            "amp": amp,
+            "ema": ema,
+            "ema_decay": ema_decay,
+            "project": project,
+            "name": name,
+        }
+
+    def _update_scheduler_horizons(
+        self, scheduler, epochs: int, train_args: object | None = None
+    ) -> None:
+        warmup_epochs = 0.0
+        if isinstance(train_args, dict):
+            warmup_epochs = _as_float(train_args.get("warmup_epochs", 0.0))
+        decay_epochs = max(epochs - int(max(warmup_epochs, 0.0)), 1)
+
+        if isinstance(scheduler, torch.optim.lr_scheduler.LinearLR):
+            scheduler.total_iters = decay_epochs
+        elif isinstance(scheduler, torch.optim.lr_scheduler.CosineAnnealingLR):
+            scheduler.T_max = decay_epochs
+
+    def _compute_warmup_iters(self, warmup_epochs: float, total_batches: int) -> int:
+        warmup_epochs = max(float(warmup_epochs), 0.0)
+        total_batches = max(int(total_batches), 0)
+        if warmup_epochs <= 0.0 or total_batches <= 0:
+            return 0
+        return max(int(round(warmup_epochs * total_batches)), 100)
+
+    def _apply_warmup(
+        self,
+        optimizer,
+        warmup_iter: int,
+        total_warmup_iters: int,
+        lr0: float,
+        warmup_momentum: float,
+        warmup_bias_lr: float,
+    ) -> None:
+        if total_warmup_iters <= 0:
+            return
+
+        progress = min((warmup_iter + 1) / total_warmup_iters, 1.0)
+        for group in optimizer.param_groups:
+            target_lr = float(group.get("initial_lr", lr0))
+            start_lr = warmup_bias_lr if bool(group.get("is_bias_group", False)) else 0.0
+            group["lr"] = start_lr + (target_lr - start_lr) * progress
+
+            if "momentum" in group and "target_momentum" in group:
+                target_momentum = float(group["target_momentum"])
+                group["momentum"] = warmup_momentum + (target_momentum - warmup_momentum) * progress
+            elif "betas" in group and "target_beta1" in group and "target_beta2" in group:
+                target_beta1 = float(group["target_beta1"])
+                target_beta2 = float(group["target_beta2"])
+                beta1 = warmup_momentum + (target_beta1 - warmup_momentum) * progress
+                group["betas"] = (beta1, target_beta2)
 
     def _serialize_training_state(
         self,
