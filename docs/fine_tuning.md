@@ -158,7 +158,11 @@ metrics = model.train(
     epochs=50,
     batch=16,
     lr0=1e-4,
-    lrf=0.01,       # final lr = lr0 * lrf (linear decay)
+    lrf=0.01,       # final lr = lr0 * lrf
+    cos_lr=True,
+    warmup_epochs=3,
+    warmup_momentum=0.8,
+    warmup_bias_lr=0.1,
     optimizer="AdamW",
     project="runs/train",
     name="my_experiment",
@@ -287,7 +291,7 @@ uv run dfine train \
 ### Hyperparameter reference
 
 The table below documents the full public `model.train(...)` surface as it
-exists today. Defaults match [`DFINE.train()`](../dfine/model.py).
+exists today. Defaults match [`DFINE.train()`](https://github.com/Vaelsys/nitid/blob/develop/dfine/model.py).
 Use this table as the authoritative reference for train-time arguments.
 
 | Parameter | Type | Default | Valid range / values | Description |
@@ -297,7 +301,11 @@ Use this table as the authoritative reference for train-time arguments.
 | `imgsz` | `int` | `640` | `>= 1` | Square training resolution applied during preprocessing. |
 | `batch` | `int` | `16` | `>= 1` | Number of images per optimizer step. Larger values use more memory. |
 | `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
-| `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier for the linear scheduler. Training ends at `lr0 * lrf`. |
+| `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier. Both linear decay and cosine decay end at `lr0 * lrf`. |
+| `cos_lr` | `bool` | `False` | `True`, `False` | Switches the main schedule from linear decay to cosine decay. |
+| `warmup_epochs` | `float` | `0.0` | `>= 0` | Number of warmup epochs before the main LR schedule begins. Fractional values are allowed. |
+| `warmup_momentum` | `float` | `0.8` | typically `0 <= x <= 1` | Starting momentum or Adam/AdamW beta1 used during warmup. It linearly ramps to the optimizer's target value. |
+| `warmup_bias_lr` | `float` | `0.1` | `>= 0` | Starting learning rate for bias parameters during warmup. Non-bias parameters warm up from `0.0`. |
 | `optimizer` | `str` | `"AdamW"` | `"AdamW"`, `"SGD"` | Optimizer choice. `AdamW` is the default general-purpose option; `SGD` uses momentum `0.9`. |
 | `resume` | `bool` | `False` | `True`, `False` | Restore the latest run state from `project/name/last.pth`. |
 | `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
@@ -335,22 +343,49 @@ metrics = model.train(
 
 nitid restores state from `runs/train/my_experiment/last.pth` and continues at
 the next epoch. The saved run configuration for `data`, `imgsz`, `batch`,
-`lr0`, `lrf`, `optimizer`, `amp`, `ema`, and `ema_decay` is reused so the
+`lr0`, `lrf`, `cos_lr`, `warmup_epochs`, `warmup_momentum`,
+`warmup_bias_lr`, `optimizer`, `amp`, `ema`, and `ema_decay` is reused so the
 training session resumes consistently. If the checkpoint already reached or
 exceeded the requested `epochs`, training does not run again and the saved
 history is returned.
+
+## Cosine LR with warmup
+
+By default, nitid uses linear LR decay. To match the more common Ultralytics
+fine-tuning setup, enable cosine decay and a warmup phase:
+
+```python
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    lr0=1e-4,
+    lrf=0.01,
+    cos_lr=True,
+    warmup_epochs=3,
+    warmup_momentum=0.8,
+    warmup_bias_lr=0.1,
+)
+```
+
+With this configuration, nitid warms up per batch during the first
+`warmup_epochs` epochs, using `warmup_bias_lr` for bias parameters and
+`0.0` for non-bias parameters, while momentum or Adam/AdamW beta1 ramps from
+`warmup_momentum` to the optimizer's target value. After warmup, cosine decay
+reduces the learning rate down to `lr0 * lrf`.
 
 ### Interaction notes
 
 - `amp=True` is only active on CUDA. On CPU, nitid logs a warning and
   continues in FP32.
 - `ema_decay` only matters when `ema=True`.
+- `warmup_epochs=0` disables warmup entirely.
+- `warmup_momentum` affects SGD momentum and Adam/AdamW beta1 during warmup.
 - `device` in `train()` overrides the device selected in `DFINE(...)` for that
   training run only.
 - The current public API does **not** expose `weight_decay` or `grad_clip` as
   train arguments. Internally, `AdamW` uses `weight_decay=1e-4`, SGD uses
   `momentum=0.9`, and gradient clipping is fixed at `max_norm=0.1` in
-  [`DFINETrainer`](../dfine/trainer.py).
+  [`DFINETrainer`](https://github.com/Vaelsys/nitid/blob/develop/dfine/trainer.py).
 
 ## AMP — mixed-precision training
 

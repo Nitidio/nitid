@@ -73,6 +73,8 @@ result = results[0]
 df = result.pandas()
 same_df = result.to_df()
 result.to_csv("out.csv")
+crops = result.crop()          # cropped objects as numpy arrays + metadata
+result.crop(save_dir="crops")  # save crops into class-name folders
 ```
 
 See [fine_tuning.md](fine_tuning.md) for dataset format, optimizers, AMP, EMA,
@@ -175,6 +177,7 @@ boxes_whn = results[0].boxes.xywhn
 
 json_data = results[0].to_json()
 df = results[0].pandas()
+crops = results[0].crop()
 ```
 
 ### Streaming, training, and export
