@@ -14,3 +14,7 @@ nav:
   - Web App: web_app.md
   - API Reference: api_reference.md
   - Troubleshooting: troubleshooting.md
+  - Contributing:
+      - Onboarding: onboarding.md
+      - macOS Docker Setup: macos_docker_setup.md
+      - Public Release Checklist: public_release_checklist.md
