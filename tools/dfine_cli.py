@@ -96,10 +96,12 @@ Options:
   device=DEVICE       cpu, cuda, or cuda:N (default: model device)
   project=PATH        Parent output directory (default: runs/train)
   name=NAME           Run directory name (default: exp)
+  wandb=BOOL          Enable Weights & Biases logging (default: false)
+  mlflow=BOOL         Enable MLflow logging (default: false)
   verbose=BOOL        Print training progress (default: true)
 
 Example:
-  dfine train model=dfine_l.pth data=coco.yaml epochs=50 batch=16 amp=true
+  dfine train model=dfine_l.pth data=coco.yaml epochs=50 batch=16 mlflow=true
 """,
     "val": """\
 Usage:
