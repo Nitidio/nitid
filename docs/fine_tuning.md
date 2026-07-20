@@ -144,6 +144,15 @@ needed when you want a *different* ordering than sorted order.
 from dfine import DFINE
 
 model = DFINE("dfine_l")
+
+def print_epoch_end(trainer):
+    row = trainer.current_row
+    if row is not None:
+        print(
+            f"epoch={row['epoch']} loss={row['loss']:.4f} "
+            f"mAP50-95={row['mAP50-95']:.4f}"
+        )
+
 metrics = model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
@@ -157,6 +166,7 @@ metrics = model.train(
     optimizer="AdamW",
     project="runs/train",
     name="my_experiment",
+    callbacks={"on_train_epoch_end": print_epoch_end},
 )
 print(metrics)
 # {
@@ -190,6 +200,83 @@ be loaded directly with `DFINE("epoch50.pth")`.
 The top-level values are the final epoch summary for backward compatibility.
 Use `metrics["history"]` to inspect per-epoch training and validation metrics,
 including `mAP50` and `mAP50-95`, from within Python.
+
+### Trainer callbacks
+
+Training accepts an optional `callbacks=` argument for extending trainer
+behavior without patching the core loop. Pass either:
+
+- an object with one or more lifecycle-hook methods, each taking `trainer`
+- a mapping from hook name to callable or list of callables, each taking `trainer`
+
+You can also register persistent callbacks on the model in an Ultralytics-like
+way:
+
+```python
+def stop_after_first_epoch(trainer):
+    if trainer.current_epoch == 1:
+        trainer.stop = True
+
+model.add_callback("on_train_epoch_end", stop_after_first_epoch)
+```
+
+Callbacks receive only the active
+[`DFINETrainer`](../dfine/trainer.py) instance, for consistency with the
+Ultralytics style. The most useful callback attributes are:
+
+| Attribute | Type | Meaning | Available |
+|-----------|------|---------|-----------|
+| `trainer.stop` | `bool` | Set to `True` to request a clean stop | all hooks |
+| `trainer.current_epoch` | `int` | 1-based epoch number currently in progress | epoch / val / end hooks |
+| `trainer.current_val_metrics` | `dict \| None` | Latest validation metrics | `on_val_end`, `on_train_epoch_end`, `on_train_end` |
+| `trainer.current_row` | `dict \| None` | Latest finalized per-epoch metrics row | `on_train_epoch_end`, `on_train_end` |
+| `trainer.current_fitness` | `float` | Latest epoch fitness | `on_train_epoch_end`, `on_train_end` |
+| `trainer.metrics` | `dict \| None` | Final return value from training | `on_train_end` |
+| `trainer.history` | `list[dict]` | Live per-epoch history accumulated so far | all hooks |
+| `trainer.save_dir` | `Path \| None` | Run artifact directory | all hooks |
+| `trainer.results_path` | `Path \| None` | CSV metrics file path | all hooks |
+| `trainer.optimizer` / `trainer.scheduler` / `trainer.criterion` / `trainer.scaler` / `trainer.ema_model` | runtime objects | Active training components | all hooks after setup |
+| `trainer.dataloader` | dataloader | Active train dataloader | all hooks after setup |
+| `trainer.train_args` | `dict[str, object]` | Resolved train arguments for this run | all hooks |
+| `trainer.start_epoch` | `int` | Resume start epoch | all hooks |
+
+These are live objects, not deep-copied snapshots. Reading them is safe and
+expected. Mutating `history`, `optimizer`, `scheduler`, or similar attributes
+changes the active training run.
+
+Supported hooks:
+
+- `on_train_start`
+- `on_train_epoch_start`
+- `on_val_end`
+- `on_train_epoch_end`
+- `on_train_end`
+
+Example using a mapping:
+
+```python
+def log_to_tracker(trainer):
+    row = trainer.current_row
+    if row is None:
+        return
+    tracker.log(
+        {
+            "epoch": row["epoch"],
+            "loss": row["loss"],
+            "mAP50": row["mAP50"],
+            "mAP50-95": row["mAP50-95"],
+        }
+    )
+
+model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    callbacks={"on_train_epoch_end": log_to_tracker},
+)
+```
+
+To stop training from a callback, set `trainer.stop = True`. The trainer checks
+this flag at safe lifecycle boundaries and finalizes the run cleanly.
 
 ### CLI
 
@@ -228,6 +315,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
 | `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
+| `callbacks` | `object \| dict \| None` | `None` | callback object or hook mapping | Optional lifecycle hooks for custom logging, experiment tracking, or other training-time integrations. |
 
 ## Resume training
 

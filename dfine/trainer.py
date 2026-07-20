@@ -11,6 +11,7 @@ import resource
 import sys
 import time
 from collections import defaultdict
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
 import torch
@@ -18,6 +19,8 @@ from tqdm.auto import tqdm
 
 from dfine.utils.checkpoint import load_checkpoint_state, save_checkpoint
 from dfine.utils.logging import LOGGER
+
+TrainerCallback = Callable[..., object]
 
 
 def _as_float(value: object, default: float = 0.0) -> float:
@@ -83,14 +86,62 @@ class DFINETrainer:
         (CUDA only; automatically disabled with a warning on CPU).
       - EMA: exponential moving average of weights; the EMA model is saved to
         the checkpoint so it loads directly with ``DFINE(path)``.
+
+    Callback contract:
+      - Callbacks receive the trainer instance only: ``callback(trainer)``.
+      - Persistent callbacks can be registered on the model via
+        ``DFINE.add_callback(...)`` or passed to ``train(callbacks=...)``.
+      - Useful callback attributes include ``stop``, ``current_epoch``,
+        ``current_val_metrics``, ``current_row``, ``current_fitness``,
+        ``metrics``, ``history``, ``save_dir``, ``results_path``,
+        ``optimizer``, ``scheduler``, ``criterion``, ``scaler``, ``ema_model``,
+        ``dataloader``, ``train_args``, and ``start_epoch``.
+      - These attributes are live objects, not deep-copied snapshots.
+        Mutating them affects the active training run.
     """
 
-    def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
+    CALLBACK_EVENTS = (
+        "on_train_start",
+        "on_train_epoch_start",
+        "on_train_epoch_end",
+        "on_val_end",
+        "on_train_end",
+    )
+
+    def __init__(
+        self,
+        model,
+        cfg: dict,
+        device: str,
+        names: dict,
+        callbacks: object | None = None,
+    ) -> None:
         self.model = model
         self.cfg = cfg
         self.device = device
         self.names = names
+        self.stop = False
+        self.current_epoch = 0
+        self.current_val_metrics: dict[str, object] | None = None
+        self.current_row: dict[str, float | int] | None = None
+        self.current_fitness = 0.0
+        self.metrics: dict | None = None
+        self.history: list[dict[str, float | int]] = []
+        self.save_dir: Path | None = None
+        self.results_path: Path | None = None
+        self.dataloader: object | None = None
+        self.optimizer: object | None = None
+        self.scheduler: object | None = None
+        self.criterion: object | None = None
+        self.scaler: torch.cuda.amp.GradScaler | None = None
+        self.ema_model: ModelEMA | None = None
+        self.train_args: dict[str, object] = {}
+        self.start_epoch = 0
         self._display_loss_keys = ("loss_bbox", "loss_giou", "loss_vfl", "loss_fgl")
+        self._base_callbacks = self._empty_callback_registry()
+        self.callbacks = self._empty_callback_registry()
+        self._register_callbacks(callbacks, self._base_callbacks)
+        self._reset_callbacks()
 
     def train(
         self,
@@ -112,6 +163,7 @@ class DFINETrainer:
         project: str,
         name: str,
         verbose: bool,
+        callbacks: object | None = None,
     ) -> dict:
         """
         Run the fine-tuning loop.
@@ -135,6 +187,7 @@ class DFINETrainer:
             project:    Root output directory.
             name:       Run name; checkpoints saved to ``<project>/<name>/``.
             verbose:    Print per-epoch loss.
+            callbacks:  Optional callback mapping or object with lifecycle-hook methods.
 
         Returns:
             Metrics dict containing final scalar metrics plus a ``history``
@@ -143,6 +196,17 @@ class DFINETrainer:
         save_dir = Path(project) / name
         save_dir.mkdir(parents=True, exist_ok=True)
         results_path = save_dir / "results.csv"
+        self.stop = False
+        self.current_epoch = 0
+        self.current_val_metrics = None
+        self.current_row = None
+        self.current_fitness = 0.0
+        self.metrics = None
+        self.history = []
+        self.save_dir = save_dir
+        self.results_path = results_path
+        self._reset_callbacks()
+        self.add_callbacks(callbacks)
         resume_state: dict[str, object] | None = None
         if resume:
             resume_state = self._load_resume_state(save_dir)
@@ -183,6 +247,10 @@ class DFINETrainer:
         decay_epochs = max(epochs - int(warmup_epoch_count), 1)
         scheduler = self._build_scheduler(opt, epochs=decay_epochs, lrf=lrf, cos_lr=cos_lr)
         criterion = self._build_criterion()
+        self.dataloader = dataloader
+        self.optimizer = opt
+        self.scheduler = scheduler
+        self.criterion = criterion
 
         # AMP: only meaningful on CUDA
         is_cuda = self.device.startswith("cuda")
@@ -191,15 +259,37 @@ class DFINETrainer:
             amp = False
         scaler = torch.cuda.amp.GradScaler() if amp else None
         device_type = self.device.split(":")[0]  # "cuda" or "cpu"
+        self.scaler = scaler
 
         # EMA
         ema_model = self._build_ema(ema_decay) if ema else None
+        self.ema_model = ema_model
 
         criterion.train()
         weight_dict = criterion.weight_dict
         history: list[dict[str, float | int]] = []
         best_fitness = float("-inf")
         start_epoch = 0
+        self.train_args = self._build_train_args(
+            data=data,
+            epochs=epochs,
+            imgsz=imgsz,
+            batch=batch,
+            lr0=lr0,
+            lrf=lrf,
+            cos_lr=cos_lr,
+            warmup_epochs=warmup_epochs,
+            warmup_momentum=warmup_momentum,
+            warmup_bias_lr=warmup_bias_lr,
+            optimizer=optimizer,
+            resume=resume,
+            amp=amp,
+            ema=ema,
+            ema_decay=ema_decay,
+            project=project,
+            name=name,
+            verbose=verbose,
+        )
 
         if resume_state is not None:
             history, best_fitness, start_epoch = self._restore_training_state(
@@ -211,6 +301,15 @@ class DFINETrainer:
                 epochs=epochs,
             )
             self._ensure_results_file(results_path, history)
+        self.history = history
+        self.start_epoch = start_epoch
+
+        self._run_callbacks("on_train_start")
+        if self.stop:
+            final_metrics = self._finalize_metrics(history)
+            self.metrics = final_metrics
+            self._run_callbacks("on_train_end")
+            return final_metrics
 
         if start_epoch >= epochs:
             LOGGER.warning(
@@ -218,7 +317,10 @@ class DFINETrainer:
                 start_epoch,
                 epochs,
             )
-            return self._finalize_metrics(history)
+            final_metrics = self._finalize_metrics(history)
+            self.metrics = final_metrics
+            self._run_callbacks("on_train_end")
+            return final_metrics
 
         total_batches = len(dataloader)
         warmup_iters = self._compute_warmup_iters(warmup_epoch_count, total_batches)
@@ -234,6 +336,13 @@ class DFINETrainer:
                 torch.cuda.reset_peak_memory_stats()
 
             self.model.train()
+            self.current_epoch = epoch + 1
+            self.current_val_metrics = None
+            self.current_row = None
+            self.current_fitness = 0.0
+            self._run_callbacks("on_train_epoch_start")
+            if self.stop:
+                break
             progress = tqdm(
                 dataloader,
                 total=len(dataloader),
@@ -321,6 +430,8 @@ class DFINETrainer:
                 save_dir=save_dir,
                 verbose=False,
             )
+            self.current_val_metrics = val_metrics
+            self._run_callbacks("on_val_end")
             primary_losses = self._primary_loss_stats(train_stats)
             scalar_val = self._compact_val_metrics(val_metrics)
 
@@ -350,24 +461,7 @@ class DFINETrainer:
                 ema_model=ema_model,
                 history=history,
                 best_fitness=max(best_fitness, fitness),
-                train_args=self._build_train_args(
-                    data=data,
-                    epochs=epochs,
-                    imgsz=imgsz,
-                    batch=batch,
-                    lr0=lr0,
-                    lrf=lrf,
-                    cos_lr=cos_lr,
-                    warmup_epochs=warmup_epochs,
-                    warmup_momentum=warmup_momentum,
-                    warmup_bias_lr=warmup_bias_lr,
-                    optimizer=optimizer,
-                    amp=amp,
-                    ema=ema,
-                    ema_decay=ema_decay,
-                    project=project,
-                    name=name,
-                ),
+                train_args=self.train_args,
             )
             save_checkpoint(
                 save_dir / f"epoch{epoch + 1}.pth",
@@ -398,10 +492,100 @@ class DFINETrainer:
                     metrics=row,
                 )
 
+            self.current_row = row
+            self.current_fitness = fitness
+            self._run_callbacks("on_train_epoch_end")
+
             if verbose:
                 LOGGER.info(self._format_epoch_row(epoch + 1, epochs, row))
 
-        return self._finalize_metrics(history)
+            if self.stop:
+                break
+
+        final_metrics = self._finalize_metrics(history)
+        self.metrics = final_metrics
+        self._run_callbacks("on_train_end")
+        return final_metrics
+
+    def add_callback(self, event: str, callback: TrainerCallback) -> None:
+        self._add_callback_to_registry(self.callbacks, event, callback)
+
+    def add_callbacks(self, callbacks: object | None) -> None:
+        self._register_callbacks(callbacks, self.callbacks)
+
+    def _normalize_callback_group(self, callback_group: object) -> list[TrainerCallback]:
+        if callable(callback_group):
+            return [callback_group]
+
+        if isinstance(callback_group, Iterable) and not isinstance(callback_group, (str, bytes)):
+            callbacks = list(callback_group)
+            if not all(callable(callback) for callback in callbacks):
+                raise TypeError("Every callback in a callback group must be callable")
+            return callbacks
+
+        raise TypeError("Callbacks must be a callable or an iterable of callables")
+
+    def _empty_callback_registry(self) -> dict[str, list[TrainerCallback]]:
+        return {event: [] for event in self.CALLBACK_EVENTS}
+
+    def _reset_callbacks(self) -> None:
+        self.callbacks = {event: callbacks[:] for event, callbacks in self._base_callbacks.items()}
+
+    def _register_callbacks(
+        self,
+        callbacks: object | None,
+        registry: dict[str, list[TrainerCallback]],
+    ) -> None:
+        if callbacks is None:
+            return
+
+        if isinstance(callbacks, Mapping):
+            for event, callback_group in callbacks.items():
+                for callback in self._normalize_callback_group(callback_group):
+                    self._add_callback_to_registry(registry, str(event), callback)
+            return
+
+        for event in self.CALLBACK_EVENTS:
+            callback_obj = getattr(callbacks, event, None)
+            if callback_obj is None:
+                continue
+            if not callable(callback_obj):
+                raise TypeError(
+                    f"Callback attribute '{event}' must be callable, got "
+                    f"{type(callback_obj).__name__}"
+                )
+            self._add_callback_to_registry(registry, event, callback_obj)
+
+    def _add_callback_to_registry(
+        self,
+        registry: dict[str, list[TrainerCallback]],
+        event: str,
+        callback: TrainerCallback,
+    ) -> None:
+        if event not in registry:
+            supported = ", ".join(self.CALLBACK_EVENTS)
+            raise ValueError(f"Unknown callback event '{event}'. Supported events: {supported}")
+        if not callable(callback):
+            raise TypeError(
+                f"Callback for '{event}' must be callable, got {type(callback).__name__}"
+            )
+        if any(
+            self._callback_identity(existing) == self._callback_identity(callback)
+            for existing in registry[event]
+        ):
+            return
+        registry[event].append(callback)
+
+    def _callback_identity(self, callback: TrainerCallback) -> object:
+        bound_self = getattr(callback, "__self__", None)
+        bound_func = getattr(callback, "__func__", None)
+        if bound_self is not None and bound_func is not None:
+            return (id(bound_self), id(bound_func))
+        return id(callback)
+
+    def _run_callbacks(self, event: str) -> None:
+        for callback in self.callbacks[event]:
+            callback(self)
 
     def _build_dataloader(self, data: str, imgsz: int, batch: int):
         from dfine.utils.data import build_coco_dataloader
@@ -497,6 +681,48 @@ class DFINETrainer:
                 f"resume=True requested but no checkpoint was found at '{checkpoint_path}'"
             )
         return load_checkpoint_state(checkpoint_path)
+
+    def _build_train_args(
+        self,
+        data: str,
+        epochs: int,
+        imgsz: int,
+        batch: int,
+        lr0: float,
+        lrf: float,
+        cos_lr: bool,
+        warmup_epochs: float,
+        warmup_momentum: float,
+        warmup_bias_lr: float,
+        optimizer: str,
+        resume: bool,
+        amp: bool,
+        ema: bool,
+        ema_decay: float,
+        project: str,
+        name: str,
+        verbose: bool,
+    ) -> dict[str, object]:
+        return {
+            "data": data,
+            "epochs": epochs,
+            "imgsz": imgsz,
+            "batch": batch,
+            "lr0": lr0,
+            "lrf": lrf,
+            "cos_lr": cos_lr,
+            "warmup_epochs": warmup_epochs,
+            "warmup_momentum": warmup_momentum,
+            "warmup_bias_lr": warmup_bias_lr,
+            "optimizer": optimizer,
+            "resume": resume,
+            "amp": amp,
+            "ema": ema,
+            "ema_decay": ema_decay,
+            "project": project,
+            "name": name,
+            "verbose": verbose,
+        }
 
     def _resolve_resume_args(
         self,
@@ -646,44 +872,6 @@ class DFINETrainer:
         best_fitness = _as_float(training_state.get("best_fitness", float("-inf")), float("-inf"))
         start_epoch = _as_int(resume_state.get("epoch", 0))
         return history, best_fitness, start_epoch
-
-    def _build_train_args(
-        self,
-        data: str,
-        epochs: int,
-        imgsz: int,
-        batch: int,
-        lr0: float,
-        lrf: float,
-        cos_lr: bool,
-        warmup_epochs: float,
-        warmup_momentum: float,
-        warmup_bias_lr: float,
-        optimizer: str,
-        amp: bool,
-        ema: bool,
-        ema_decay: float,
-        project: str,
-        name: str,
-    ) -> dict[str, object]:
-        return {
-            "data": data,
-            "epochs": epochs,
-            "imgsz": imgsz,
-            "batch": batch,
-            "lr0": lr0,
-            "lrf": lrf,
-            "cos_lr": cos_lr,
-            "warmup_epochs": warmup_epochs,
-            "warmup_momentum": warmup_momentum,
-            "warmup_bias_lr": warmup_bias_lr,
-            "optimizer": optimizer,
-            "amp": amp,
-            "ema": ema,
-            "ema_decay": ema_decay,
-            "project": project,
-            "name": name,
-        }
 
     def _update_scheduler_horizons(
         self, scheduler, epochs: int, train_args: object | None = None
