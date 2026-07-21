@@ -42,6 +42,23 @@ def test_export_torchscript(tiny_checkpoint, tmp_path):
     out.unlink()
 
 
+def test_repeated_export_calls_increment_run_directory(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    first = model.export(
+        format="onnx", imgsz=640, simplify=False, project=str(tmp_path), verbose=False
+    )
+    second = model.export(
+        format="onnx", imgsz=640, simplify=False, project=str(tmp_path), verbose=False
+    )
+
+    assert first.parent == tmp_path / "exp"
+    assert second.parent == tmp_path / "exp2"
+    assert (first.parent / "args.yaml").exists()
+    assert (second.parent / "environment.yaml").exists()
+
+
 def test_export_invalid_format(tiny_checkpoint):
     from dfine import DFINE
 

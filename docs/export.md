@@ -1,5 +1,11 @@
 # Export
 
+Exports are written to `runs/export/exp`, then `exp2`, `exp3`, and so on by
+default. Use `project` and `name`, an exact `save_dir`, or `output` for an exact
+artifact filename. Set `exist_ok=True` only when replacing/reusing an explicit
+destination is intentional. Export files are atomically published, and each run
+includes `args.yaml` and `environment.yaml`.
+
 Export a nitid-wrapped checkpoint to ONNX, TorchScript, or TensorRT for deployment.
 
 ## ONNX

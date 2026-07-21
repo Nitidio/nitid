@@ -64,6 +64,8 @@ class DFINE:
         save: bool = False,
         project: str = "runs/detect",
         name: str = "exp",
+        save_dir: str | Path | None = None,
+        exist_ok: bool = False,
         verbose: bool = True,
         iou: float = 0.85,
     ) -> list | Generator:
@@ -84,6 +86,8 @@ class DFINE:
             save=save,
             project=project,
             name=name,
+            save_dir=save_dir,
+            exist_ok=exist_ok,
             verbose=verbose,
             iou=iou,
         )
@@ -110,6 +114,8 @@ class DFINE:
         device: str | None = None,
         project: str = "runs/train",
         name: str = "exp",
+        save_dir: str | Path | None = None,
+        exist_ok: bool = False,
         verbose: bool = True,
         callbacks: object | None = None,
         wandb: bool | dict[str, Any] = False,
@@ -144,6 +150,8 @@ class DFINE:
                 ema_decay=ema_decay,
                 project=project,
                 name=name,
+                save_dir=save_dir,
+                exist_ok=exist_ok,
                 verbose=verbose,
                 callbacks=callbacks,
                 wandb=wandb,
@@ -202,12 +210,33 @@ class DFINE:
         split: str = "val",
         project: str = "runs/val",
         name: str = "exp",
+        save_dir: str | Path | None = None,
+        exist_ok: bool = False,
         plots: bool = True,
         verbose: bool = True,
     ) -> dict:
         """Evaluate on val/test split. Returns mAP50, mAP50-95, etc."""
+        from dfine.utils.runs import resolve_run_dir, write_run_metadata
         from dfine.validator import DFINEValidator
 
+        resolved_dir = resolve_run_dir(
+            project=project, name=name, save_dir=save_dir, exist_ok=exist_ok
+        )
+        args = {
+            "mode": "val",
+            "data": data,
+            "imgsz": imgsz,
+            "batch": batch,
+            "conf": conf,
+            "split": split,
+            "project": project,
+            "name": name,
+            "save_dir": str(resolved_dir),
+            "exist_ok": exist_ok,
+            "plots": plots,
+            "verbose": verbose,
+        }
+        write_run_metadata(resolved_dir, args)
         validator = DFINEValidator(self._model, self._cfg, self._device_str, self._names)
         return validator.run(
             data=data,
@@ -216,7 +245,7 @@ class DFINE:
             conf=conf,
             split=split,
             verbose=verbose,
-            save_dir=Path(project) / name if plots else None,
+            save_dir=resolved_dir,
             plots=plots,
         )
 
@@ -233,6 +262,11 @@ class DFINE:
         half: bool = False,
         device: str | None = None,
         verbose: bool = True,
+        project: str = "runs/export",
+        name: str = "exp",
+        save_dir: str | Path | None = None,
+        output: str | Path | None = None,
+        exist_ok: bool = False,
     ) -> Path:
         """Export to ONNX, TensorRT, or TorchScript. Returns output path."""
         from dfine.exporter import DFINEExporter
@@ -251,6 +285,11 @@ class DFINE:
             opset=opset,
             half=half,
             verbose=verbose,
+            project=project,
+            name=name,
+            save_dir=save_dir,
+            output=output,
+            exist_ok=exist_ok,
         )
 
     # ── Utilities ───────────────────────────────────────────────────────────

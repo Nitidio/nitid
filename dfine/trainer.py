@@ -167,6 +167,8 @@ class DFINETrainer:
         ema_decay: float,
         project: str,
         name: str,
+        save_dir: str | Path | None,
+        exist_ok: bool,
         verbose: bool,
         callbacks: object | None = None,
         wandb: bool | Mapping[str, Any] = False,
@@ -202,8 +204,15 @@ class DFINETrainer:
             Metrics dict containing final scalar metrics plus a ``history``
             list with one metrics row per epoch.
         """
-        save_dir = Path(project) / name
-        save_dir.mkdir(parents=True, exist_ok=True)
+        from dfine.utils.runs import resolve_run_dir, write_run_metadata
+
+        save_dir = resolve_run_dir(
+            project=project,
+            name=name,
+            save_dir=save_dir,
+            exist_ok=False if not resume else exist_ok,
+            resume=resume,
+        )
         results_path = save_dir / "results.csv"
         self.stop = False
         self.current_epoch = 0
@@ -303,6 +312,9 @@ class DFINETrainer:
             name=name,
             verbose=verbose,
         )
+        self.train_args["save_dir"] = str(save_dir)
+        self.train_args["exist_ok"] = exist_ok
+        write_run_metadata(save_dir, {"mode": "train", **self.train_args})
 
         if resume_state is not None:
             history, best_fitness, start_epoch = self._restore_training_state(

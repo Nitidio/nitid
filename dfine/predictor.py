@@ -52,14 +52,41 @@ class DFINEPredictor:
         save: bool,
         project: str,
         name: str,
+        save_dir: str | Path | None,
+        exist_ok: bool,
         verbose: bool,
         iou: float = 0.85,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
         loader = LoadSource(source, imgsz=imgsz, device=self.device, vid_stride=vid_stride)
-        save_dir = Path(project) / name if save else None
-        if save_dir is not None:
-            save_dir.mkdir(parents=True, exist_ok=True)
+        if save:
+            from dfine.utils.runs import resolve_run_dir, write_run_metadata
+
+            save_dir = resolve_run_dir(
+                project=project, name=name, save_dir=save_dir, exist_ok=exist_ok
+            )
+            write_run_metadata(
+                save_dir,
+                {
+                    "mode": "predict",
+                    "source": source,
+                    "conf": conf,
+                    "imgsz": imgsz,
+                    "classes": classes,
+                    "stream": stream,
+                    "vid_stride": vid_stride,
+                    "augment": augment,
+                    "save": save,
+                    "project": project,
+                    "name": name,
+                    "save_dir": str(save_dir),
+                    "exist_ok": exist_ok,
+                    "verbose": verbose,
+                    "iou": iou,
+                },
+            )
+        else:
+            save_dir = None
         gen = self._infer(loader, conf, classes, augment=augment, iou=iou, save_dir=save_dir)
         return gen if stream else list(gen)
 

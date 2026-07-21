@@ -10,6 +10,7 @@ from pathlib import Path
 import torch
 
 from dfine.utils.logging import LOGGER
+from dfine.utils.runs import atomic_output_path, resolve_run_dir, write_run_metadata
 
 
 class DeployModel(torch.nn.Module):
@@ -46,32 +47,70 @@ class DFINEExporter:
         opset: int,
         half: bool,
         verbose: bool,
+        project: str,
+        name: str,
+        save_dir: str | Path | None,
+        output: str | Path | None,
+        exist_ok: bool,
     ) -> Path:
         format = format.lower()
-        if format == "onnx":
-            return self._to_onnx(imgsz, batch, dynamic, simplify, opset, verbose)
-        if format == "tensorrt":
-            return self._to_tensorrt(imgsz, batch, dynamic, half, verbose)
-        if format == "torchscript":
-            return self._to_torchscript(imgsz, batch, verbose)
-        raise ValueError(
-            f"Unsupported export format: {format!r}. Choose: onnx, tensorrt, torchscript"
+        suffixes = {"onnx": ".onnx", "tensorrt": ".engine", "torchscript": ".torchscript"}
+        if format not in suffixes:
+            raise ValueError(
+                f"Unsupported export format: {format!r}. Choose: onnx, tensorrt, torchscript"
+            )
+        if output is not None:
+            out = Path(output)
+            if out.exists() and not exist_ok:
+                raise FileExistsError(f"Export output already exists: '{out}'")
+            run_dir = out.parent
+            run_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            run_dir = resolve_run_dir(
+                project=project, name=name, save_dir=save_dir, exist_ok=exist_ok
+            )
+            out = run_dir / f"dfine_{imgsz}{suffixes[format]}"
+        write_run_metadata(
+            run_dir,
+            {
+                "mode": "export",
+                "format": format,
+                "imgsz": imgsz,
+                "batch": batch,
+                "dynamic": dynamic,
+                "simplify": simplify,
+                "opset": opset,
+                "half": half,
+                "project": project,
+                "name": name,
+                "save_dir": str(run_dir),
+                "output": str(out),
+                "exist_ok": exist_ok,
+                "verbose": verbose,
+            },
         )
+        if format == "onnx":
+            return self._to_onnx(out, imgsz, batch, dynamic, simplify, opset, verbose)
+        if format == "tensorrt":
+            return self._to_tensorrt(out, imgsz, batch, dynamic, half, verbose)
+        if format == "torchscript":
+            return self._to_torchscript(out, imgsz, batch, verbose)
+        raise AssertionError("unreachable")
 
     # ── ONNX ────────────────────────────────────────────────────────────────
 
-    def _to_onnx(self, imgsz, batch, dynamic, simplify, opset, verbose) -> Path:
+    def _to_onnx(self, out, imgsz, batch, dynamic, simplify, opset, verbose) -> Path:
         import onnx
 
-        out = Path(f"dfine_{imgsz}.onnx")
-        self._export_onnx_to_path(out, imgsz, batch, dynamic, opset)
-        if simplify:
-            import onnxsim
+        with atomic_output_path(out) as temporary:
+            self._export_onnx_to_path(temporary, imgsz, batch, dynamic, opset)
+            if simplify:
+                import onnxsim
 
-            model_onnx = onnx.load(str(out))
-            model_onnx, ok = onnxsim.simplify(model_onnx)
-            if ok:
-                onnx.save(model_onnx, str(out))
+                model_onnx = onnx.load(str(temporary))
+                model_onnx, ok = onnxsim.simplify(model_onnx)
+                if ok:
+                    onnx.save(model_onnx, str(temporary))
         LOGGER.info(f"ONNX export saved to {out}")
         return out
 
@@ -84,8 +123,9 @@ class DFINEExporter:
         from dfine.nn.build import build_postprocessor
 
         # Deploy raw model if available
-        if hasattr(self.model, "deploy"):
+        if hasattr(self.model, "deploy") and not getattr(self.model, "_deployed", False):
             self.model.deploy()
+            self.model._deployed = True
 
         postprocessor: Any = build_postprocessor(self.cfg)
         if hasattr(postprocessor, "deploy"):
@@ -121,7 +161,7 @@ class DFINEExporter:
     # ── TensorRT ─────────────────────────────────────────────────────────────
 
     def _to_tensorrt(
-        self, imgsz: int, batch: int, dynamic: bool, half: bool, verbose: bool
+        self, out: Path, imgsz: int, batch: int, dynamic: bool, half: bool, verbose: bool
     ) -> Path:
         """
         Export to a TensorRT serialised engine via the TRT Python API.
@@ -137,8 +177,6 @@ class DFINEExporter:
             raise ImportError(
                 "TensorRT is not installed. Install it with: uv sync --extra tensorrt"
             ) from None
-
-        out = Path(f"dfine_{imgsz}.engine")
 
         # ── Step 1: trace to a temporary ONNX ────────────────────────────────
         with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
@@ -189,7 +227,8 @@ class DFINEExporter:
             if engine_bytes is None:
                 raise RuntimeError("TensorRT engine build failed — check GPU and TRT logs")
 
-            out.write_bytes(engine_bytes)
+            with atomic_output_path(out) as temporary:
+                temporary.write_bytes(engine_bytes)
 
         finally:
             tmp_onnx.unlink(missing_ok=True)
@@ -199,11 +238,11 @@ class DFINEExporter:
 
     # ── TorchScript ──────────────────────────────────────────────────────────
 
-    def _to_torchscript(self, imgsz, batch, verbose) -> Path:
-        out = Path(f"dfine_{imgsz}.torchscript")
+    def _to_torchscript(self, out, imgsz, batch, verbose) -> Path:
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
         # D-FINE forward returns a dict; strict=False allows tracing dict outputs
         scripted = torch.jit.trace(self.model, dummy, strict=False)
-        scripted.save(str(out))
+        with atomic_output_path(out) as temporary:
+            scripted.save(str(temporary))
         LOGGER.info(f"TorchScript export saved to {out}")
         return out

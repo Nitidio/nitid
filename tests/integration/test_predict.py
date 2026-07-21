@@ -182,6 +182,20 @@ def test_predict_save_writes_annotated_image(tiny_checkpoint, tmp_path):
     assert results[0].save_path == str(save_path)
 
 
+def test_repeated_predict_calls_increment_run_directory(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    frame = _random_frame()
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    first = model.predict(frame, save=True, project=str(tmp_path), verbose=False)
+    second = model.predict(frame, save=True, project=str(tmp_path), verbose=False)
+
+    assert Path(first[0].save_path).parent == tmp_path / "exp"
+    assert Path(second[0].save_path).parent == tmp_path / "exp2"
+    assert (tmp_path / "exp" / "args.yaml").exists()
+    assert (tmp_path / "exp2" / "environment.yaml").exists()
+
+
 def test_predict_save_generates_name_for_numpy_frame(tiny_checkpoint, tmp_path):
     from dfine import DFINE
 

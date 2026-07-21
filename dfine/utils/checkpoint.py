@@ -20,6 +20,8 @@ from pathlib import Path
 
 import torch
 
+from dfine.utils.runs import atomic_output_path
+
 
 def load_checkpoint(path: str | Path, device: str = "cpu"):
     """
@@ -72,14 +74,15 @@ def save_checkpoint(
     training_state: dict | None = None,
 ) -> None:
     """Save a dfine-wrap checkpoint with embedded config."""
-    torch.save(
-        {
-            "model": model.state_dict(),
-            "config": cfg,
-            "names": names,
-            "epoch": epoch,
-            "metrics": metrics or {},
-            "training_state": training_state or {},
-        },
-        str(path),
-    )
+    with atomic_output_path(path) as temporary:
+        torch.save(
+            {
+                "model": model.state_dict(),
+                "config": cfg,
+                "names": names,
+                "epoch": epoch,
+                "metrics": metrics or {},
+                "training_state": training_state or {},
+            },
+            str(temporary),
+        )
