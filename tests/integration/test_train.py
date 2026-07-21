@@ -1,7 +1,6 @@
 """Integration tests for training and validation (Phase 3)."""
 
 import logging
-from pathlib import Path
 
 import pytest
 import torch
@@ -37,6 +36,22 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     assert (tmp_path / "test" / "confusion_matrix.png").exists()
     assert (tmp_path / "test" / "pr_curve.png").exists()
     assert (tmp_path / "test" / "f1_curve.png").exists()
+    assert (tmp_path / "test" / "args.yaml").exists()
+    assert (tmp_path / "test" / "environment.yaml").exists()
+
+
+def test_repeated_train_calls_increment_run_directory(tiny_checkpoint, tiny_dataset, tmp_path):
+    from dfine import DFINE
+
+    for _ in range(2):
+        DFINE(tiny_checkpoint, device="cpu", verbose=False).train(
+            data=tiny_dataset, epochs=1, batch=2, project=str(tmp_path), verbose=False
+        )
+
+    assert (tmp_path / "exp" / "results.csv").exists()
+    assert (tmp_path / "exp2" / "results.csv").exists()
+    assert (tmp_path / "exp" / "args.yaml").exists()
+    assert (tmp_path / "exp2" / "environment.yaml").exists()
 
 
 def test_train_callbacks_receive_lifecycle_events(tiny_checkpoint, tiny_dataset, tmp_path):
@@ -174,17 +189,30 @@ def test_train_args_match_serialized_training_state(tiny_checkpoint, tiny_datase
     assert serialized_train_args["verbose"] is False
 
 
-def test_val_runs(tiny_checkpoint, tiny_dataset):
+def test_val_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     from dfine import DFINE
 
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     metrics = model.val(
-        data=tiny_dataset, batch=2, project="runs/pytest_val", name="exp", verbose=False
+        data=tiny_dataset, batch=2, project=str(tmp_path), name="exp", verbose=False
     )
     assert set(metrics) >= {"mAP50", "mAP50-95", "AR1", "AR100", "precision", "recall", "f1"}
-    assert (Path("runs/pytest_val") / "exp" / "confusion_matrix.png").exists()
-    assert (Path("runs/pytest_val") / "exp" / "pr_curve.png").exists()
-    assert (Path("runs/pytest_val") / "exp" / "f1_curve.png").exists()
+    assert (tmp_path / "exp" / "confusion_matrix.png").exists()
+    assert (tmp_path / "exp" / "pr_curve.png").exists()
+    assert (tmp_path / "exp" / "f1_curve.png").exists()
+
+
+def test_repeated_val_calls_increment_run_directory(tiny_checkpoint, tiny_dataset, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    model.val(data=tiny_dataset, batch=2, project=str(tmp_path), verbose=False)
+    model.val(data=tiny_dataset, batch=2, project=str(tmp_path), verbose=False)
+
+    assert (tmp_path / "exp" / "args.yaml").exists()
+    assert (tmp_path / "exp2" / "environment.yaml").exists()
+    assert (tmp_path / "exp" / "confusion_matrix.png").exists()
+    assert (tmp_path / "exp2" / "confusion_matrix.png").exists()
 
 
 def test_val_return_format_includes_per_class_and_summary_fields(tiny_checkpoint, tiny_dataset):

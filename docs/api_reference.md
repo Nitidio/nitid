@@ -1,5 +1,18 @@
 # API Reference
 
+## Run output behavior
+
+Artifact-producing calls allocate unique directories by default: `exp`, `exp2`,
+`exp3`, and so on. Pass `save_dir` to choose the requested directory directly and
+`exist_ok=True` to deliberately reuse it for prediction, validation, or export.
+Training never reuses an existing directory unless `resume=True`; non-resume
+training increments even when `exist_ok=True`. Every run stores `args.yaml` and
+`environment.yaml` alongside its artifacts.
+
+Exports default to `runs/export/exp/dfine_640.onnx` (with the appropriate format
+suffix). Use `output="path/model.onnx"` for an exact artifact path. Checkpoints and
+export artifacts are published atomically.
+
 ## `DFINE`
 
 ```python
