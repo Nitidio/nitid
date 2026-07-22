@@ -84,6 +84,8 @@ class DFINEValidator:
         verbose: bool,
         save_dir: str | Path | None = None,
         plots: bool = True,
+        classes: list[int] | None = None,
+        single_cls: bool = False,
     ) -> dict:
         """
         Evaluate on a COCO-format dataset split.
@@ -109,6 +111,8 @@ class DFINEValidator:
             imgsz=imgsz,
             batch_size=batch,
             spec=spec,
+            classes=classes,
+            single_cls=single_cls,
         )
 
         postprocessor = build_postprocessor(self.cfg)

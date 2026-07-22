@@ -38,7 +38,7 @@ import torch
 import torchvision.transforms as T
 import yaml
 from PIL import Image
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 
 from dfine.utils.logging import LOGGER
 
@@ -122,6 +122,9 @@ class CocoFinetuneDataset(Dataset):
         ann_file: str | Path,
         imgsz: int,
         cat_id_to_label: dict[int, int] | None = None,
+        classes: list[int] | None = None,
+        single_cls: bool = False,
+        cache: bool | str = False,
     ) -> None:
         from pycocotools.coco import COCO
 
@@ -135,6 +138,15 @@ class CocoFinetuneDataset(Dataset):
             sorted_cat_ids = sorted(self.coco.cats)
             cat_id_to_label = {c: i for i, c in enumerate(sorted_cat_ids)}
         self.cat_id_to_label = cat_id_to_label
+        self.classes = set(classes) if classes is not None else None
+        self.single_cls = single_cls
+        self.cache = cache
+        self._image_cache: dict[int, torch.Tensor] = {}
+        if cache is True or str(cache).lower() == "ram":
+            for index in range(len(self.ids)):
+                self._image_cache[index] = self._load_image(index)
+        elif cache not in (False, None, "false"):
+            raise ValueError("cache must be False, True, or 'ram'")
 
     def __len__(self) -> int:
         return len(self.ids)
@@ -142,8 +154,8 @@ class CocoFinetuneDataset(Dataset):
     def __getitem__(self, idx: int):
         img_id = self.ids[idx]
         info = self.coco.imgs[img_id]
-        img = Image.open(self.img_dir / info["file_name"]).convert("RGB")
-        width, height = img.size
+        with Image.open(self.img_dir / info["file_name"]) as image:
+            width, height = image.size
 
         anns = self.coco.loadAnns(self.coco.getAnnIds(imgIds=img_id, iscrowd=False))
         boxes, labels = [], []
@@ -151,15 +163,26 @@ class CocoFinetuneDataset(Dataset):
             x, y, w, h = ann["bbox"]
             if w <= 0 or h <= 0:
                 continue
+            label = self.cat_id_to_label.get(ann["category_id"], 0)
+            if self.classes is not None and label not in self.classes:
+                continue
             boxes.append([(x + w / 2) / width, (y + h / 2) / height, w / width, h / height])
-            labels.append(self.cat_id_to_label.get(ann["category_id"], 0))
+            labels.append(0 if self.single_cls else label)
 
         target = {
             "labels": torch.tensor(labels, dtype=torch.long),
             "boxes": torch.tensor(boxes, dtype=torch.float32).reshape(-1, 4),
             "image_id": torch.tensor([img_id], dtype=torch.long),
         }
-        return self.transform(img), target
+        image_tensor = self._image_cache.get(idx)
+        if image_tensor is None:
+            image_tensor = self._load_image(idx)
+        return image_tensor.clone(), target
+
+    def _load_image(self, idx: int) -> torch.Tensor:
+        info = self.coco.imgs[self.ids[idx]]
+        with Image.open(self.img_dir / info["file_name"]) as image:
+            return self.transform(image.convert("RGB"))
 
 
 def _collate(batch):
@@ -174,6 +197,13 @@ def build_detection_dataloader(
     imgsz: int,
     batch_size: int,
     spec: DetectionSplitSpec | None = None,
+    workers: int = 0,
+    cache: bool | str = False,
+    seed: int = 0,
+    deterministic: bool = True,
+    classes: list[int] | None = None,
+    single_cls: bool = False,
+    fraction: float = 1.0,
 ) -> DataLoader:
     """Build a DataLoader from COCO JSON or YOLO txt labels."""
     cfg = load_data_yaml(data)
@@ -182,20 +212,37 @@ def build_detection_dataloader(
     cat_ids_cfg = cfg.get("cat_ids")
     cat_id_to_label = {int(k): int(v) for k, v in cat_ids_cfg.items()} if cat_ids_cfg else None
 
-    dataset = CocoFinetuneDataset(
+    base_dataset = CocoFinetuneDataset(
         img_dir=spec.img_dir,
         ann_file=spec.ann_file,
         imgsz=imgsz,
         cat_id_to_label=cat_id_to_label,
+        classes=classes,
+        single_cls=single_cls,
+        cache=cache,
     )
 
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError("fraction must be in the range (0, 1]")
+    dataset: Dataset = base_dataset
+    dataset_size = len(base_dataset)
+    if fraction < 1.0:
+        count = max(1, int(len(base_dataset) * fraction))
+        generator = torch.Generator().manual_seed(seed)
+        indices = torch.randperm(len(base_dataset), generator=generator)[:count].tolist()
+        dataset = Subset(base_dataset, indices)
+        dataset_size = count
+
+    generator = torch.Generator().manual_seed(seed)
     return DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=(split == "train"),
-        num_workers=0,
+        shuffle=split == "train",
+        num_workers=workers,
         collate_fn=_collate,
-        drop_last=(split == "train"),
+        drop_last=split == "train" and dataset_size >= batch_size,
+        generator=generator,
+        worker_init_fn=_seed_worker if workers > 0 and deterministic else None,
     )
 
 
@@ -205,9 +252,21 @@ def build_coco_dataloader(
     imgsz: int,
     batch_size: int,
     spec: DetectionSplitSpec | None = None,
+    **kwargs,
 ) -> DataLoader:
     """Backward-compatible alias for the generalized detection dataloader."""
-    return build_detection_dataloader(data, split, imgsz, batch_size, spec=spec)
+    return build_detection_dataloader(data, split, imgsz, batch_size, spec=spec, **kwargs)
+
+
+def _seed_worker(worker_id: int) -> None:
+    del worker_id
+    import random
+
+    import numpy as np
+
+    worker_seed = torch.initial_seed() % (2**32)
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
 
 
 def convert_yolo_split_to_coco_json(

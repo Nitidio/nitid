@@ -1,5 +1,7 @@
 """Unit tests for DFINETrainer helper methods (no D-FINE submodule needed)."""
 
+import itertools
+
 import pytest
 import torch
 import torch.nn as nn
@@ -48,6 +50,68 @@ def test_build_optimizer_splits_bias_group(trainer):
 def test_build_optimizer_invalid(trainer):
     with pytest.raises(ValueError, match="Unknown optimizer"):
         trainer._build_optimizer("LAMB", lr=1e-3)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Adam", torch.optim.Adam),
+        ("RAdam", torch.optim.RAdam),
+        ("NAdam", torch.optim.NAdam),
+        ("RMSprop", torch.optim.RMSprop),
+        ("Auto", torch.optim.AdamW),
+    ],
+)
+def test_build_optimizer_expanded_choices(trainer, name, expected):
+    assert isinstance(trainer._build_optimizer(name, lr=1e-3), expected)
+
+
+def test_time_limit_overrides_epoch_limit(trainer):
+    assert list(trainer._epoch_iterator(0, 2, None)) == [0, 1]
+    assert list(itertools.islice(trainer._epoch_iterator(0, 2, 1.0), 4)) == [0, 1, 2, 3]
+
+
+@pytest.mark.parametrize("batch", ["auto", -1, 0, 0.5, True])
+def test_batch_requires_positive_integer(trainer, batch):
+    with pytest.raises(ValueError, match="positive integer"):
+        trainer._validate_batch_size(batch)
+
+
+def test_freeze_parameter_pattern(trainer):
+    frozen = trainer._apply_freeze("l.weight")
+
+    assert frozen == trainer.model.l.weight.numel()
+    assert trainer.model.l.weight.requires_grad is False
+    assert trainer.model.l.bias.requires_grad is True
+
+
+def test_resume_restores_all_saved_controls_with_warning(trainer, caplog):
+    saved = {
+        "patience": 7,
+        "save_period": 3,
+        "workers": 2,
+        "freeze": ["backbone"],
+        "classes": [0, 2],
+        "accumulate": 4,
+        "multi_scale": True,
+        "time": 1.5,
+    }
+    state = {"training_state": {"train_args": saved}}
+    current = {
+        "patience": 100,
+        "save_period": 1,
+        "workers": 0,
+        "freeze": None,
+        "classes": None,
+        "accumulate": 1,
+        "multi_scale": False,
+        "time": None,
+    }
+
+    resolved = trainer._resolve_resume_args(state, current)
+
+    assert resolved == saved
+    assert "restored saved value" in caplog.text
 
 
 def test_build_scheduler(trainer):

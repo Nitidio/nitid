@@ -90,7 +90,12 @@ Options:
   batch=INT           Batch size (default: 16)
   lr0=FLOAT           Initial learning rate (default: 0.0001)
   lrf=FLOAT           Final learning-rate factor (default: 0.01)
-  optimizer=NAME      AdamW or SGD (default: AdamW)
+  optimizer=NAME      Auto, Adam, AdamW, SGD, RAdam, NAdam, or RMSprop (default: AdamW)
+  momentum=FLOAT      SGD momentum or Adam beta1 (default: 0.9)
+  weight_decay=FLOAT  Weight decay (default: 0.0001)
+  clip_grad=FLOAT     Maximum gradient norm; 0 disables (default: 0.1)
+  patience=INT        Early-stopping patience; 0 disables (default: 100)
+  time=FLOAT          Training duration in hours; overrides epochs
   resume=BOOL         Resume a previous run (default: false)
   amp=BOOL            Enable mixed precision on CUDA (default: false)
   ema=BOOL            Enable exponential moving average (default: false)
@@ -100,6 +105,21 @@ Options:
   name=NAME           Run directory name (default: exp)
   save_dir=PATH       Exact run directory override
   exist_ok=BOOL       Accepted for API parity; non-resume training still increments
+  save=BOOL           Save last/best checkpoints (default: true)
+  save_period=INT     Periodic checkpoint interval; -1 disables (default: 1)
+  val=BOOL            Run validation during training (default: true)
+  val_period=INT      Validate every N epochs (default: 1)
+  plots=BOOL          Save training/validation plots (default: true)
+  workers=INT         Data-loading worker processes (default: 0)
+  cache=BOOL          Cache resized training images in RAM (default: false)
+  seed=INT            Random seed (default: 0)
+  deterministic=BOOL  Request deterministic algorithms (default: true)
+  freeze=VALUE        Layer count, stage, glob, or list to freeze
+  classes=LIST        Train only selected class IDs, e.g. classes=[0,2]
+  single_cls=BOOL     Treat all selected classes as one class (default: false)
+  fraction=FLOAT      Fraction of training images to use (default: 1.0)
+  accumulate=INT      Gradient accumulation steps (default: 1)
+  multi_scale=BOOL    Randomly resize batches during training (default: false)
   wandb=BOOL          Enable Weights & Biases logging (default: false)
   mlflow=BOOL         Enable MLflow logging (default: false)
   verbose=BOOL        Print training progress (default: true)
@@ -214,6 +234,12 @@ def _coerce(v: str):
         return float(v)
     except ValueError:
         pass
+    if v.startswith("[") and v.endswith("]"):
+        import yaml
+
+        value = yaml.safe_load(v)
+        if isinstance(value, list):
+            return value
     return v
 
 
