@@ -50,6 +50,8 @@ Options:
   save=BOOL           Save annotated images (default: false)
   project=PATH        Parent output directory when save=true (default: runs/detect)
   name=NAME           Run directory name when save=true (default: exp)
+  save_dir=PATH       Exact output directory override
+  exist_ok=BOOL       Reuse the requested directory (default: false)
   verbose=BOOL        Print prediction progress (default: true)
 
 Examples:
@@ -96,6 +98,8 @@ Options:
   device=DEVICE       cpu, cuda, or cuda:N (default: model device)
   project=PATH        Parent output directory (default: runs/train)
   name=NAME           Run directory name (default: exp)
+  save_dir=PATH       Exact run directory override
+  exist_ok=BOOL       Accepted for API parity; non-resume training still increments
   wandb=BOOL          Enable Weights & Biases logging (default: false)
   mlflow=BOOL         Enable MLflow logging (default: false)
   verbose=BOOL        Print training progress (default: true)
@@ -118,6 +122,8 @@ Options:
   split=NAME          Dataset split: val or test (default: val)
   project=PATH        Output root for validation artifacts (default: runs/val)
   name=NAME           Validation run name (default: exp)
+  save_dir=PATH       Exact output directory override
+  exist_ok=BOOL       Reuse the requested directory (default: false)
   plots=BOOL          Save PR/confusion plots and results.png (default: true)
   verbose=BOOL        Print validation progress (default: true)
 
@@ -138,6 +144,11 @@ Options:
   opset=INT           ONNX opset version (default: 17)
   half=BOOL           Enable FP16 TensorRT export (default: false)
   device=DEVICE       cpu, cuda, or cuda:N (default: model device)
+  project=PATH        Export run root (default: runs/export)
+  name=NAME           Export run name (default: exp)
+  save_dir=PATH       Exact export run directory override
+  output=PATH         Exact exported artifact path
+  exist_ok=BOOL       Reuse/replace an explicit destination (default: false)
   verbose=BOOL        Print export progress (default: true)
 
 Examples:
