@@ -308,7 +308,7 @@ class DFINE:
         output: str | Path | None = None,
         exist_ok: bool = False,
     ) -> Path:
-        """Export to ONNX, TensorRT, or TorchScript. Returns output path."""
+        """Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path."""
         from dfine.exporter import DFINEExporter
 
         exporter = DFINEExporter(

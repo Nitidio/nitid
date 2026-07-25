@@ -279,23 +279,24 @@ metrics = model.val(
 
 ### `export()`
 
-Export to ONNX, TorchScript, or TensorRT. See [export.md](export.md).
+Export to ONNX, OpenVINO IR, TorchScript, or TensorRT. See [export.md](export.md).
 
 ```python
 model.export(format="onnx")        # → dfine_640.onnx
+model.export(format="openvino")    # → dfine_640.xml + dfine_640.bin
 model.export(format="torchscript") # → dfine_640.torchscript
 model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt installation)
 ```
 
 | Argument    | Default  | Description |
 |-------------|----------|-------------|
-| `format`    | `"onnx"` | `"onnx"`, `"torchscript"`, or `"tensorrt"` |
+| `format`    | `"onnx"` | `"onnx"`, `"openvino"`, `"torchscript"`, or `"tensorrt"` |
 | `imgsz`     | 640      | Must match model's `eval_spatial_size` |
 | `batch`     | 1        | Static batch size |
-| `dynamic`   | `False`  | Dynamic batch axis (ONNX and TensorRT) |
-| `simplify`  | `True`   | Run onnxsim after export (ONNX only) |
-| `opset`     | 17       | ONNX opset version (ONNX only) |
-| `half`      | `False`  | FP16 precision (TensorRT only) |
+| `dynamic`   | `False`  | Dynamic batch axis (ONNX, OpenVINO, and TensorRT) |
+| `simplify`  | `True`   | Simplify the intermediate ONNX graph (ONNX and OpenVINO) |
+| `opset`     | 17       | ONNX opset version (ONNX and OpenVINO) |
+| `half`      | `False`  | FP16 precision/weight compression (OpenVINO and TensorRT) |
 | `device`    | `None`   | Override export device |
 | `verbose`   | `True`   | Print export progress |
 

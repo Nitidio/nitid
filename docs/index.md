@@ -9,7 +9,7 @@ It provides a familiar API for inference, training, validation, export, and depl
 - Ultralytics-style Python API
 - Simple command-line interface
 - Fine-tuning and validation
-- ONNX, TorchScript, and TensorRT export
+- ONNX, OpenVINO IR, TorchScript, and TensorRT export
 - FastAPI web application
 - Self-contained wrapped checkpoints
 

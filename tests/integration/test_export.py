@@ -1,4 +1,4 @@
-"""Integration tests for model export (ONNX, TorchScript, TensorRT)."""
+"""Integration tests for model export (ONNX, OpenVINO, TorchScript, TensorRT)."""
 
 import pytest
 
@@ -40,6 +40,41 @@ def test_export_torchscript(tiny_checkpoint, tmp_path):
     assert out.exists()
     assert out.suffix == ".torchscript"
     out.unlink()
+
+
+def test_export_openvino(tiny_checkpoint, tmp_path):
+    ov = pytest.importorskip("openvino", reason="openvino not installed")
+    import numpy as np
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="openvino",
+        imgsz=640,
+        simplify=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert out.suffix == ".xml"
+    assert out.is_file()
+    assert out.with_suffix(".bin").is_file()
+
+    compiled = ov.Core().compile_model(out, "CPU")
+    results = compiled([np.zeros((1, 3, 640, 640), dtype=np.float32)])
+    assert len(results) == 3
+
+
+def test_export_openvino_missing_package(tiny_checkpoint, monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "openvino", None)
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    with pytest.raises(ImportError, match="uv sync --extra openvino"):
+        model.export(format="openvino", imgsz=640, simplify=False, verbose=False)
 
 
 def test_repeated_export_calls_increment_run_directory(tiny_checkpoint, tmp_path):
