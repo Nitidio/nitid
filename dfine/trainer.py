@@ -9,6 +9,7 @@ import copy
 import csv
 import fnmatch
 import itertools
+import math
 import random
 import resource
 import sys
@@ -526,7 +527,7 @@ class DFINETrainer:
 
                 images = images.to(self.device)
                 if multi_scale:
-                    size = random.randrange(max(32, imgsz // 2), imgsz * 3 // 2 + 32, 32)
+                    size = self._random_multi_scale_size(imgsz)
                     images = torch.nn.functional.interpolate(
                         images, size=(size, size), mode="bilinear", align_corners=False
                     )
@@ -992,6 +993,13 @@ class DFINETrainer:
         if isinstance(batch, bool) or not isinstance(batch, int) or batch < 1:
             raise ValueError("batch must be a positive integer")
         return batch
+
+    @staticmethod
+    def _random_multi_scale_size(imgsz: int, stride: int = 32) -> int:
+        """Select a 0.5x–1.5x training size aligned to the model stride."""
+        lower = max(1, math.ceil((imgsz * 0.5) / stride))
+        upper = max(lower, math.floor((imgsz * 1.5) / stride))
+        return random.randint(lower, upper) * stride
 
     def _apply_freeze(self, freeze: int | list[int | str] | str | None) -> int:
         for parameter in self.model.parameters():

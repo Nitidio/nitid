@@ -77,6 +77,13 @@ def test_batch_requires_positive_integer(trainer, batch):
         trainer._validate_batch_size(batch)
 
 
+def test_multi_scale_sizes_are_stride_aligned(trainer):
+    sizes = [trainer._random_multi_scale_size(800) for _ in range(100)]
+
+    assert all(size % 32 == 0 for size in sizes)
+    assert all(400 <= size <= 1200 for size in sizes)
+
+
 def test_freeze_parameter_pattern(trainer):
     frozen = trainer._apply_freeze("l.weight")
 
