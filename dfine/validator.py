@@ -58,6 +58,25 @@ def _as_float(value: object, default: float = 0.0) -> float:
     return default
 
 
+@contextlib.contextmanager
+def _dynamic_eval_geometry(model, imgsz: int):
+    """Use dynamic encoder positions and decoder anchors for non-native eval sizes."""
+    changed: list[tuple[torch.nn.Module, object]] = []
+    requested_size = (imgsz, imgsz)
+    for module in model.modules():
+        if not hasattr(module, "eval_spatial_size"):
+            continue
+        configured_size = getattr(module, "eval_spatial_size")
+        if configured_size is not None and tuple(configured_size) != requested_size:
+            changed.append((module, configured_size))
+            setattr(module, "eval_spatial_size", None)
+    try:
+        yield
+    finally:
+        for module, configured_size in changed:
+            setattr(module, "eval_spatial_size", configured_size)
+
+
 class DFINEValidator:
     """
     Runs COCO-style bounding-box evaluation against a labelled split.
@@ -84,6 +103,8 @@ class DFINEValidator:
         verbose: bool,
         save_dir: str | Path | None = None,
         plots: bool = True,
+        classes: list[int] | None = None,
+        single_cls: bool = False,
     ) -> dict:
         """
         Evaluate on a COCO-format dataset split.
@@ -109,6 +130,8 @@ class DFINEValidator:
             imgsz=imgsz,
             batch_size=batch,
             spec=spec,
+            classes=classes,
+            single_cls=single_cls,
         )
 
         postprocessor = build_postprocessor(self.cfg)
@@ -124,7 +147,7 @@ class DFINEValidator:
         coco_results: list[dict[str, object]] = []
 
         self.model.eval()
-        with torch.no_grad():
+        with _dynamic_eval_geometry(self.model, imgsz), torch.no_grad():
             for images, targets in dataloader:
                 images = images.to(self.device)
                 orig_sizes = torch.tensor(

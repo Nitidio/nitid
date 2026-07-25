@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from tools.dfine_cli import COMMAND_HELP, COMMANDS, main
+from tools.dfine_cli import COMMAND_HELP, COMMANDS, main, parse_args
 
 
 @pytest.mark.parametrize(
@@ -62,3 +62,13 @@ def test_unknown_command_exits_with_error(capsys):
     output = capsys.readouterr().out
     assert "ERROR: unknown command 'unknown'" in output
     assert "Commands:" in output
+
+
+def test_train_cli_parses_list_controls():
+    command, args = parse_args(
+        ["dfine", "train", "data=data.yml", "classes=[0,2]", "freeze=[backbone,decoder]"]
+    )
+
+    assert command == "train"
+    assert args["classes"] == [0, 2]
+    assert args["freeze"] == ["backbone", "decoder"]

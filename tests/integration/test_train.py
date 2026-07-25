@@ -54,6 +54,72 @@ def test_repeated_train_calls_increment_run_directory(tiny_checkpoint, tiny_data
     assert (tmp_path / "exp2" / "environment.yaml").exists()
 
 
+def test_train_early_stopping_reports_best_epoch(
+    tiny_checkpoint, tiny_dataset, tmp_path, monkeypatch
+):
+    from dfine import DFINE
+    from dfine.trainer import DFINETrainer
+
+    def constant_validation(self, **kwargs):
+        return {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "mAP50": 0.5,
+            "mAP50-95": 0.5,
+            "fitness": 0.5,
+        }
+
+    monkeypatch.setattr(DFINETrainer, "_validate_epoch", constant_validation)
+    metrics = DFINE(tiny_checkpoint, device="cpu", verbose=False).train(
+        data=tiny_dataset,
+        epochs=5,
+        batch=2,
+        patience=1,
+        plots=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert len(metrics["history"]) == 2
+    assert metrics["best_epoch"] == 1
+
+
+def test_train_gradient_accumulation_reduces_optimizer_steps(
+    tiny_checkpoint, tiny_dataset, tmp_path, monkeypatch
+):
+    from dfine import DFINE
+    from dfine.trainer import ModelEMA
+
+    observed = {"steps": 0, "batches": 0}
+    original_update = ModelEMA.update
+
+    def count_update(self, model):
+        observed["steps"] += 1
+        return original_update(self, model)
+
+    monkeypatch.setattr(ModelEMA, "update", count_update)
+
+    class CountSteps:
+        def on_train_start(self, trainer):
+            observed["batches"] = len(trainer.dataloader)
+
+    DFINE(tiny_checkpoint, device="cpu", verbose=False).train(
+        data=tiny_dataset,
+        epochs=1,
+        batch=1,
+        accumulate=2,
+        ema=True,
+        val=False,
+        plots=False,
+        project=str(tmp_path),
+        verbose=False,
+        callbacks=CountSteps(),
+    )
+
+    assert observed["steps"] == (observed["batches"] + 1) // 2
+
+
 def test_train_callbacks_receive_lifecycle_events(tiny_checkpoint, tiny_dataset, tmp_path):
     from dfine import DFINE
 
@@ -187,6 +253,28 @@ def test_train_args_match_serialized_training_state(tiny_checkpoint, tiny_datase
     assert observed_train_args == serialized_train_args
     assert serialized_train_args["resume"] is False
     assert serialized_train_args["verbose"] is False
+    assert set(serialized_train_args) >= {
+        "patience",
+        "save",
+        "save_period",
+        "val",
+        "plots",
+        "val_period",
+        "workers",
+        "cache",
+        "seed",
+        "deterministic",
+        "momentum",
+        "weight_decay",
+        "clip_grad",
+        "freeze",
+        "classes",
+        "single_cls",
+        "fraction",
+        "accumulate",
+        "multi_scale",
+        "time",
+    }
 
 
 def test_val_runs(tiny_checkpoint, tiny_dataset, tmp_path):

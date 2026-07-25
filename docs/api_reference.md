@@ -186,7 +186,7 @@ metrics = model.train(
     batch=16,
     lr0=1e-4,
     lrf=0.01,
-    optimizer="AdamW",   # or "SGD"
+    optimizer="AdamW",   # Auto, Adam, AdamW, SGD, RAdam, NAdam, or RMSprop
     resume=False,        # resume from project/name/last.pth
     amp=False,           # FP16 mixed precision (CUDA only)
     ema=False,           # EMA weight averaging
@@ -210,9 +210,40 @@ metrics = model.train(
 The top-level values summarize the final epoch. `metrics["history"]` contains
 one row per epoch with training loss terms and validation metrics.
 
+Training controls added to the public API:
+
+| Argument | Type / default | Meaning |
+|---|---|---|
+| `batch` | `int = 16` | Explicit positive batch size. |
+| `optimizer` | `str = "AdamW"` | Auto, Adam, AdamW, SGD, RAdam, NAdam, or RMSprop; Auto predictably selects AdamW. |
+| `momentum` | `float = 0.9` | SGD momentum or Adam-family beta1. |
+| `weight_decay` | `float = 1e-4` | Non-bias weight decay. |
+| `clip_grad` | `float = 0.1` | Maximum gradient norm; zero disables clipping. |
+| `patience` | `int = 100` | Validated epochs without improvement before stopping; zero disables. |
+| `save` | `bool = True` | Save checkpoint artifacts. |
+| `save_period` | `int = 1` | Periodic `epochN.pth` interval; `-1` disables periodic files. |
+| `val` | `bool = True` | Enable validation during training. |
+| `val_period` | `int = 1` | Validation interval in epochs. |
+| `plots` | `bool = True` | Save training and validation plots. |
+| `workers` | `int = 0` | DataLoader worker processes. |
+| `cache` | `bool \| str = False` | Cache resized images in RAM with `True`/`"ram"`. |
+| `seed` | `int = 0` | Python, NumPy, PyTorch, sampling, and worker seed. |
+| `deterministic` | `bool = True` | Request deterministic PyTorch behavior. |
+| `freeze` | `int \| str \| list \| None = None` | Freeze early stages or matching parameter names/globs. |
+| `classes` | `list[int] \| None = None` | Keep only selected training class IDs. |
+| `single_cls` | `bool = False` | Remap retained targets to class zero. |
+| `fraction` | `float = 1.0` | Deterministically use a fraction in `(0, 1]`. |
+| `accumulate` | `int = 1` | Batches accumulated per optimizer step. |
+| `multi_scale` | `bool = False` | Random per-batch resizing around `imgsz`. |
+| `time` | `float \| None = None` | Training duration in hours; when set, it overrides `epochs`. |
+| `save_dir` | `str \| Path \| None = None` | Exact requested run directory. |
+| `exist_ok` | `bool = False` | Training still reuses an existing directory only with resume. |
+
 When `resume=True`, nitid restores the latest checkpoint from `project/name/last.pth`,
-including optimizer, scheduler, EMA, AMP scaler, metrics history, and tracker
-run IDs when WandB or MLflow is enabled.
+including optimizer, scheduler, EMA, AMP scaler, metrics history, tracker IDs,
+and every control above. Conflicts warn and restore the saved value. `epochs`,
+run location, verbosity, callbacks, and tracker enablement are deliberate
+new-invocation overrides. Final metrics include `best_epoch`.
 
 ---
 
