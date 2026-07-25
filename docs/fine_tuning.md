@@ -193,7 +193,10 @@ print(metrics)
 # }
 ```
 
-Checkpoints are saved after every epoch to `runs/train/my_experiment/epoch{N}.pth`.
+With the default `save_period=1`, checkpoints are saved after every epoch to
+`runs/train/my_experiment/epoch{N}.pth`. Use a larger interval or `-1` to reduce
+periodic checkpoint files; `last.pth` and `best.pth` remain available when
+`save=True`.
 Each checkpoint is a full nitid-wrapped `.pth` (config + names embedded) and can
 be loaded directly with `DFINE("epoch50.pth")`.
 
@@ -468,14 +471,17 @@ Use this table as the authoritative reference for train-time arguments.
 | `data` | `str` | required | path to a dataset YAML | Ultralytics-style dataset config describing `path`, split locations, class count, and names. |
 | `epochs` | `int` | `50` | `>= 1` | Number of full passes over the training set. |
 | `imgsz` | `int` | `640` | `>= 1` | Square training resolution applied during preprocessing. |
-| `batch` | `int` | `16` | `>= 1` | Number of images per optimizer step. Larger values use more memory. |
+| `batch` | `int` | `16` | positive integer | Images per batch. Choose this explicitly for the available device memory. |
 | `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
 | `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier. Both linear decay and cosine decay end at `lr0 * lrf`. |
 | `cos_lr` | `bool` | `False` | `True`, `False` | Switches the main schedule from linear decay to cosine decay. |
 | `warmup_epochs` | `float` | `0.0` | `>= 0` | Number of warmup epochs before the main LR schedule begins. Fractional values are allowed. |
 | `warmup_momentum` | `float` | `0.8` | typically `0 <= x <= 1` | Starting momentum or Adam/AdamW beta1 used during warmup. It linearly ramps to the optimizer's target value. |
 | `warmup_bias_lr` | `float` | `0.1` | `>= 0` | Starting learning rate for bias parameters during warmup. Non-bias parameters warm up from `0.0`. |
-| `optimizer` | `str` | `"AdamW"` | `"AdamW"`, `"SGD"` | Optimizer choice. `AdamW` is the default general-purpose option; `SGD` uses momentum `0.9`. |
+| `optimizer` | `str` | `"AdamW"` | `"Auto"`, `"Adam"`, `"AdamW"`, `"SGD"`, `"RAdam"`, `"NAdam"`, `"RMSprop"` | Optimizer choice. The predictable `Auto` policy always selects AdamW. |
+| `momentum` | `float` | `0.9` | usually `0 <= x < 1` | SGD momentum or beta1 for Adam-family optimizers. |
+| `weight_decay` | `float` | `1e-4` | `>= 0` | Weight decay applied to non-bias parameters. |
+| `clip_grad` | `float` | `0.1` | `>= 0` | Maximum gradient norm; `0` disables clipping. |
 | `resume` | `bool` | `False` | `True`, `False` | Restore the latest run state from `project/name/last.pth`. |
 | `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
 | `ema` | `bool` | `False` | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. |
@@ -483,6 +489,25 @@ Use this table as the authoritative reference for train-time arguments.
 | `device` | `str \| None` | `None` | e.g. `"cpu"`, `"cuda"`, `"cuda:0"` | Optional override for the training device. If omitted, training uses the device selected when the `DFINE` object was created. |
 | `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
 | `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
+| `save_dir` | `str \| Path \| None` | `None` | writable directory | Exact requested run directory; non-resume training still increments if it exists. |
+| `exist_ok` | `bool` | `False` | `True`, `False` | Existing training directories are reused only by `resume=True`. |
+| `patience` | `int` | `100` | `>= 0` | Stop after this many validated epochs without improvement; `0` disables early stopping. Final metrics report `best_epoch`. |
+| `save` | `bool` | `True` | `True`, `False` | Save last, best, and enabled periodic checkpoints. |
+| `save_period` | `int` | `1` | `-1` or `>= 1` | Save `epochN.pth` every N epochs; `-1` disables periodic files. |
+| `val` | `bool` | `True` | `True`, `False` | Enable validation during training. |
+| `plots` | `bool` | `True` | `True`, `False` | Save training-history and validation plots. |
+| `val_period` | `int` | `1` | `>= 1` | Validate every N epochs and at the final/time-limited epoch. |
+| `workers` | `int` | `0` | `>= 0` | DataLoader worker processes. |
+| `cache` | `bool \| str` | `False` | `False`, `True`, `"ram"` | Cache resized training images in memory. |
+| `seed` | `int` | `0` | any integer | Seed Python, NumPy, PyTorch, dataset sampling, and DataLoader generators. |
+| `deterministic` | `bool` | `True` | `True`, `False` | Request deterministic PyTorch/cuDNN behavior where available. |
+| `freeze` | `int \| str \| list \| None` | `None` | layer count, stage, substring, or glob | Freeze matching parameters before optimizer creation. |
+| `classes` | `list[int] \| None` | `None` | valid class IDs | Keep annotations only for selected classes. |
+| `single_cls` | `bool` | `False` | `True`, `False` | Remap all retained annotations to class 0. |
+| `fraction` | `float` | `1.0` | `(0, 1]` | Deterministically sample this fraction of training images. |
+| `accumulate` | `int` | `1` | `>= 1` | Accumulate gradients across batches before optimizer and EMA steps. |
+| `multi_scale` | `bool` | `False` | `True`, `False` | Randomly resize batches from roughly 0.5× to 1.5× `imgsz`, in multiples of 32. |
+| `time` | `float \| None` | `None` | positive hours or `None` | Training duration in hours. When supplied, this overrides `epochs` as the loop's stopping limit. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
 | `callbacks` | `object \| dict \| None` | `None` | callback object or hook mapping | Optional lifecycle hooks for custom logging, experiment tracking, or other training-time integrations. |
 | `wandb` | `bool \| dict` | `False` | `True`, `False`, or WandB options | Enables the optional Weights & Biases integration. |
@@ -513,10 +538,12 @@ metrics = model.train(
 ```
 
 nitid restores state from `runs/train/my_experiment/last.pth` and continues at
-the next epoch. The saved run configuration for `data`, `imgsz`, `batch`,
-`lr0`, `lrf`, `cos_lr`, `warmup_epochs`, `warmup_momentum`,
-`warmup_bias_lr`, `optimizer`, `amp`, `ema`, and `ema_decay` is reused so the
-training session resumes consistently. If the checkpoint already reached or
+the next epoch. All data, optimization, stopping, reproducibility, freezing,
+filtering, accumulation, multi-scale, validation, plotting, and saving controls
+in the table above are restored; conflicting values produce a warning.
+`epochs` is deliberately controlled by the new invocation so a run can be
+extended. Run location, verbosity, callbacks, and tracker enablement also
+belong to the new invocation. If the checkpoint already reached or
 exceeded the requested `epochs`, training does not run again and the saved
 history is returned.
 
@@ -553,10 +580,8 @@ reduces the learning rate down to `lr0 * lrf`.
 - `warmup_momentum` affects SGD momentum and Adam/AdamW beta1 during warmup.
 - `device` in `train()` overrides the device selected in `DFINE(...)` for that
   training run only.
-- The current public API does **not** expose `weight_decay` or `grad_clip` as
-  train arguments. Internally, `AdamW` uses `weight_decay=1e-4`, SGD uses
-  `momentum=0.9`, and gradient clipping is fixed at `max_norm=0.1` in
-  [`DFINETrainer`](https://github.com/Vaelsys/nitid/blob/develop/dfine/trainer.py).
+- `momentum`, `weight_decay`, and `clip_grad` explicitly control optimizer
+  momentum/beta1, non-bias regularization, and maximum gradient norm.
 
 ## AMP — mixed-precision training
 

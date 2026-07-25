@@ -7,6 +7,10 @@ from __future__ import annotations
 
 import copy
 import csv
+import fnmatch
+import itertools
+import math
+import random
 import resource
 import sys
 import time
@@ -161,6 +165,9 @@ class DFINETrainer:
         warmup_momentum: float,
         warmup_bias_lr: float,
         optimizer: str,
+        momentum: float,
+        weight_decay: float,
+        clip_grad: float,
         resume: bool,
         amp: bool,
         ema: bool,
@@ -169,6 +176,23 @@ class DFINETrainer:
         name: str,
         save_dir: str | Path | None,
         exist_ok: bool,
+        patience: int,
+        save: bool,
+        save_period: int,
+        val: bool,
+        plots: bool,
+        val_period: int,
+        workers: int,
+        cache: bool | str,
+        seed: int,
+        deterministic: bool,
+        freeze: int | list[int | str] | str | None,
+        classes: list[int] | None,
+        single_cls: bool,
+        fraction: float,
+        accumulate: int,
+        multi_scale: bool,
+        time_limit: float | None,
         verbose: bool,
         callbacks: object | None = None,
         wandb: bool | Mapping[str, Any] = False,
@@ -188,7 +212,7 @@ class DFINETrainer:
             warmup_epochs: Number of warmup epochs before the main decay schedule.
             warmup_momentum: Warmup starting momentum/beta1 value.
             warmup_bias_lr: Warmup starting LR for bias parameters.
-            optimizer:  ``"AdamW"`` or ``"SGD"``.
+            optimizer:  Auto, Adam, AdamW, SGD, RAdam, NAdam, or RMSprop.
             resume:     Restore the latest run state from ``<project>/<name>/last.pth``.
             amp:        Enable AMP mixed-precision (CUDA only).
             ema:        Enable EMA weight averaging.
@@ -232,39 +256,105 @@ class DFINETrainer:
         resume_state: dict[str, object] | None = None
         if resume:
             resume_state = self._load_resume_state(save_dir)
-            (
-                data,
-                imgsz,
-                batch,
-                lr0,
-                lrf,
-                cos_lr,
-                warmup_epochs,
-                warmup_momentum,
-                warmup_bias_lr,
-                optimizer,
-                amp,
-                ema,
-                ema_decay,
-            ) = self._resolve_resume_args(
-                resume_state=resume_state,
-                data=data,
-                imgsz=imgsz,
-                batch=batch,
-                lr0=lr0,
-                lrf=lrf,
-                cos_lr=cos_lr,
-                warmup_epochs=warmup_epochs,
-                warmup_momentum=warmup_momentum,
-                warmup_bias_lr=warmup_bias_lr,
-                optimizer=optimizer,
-                amp=amp,
-                ema=ema,
-                ema_decay=ema_decay,
+            resolved = self._resolve_resume_args(
+                resume_state,
+                {
+                    "data": data,
+                    "imgsz": imgsz,
+                    "batch": batch,
+                    "lr0": lr0,
+                    "lrf": lrf,
+                    "cos_lr": cos_lr,
+                    "warmup_epochs": warmup_epochs,
+                    "warmup_momentum": warmup_momentum,
+                    "warmup_bias_lr": warmup_bias_lr,
+                    "optimizer": optimizer,
+                    "momentum": momentum,
+                    "weight_decay": weight_decay,
+                    "clip_grad": clip_grad,
+                    "amp": amp,
+                    "ema": ema,
+                    "ema_decay": ema_decay,
+                    "patience": patience,
+                    "save": save,
+                    "save_period": save_period,
+                    "val": val,
+                    "plots": plots,
+                    "val_period": val_period,
+                    "workers": workers,
+                    "cache": cache,
+                    "seed": seed,
+                    "deterministic": deterministic,
+                    "freeze": freeze,
+                    "classes": classes,
+                    "single_cls": single_cls,
+                    "fraction": fraction,
+                    "accumulate": accumulate,
+                    "multi_scale": multi_scale,
+                    "time": time_limit,
+                },
+            )
+            data = str(resolved["data"])
+            imgsz = _as_int(resolved["imgsz"])
+            batch = _as_int(resolved["batch"])
+            lr0, lrf = _as_float(resolved["lr0"]), _as_float(resolved["lrf"])
+            cos_lr = bool(resolved["cos_lr"])
+            warmup_epochs = _as_float(resolved["warmup_epochs"])
+            warmup_momentum = _as_float(resolved["warmup_momentum"])
+            warmup_bias_lr = _as_float(resolved["warmup_bias_lr"])
+            optimizer, momentum = str(resolved["optimizer"]), _as_float(resolved["momentum"])
+            weight_decay, clip_grad = (
+                _as_float(resolved["weight_decay"]),
+                _as_float(resolved["clip_grad"]),
+            )
+            amp, ema, ema_decay = (
+                bool(resolved["amp"]),
+                bool(resolved["ema"]),
+                _as_float(resolved["ema_decay"]),
+            )
+            patience, save = _as_int(resolved["patience"]), bool(resolved["save"])
+            save_period, val, plots = (
+                _as_int(resolved["save_period"]),
+                bool(resolved["val"]),
+                bool(resolved["plots"]),
+            )
+            val_period, workers = _as_int(resolved["val_period"]), _as_int(resolved["workers"])
+            cache_value = resolved["cache"]
+            cache = cache_value if isinstance(cache_value, (bool, str)) else False
+            seed, deterministic = _as_int(resolved["seed"]), bool(resolved["deterministic"])
+            freeze = resolved["freeze"]  # type: ignore[assignment]
+            classes = resolved["classes"]  # type: ignore[assignment]
+            single_cls, fraction = bool(resolved["single_cls"]), _as_float(resolved["fraction"])
+            accumulate, multi_scale = _as_int(resolved["accumulate"]), bool(resolved["multi_scale"])
+            time_limit = (
+                resolved["time"] if resolved["time"] is None else _as_float(resolved["time"])
             )
 
-        dataloader = self._build_dataloader(data, imgsz, batch)
-        opt = self._build_optimizer(optimizer, lr0)
+        self._validate_train_options(
+            patience=patience,
+            save_period=save_period,
+            val_period=val_period,
+            workers=workers,
+            accumulate=accumulate,
+            clip_grad=clip_grad,
+            time=time_limit,
+        )
+        self._set_reproducibility(seed, deterministic)
+        batch = self._validate_batch_size(batch)
+        self._apply_freeze(freeze)
+        dataloader = self._build_dataloader(
+            data,
+            imgsz,
+            batch,
+            workers=workers,
+            cache=cache,
+            seed=seed,
+            deterministic=deterministic,
+            classes=classes,
+            single_cls=single_cls,
+            fraction=fraction,
+        )
+        opt = self._build_optimizer(optimizer, lr0, momentum=momentum, weight_decay=weight_decay)
         warmup_epoch_count = max(float(warmup_epochs), 0.0)
         decay_epochs = max(epochs - int(warmup_epoch_count), 1)
         scheduler = self._build_scheduler(opt, epochs=decay_epochs, lrf=lrf, cos_lr=cos_lr)
@@ -291,6 +381,8 @@ class DFINETrainer:
         weight_dict = criterion.weight_dict
         history: list[dict[str, float | int]] = []
         best_fitness = float("-inf")
+        best_epoch = 0
+        epochs_without_improvement = 0
         start_epoch = 0
         self.train_args = self._build_train_args(
             data=data,
@@ -304,12 +396,32 @@ class DFINETrainer:
             warmup_momentum=warmup_momentum,
             warmup_bias_lr=warmup_bias_lr,
             optimizer=optimizer,
+            momentum=momentum,
+            weight_decay=weight_decay,
+            clip_grad=clip_grad,
             resume=resume,
             amp=amp,
             ema=ema,
             ema_decay=ema_decay,
             project=project,
             name=name,
+            patience=patience,
+            save=save,
+            save_period=save_period,
+            val=val,
+            plots=plots,
+            val_period=val_period,
+            workers=workers,
+            cache=cache,
+            seed=seed,
+            deterministic=deterministic,
+            freeze=freeze,
+            classes=classes,
+            single_cls=single_cls,
+            fraction=fraction,
+            accumulate=accumulate,
+            multi_scale=multi_scale,
+            time=time_limit,
             verbose=verbose,
         )
         self.train_args["save_dir"] = str(save_dir)
@@ -317,7 +429,13 @@ class DFINETrainer:
         write_run_metadata(save_dir, {"mode": "train", **self.train_args})
 
         if resume_state is not None:
-            history, best_fitness, start_epoch = self._restore_training_state(
+            (
+                history,
+                best_fitness,
+                start_epoch,
+                restored_best_epoch,
+                restored_no_improve,
+            ) = self._restore_training_state(
                 resume_state=resume_state,
                 optimizer=opt,
                 scheduler=scheduler,
@@ -326,31 +444,41 @@ class DFINETrainer:
                 epochs=epochs,
             )
             self._ensure_results_file(results_path, history)
+            if restored_best_epoch > 0:
+                best_epoch = restored_best_epoch
+                epochs_without_improvement = restored_no_improve
+            elif history:
+                best_row = max(history, key=lambda row: float(row.get("fitness", float("-inf"))))
+                best_epoch = int(best_row["epoch"])
+                epochs_without_improvement = max(0, start_epoch - best_epoch)
         self.history = history
         self.start_epoch = start_epoch
 
         self._run_callbacks("on_train_start")
         if self.stop:
-            final_metrics = self._finalize_metrics(history)
+            final_metrics = self._finalize_metrics(history, best_epoch=best_epoch)
             self.metrics = final_metrics
             self._run_callbacks("on_train_end")
             return final_metrics
 
-        if start_epoch >= epochs:
+        if time_limit is None and start_epoch >= epochs:
             LOGGER.warning(
                 "resume=True found checkpoint at epoch %s, which already meets/exceeds epochs=%s",
                 start_epoch,
                 epochs,
             )
-            final_metrics = self._finalize_metrics(history)
+            final_metrics = self._finalize_metrics(history, best_epoch=best_epoch)
             self.metrics = final_metrics
             self._run_callbacks("on_train_end")
             return final_metrics
 
         total_batches = len(dataloader)
         warmup_iters = self._compute_warmup_iters(warmup_epoch_count, total_batches)
+        training_started = time.perf_counter()
+        time_limit_reached = False
 
-        for epoch in range(start_epoch, epochs):
+        epoch_iterator = self._epoch_iterator(start_epoch, epochs, time_limit)
+        for epoch in epoch_iterator:
             epoch_start = time.perf_counter()
             epoch_loss = 0.0
             batch_count = 0
@@ -371,13 +499,21 @@ class DFINETrainer:
             progress = tqdm(
                 dataloader,
                 total=len(dataloader),
-                desc=f"{epoch + 1}/{epochs}",
+                desc=f"{epoch + 1}/time" if time_limit is not None else f"{epoch + 1}/{epochs}",
                 leave=False,
                 unit="batch",
                 disable=not verbose,
             )
+            opt.zero_grad()
 
             for batch_idx, (images, targets) in enumerate(progress):
+                if (
+                    time_limit is not None
+                    and time.perf_counter() - training_started >= time_limit * 3600
+                ):
+                    time_limit_reached = True
+                    LOGGER.info("Maximum training duration of %.3f hours reached", time_limit)
+                    break
                 ni = epoch * total_batches + batch_idx
                 if warmup_iters > 0 and ni < warmup_iters:
                     self._apply_warmup(
@@ -390,6 +526,11 @@ class DFINETrainer:
                     )
 
                 images = images.to(self.device)
+                if multi_scale:
+                    size = self._random_multi_scale_size(imgsz)
+                    images = torch.nn.functional.interpolate(
+                        images, size=(size, size), mode="bilinear", align_corners=False
+                    )
                 targets = [
                     {
                         k: v.to(self.device) if isinstance(v, torch.Tensor) else v
@@ -398,26 +539,31 @@ class DFINETrainer:
                     for t in targets
                 ]
 
-                opt.zero_grad()
-
                 with torch.amp.autocast(device_type=device_type, enabled=amp):
                     outputs = self.model(images, targets=targets)
                     loss_dict = criterion(outputs, targets)
                     loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
+                    scaled_loss = loss / accumulate
 
                 if scaler is not None:
-                    scaler.scale(loss).backward()
-                    scaler.unscale_(opt)
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.1)
-                    scaler.step(opt)
-                    scaler.update()
+                    scaler.scale(scaled_loss).backward()
                 else:
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.1)
-                    opt.step()
+                    scaled_loss.backward()
 
-                if ema_model is not None:
-                    ema_model.update(self.model)
+                should_step = (batch_idx + 1) % accumulate == 0 or batch_idx + 1 == total_batches
+                if should_step:
+                    if scaler is not None:
+                        scaler.unscale_(opt)
+                    if clip_grad > 0:
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=clip_grad)
+                    if scaler is not None:
+                        scaler.step(opt)
+                        scaler.update()
+                    else:
+                        opt.step()
+                    opt.zero_grad()
+                    if ema_model is not None:
+                        ema_model.update(self.model)
 
                 epoch_loss += loss.item()
                 batch_count += 1
@@ -446,17 +592,27 @@ class DFINETrainer:
             memory_mb = self._current_memory_mb()
             seconds_per_iter = epoch_time / max(batch_count, 1)
 
-            eval_model = ema_model.ema if ema_model is not None else self.model
-            val_metrics = self._validate_epoch(
-                model=eval_model,
-                data=data,
-                imgsz=imgsz,
-                batch=batch,
-                save_dir=save_dir,
-                verbose=False,
+            should_validate = val and (
+                (epoch + 1) % val_period == 0
+                or (time_limit is None and epoch + 1 == epochs)
+                or time_limit_reached
             )
-            self.current_val_metrics = val_metrics
-            self._run_callbacks("on_val_end")
+            val_metrics: dict[str, object] = {}
+            if should_validate:
+                eval_model = ema_model.ema if ema_model is not None else self.model
+                val_metrics = self._validate_epoch(
+                    model=eval_model,
+                    data=data,
+                    imgsz=imgsz,
+                    batch=batch,
+                    save_dir=save_dir,
+                    verbose=False,
+                    plots=plots,
+                    classes=classes,
+                    single_cls=single_cls,
+                )
+                self.current_val_metrics = val_metrics
+                self._run_callbacks("on_val_end")
             primary_losses = self._primary_loss_stats(train_stats)
             scalar_val = self._compact_val_metrics(val_metrics)
 
@@ -474,48 +630,58 @@ class DFINETrainer:
             }
             history.append(row)
             self._write_results_row(results_path, row)
-            self._plot_results(save_dir, history)
+            if plots:
+                self._plot_results(save_dir, history)
 
             # Save EMA weights when available — they are what gets loaded by DFINE(path)
             save_model = ema_model.ema if ema_model is not None else self.model
-            fitness = float(row.get("fitness", 0.0))
+            fitness = float(row.get("fitness", -train_loss)) if should_validate else -train_loss
+            improved = fitness > best_fitness
+            if improved:
+                best_fitness = fitness
+                best_epoch = epoch + 1
+                epochs_without_improvement = 0
+            elif should_validate or not val:
+                epochs_without_improvement += 1
             training_state = self._serialize_training_state(
                 optimizer=opt,
                 scheduler=scheduler,
                 scaler=scaler,
                 ema_model=ema_model,
                 history=history,
-                best_fitness=max(best_fitness, fitness),
+                best_fitness=best_fitness,
                 train_args=self.train_args,
             )
-            save_checkpoint(
-                save_dir / f"epoch{epoch + 1}.pth",
-                save_model,
-                self.cfg,
-                self.names,
-                epoch=epoch + 1,
-                metrics=row,
-            )
-            save_checkpoint(
-                save_dir / "last.pth",
-                save_model,
-                self.cfg,
-                self.names,
-                epoch=epoch + 1,
-                metrics=row,
-                training_state=training_state,
-            )
-
-            if fitness >= best_fitness:
-                best_fitness = fitness
+            training_state["best_epoch"] = best_epoch
+            training_state["epochs_without_improvement"] = epochs_without_improvement
+            if save:
                 save_checkpoint(
-                    save_dir / "best.pth",
+                    save_dir / "last.pth",
                     save_model,
                     self.cfg,
                     self.names,
                     epoch=epoch + 1,
                     metrics=row,
+                    training_state=training_state,
                 )
+                if save_period > 0 and (epoch + 1) % save_period == 0:
+                    save_checkpoint(
+                        save_dir / f"epoch{epoch + 1}.pth",
+                        save_model,
+                        self.cfg,
+                        self.names,
+                        epoch=epoch + 1,
+                        metrics=row,
+                    )
+                if improved:
+                    save_checkpoint(
+                        save_dir / "best.pth",
+                        save_model,
+                        self.cfg,
+                        self.names,
+                        epoch=epoch + 1,
+                        metrics=row,
+                    )
 
             self.current_row = row
             self.current_fitness = fitness
@@ -526,8 +692,26 @@ class DFINETrainer:
 
             if self.stop:
                 break
+            if patience > 0 and epochs_without_improvement >= patience:
+                LOGGER.info(
+                    "Early stopping at epoch %d; best epoch was %d (patience=%d)",
+                    epoch + 1,
+                    best_epoch,
+                    patience,
+                )
+                self.stop = True
+                break
+            if time_limit_reached:
+                self.stop = True
+                break
 
-        final_metrics = self._finalize_metrics(history)
+        final_metrics = self._finalize_metrics(history, best_epoch=best_epoch)
+        if history:
+            LOGGER.info(
+                "Training complete: best epoch %d, best fitness %.4f",
+                best_epoch,
+                best_fitness,
+            )
         self.metrics = final_metrics
         self._run_callbacks("on_train_end")
         return final_metrics
@@ -648,12 +832,38 @@ class DFINETrainer:
         except Exception:
             LOGGER.exception("A callback failed while handling a training error")
 
-    def _build_dataloader(self, data: str, imgsz: int, batch: int):
+    def _build_dataloader(
+        self,
+        data: str,
+        imgsz: int,
+        batch: int,
+        workers: int = 0,
+        cache: bool | str = False,
+        seed: int = 0,
+        deterministic: bool = True,
+        classes: list[int] | None = None,
+        single_cls: bool = False,
+        fraction: float = 1.0,
+    ):
         from dfine.utils.data import build_coco_dataloader
 
-        return build_coco_dataloader(data, split="train", imgsz=imgsz, batch_size=batch)
+        return build_coco_dataloader(
+            data,
+            split="train",
+            imgsz=imgsz,
+            batch_size=batch,
+            workers=workers,
+            cache=cache,
+            seed=seed,
+            deterministic=deterministic,
+            classes=classes,
+            single_cls=single_cls,
+            fraction=fraction,
+        )
 
-    def _build_optimizer(self, name: str, lr: float):
+    def _build_optimizer(
+        self, name: str, lr: float, momentum: float = 0.9, weight_decay: float = 1e-4
+    ):
         # Keep a dedicated bias group so warmup_bias_lr can match Ultralytics-style warmup.
         weights: list[torch.nn.Parameter] = []
         biases: list[torch.nn.Parameter] = []
@@ -673,7 +883,7 @@ class DFINETrainer:
                     "lr": lr,
                     "initial_lr": lr,
                     "is_bias_group": False,
-                    "weight_decay": 1e-4 if name == "AdamW" else 0.0,
+                    "weight_decay": weight_decay,
                 }
             )
         if biases:
@@ -688,12 +898,38 @@ class DFINETrainer:
             )
 
         optimizer: torch.optim.Optimizer
-        if name == "AdamW":
-            optimizer = torch.optim.AdamW(param_groups, lr=lr, weight_decay=1e-4)
-        elif name == "SGD":
-            optimizer = torch.optim.SGD(param_groups, lr=lr, momentum=0.9)
+        normalized = name.lower()
+        if normalized == "auto":
+            normalized = "adamw"
+            LOGGER.info("optimizer=auto selected AdamW (documented deterministic policy)")
+        if normalized == "adamw":
+            optimizer = torch.optim.AdamW(
+                param_groups, lr=lr, betas=(momentum, 0.999), weight_decay=weight_decay
+            )
+        elif normalized == "adam":
+            optimizer = torch.optim.Adam(
+                param_groups, lr=lr, betas=(momentum, 0.999), weight_decay=weight_decay
+            )
+        elif normalized == "radam":
+            optimizer = torch.optim.RAdam(
+                param_groups, lr=lr, betas=(momentum, 0.999), weight_decay=weight_decay
+            )
+        elif normalized == "nadam":
+            optimizer = torch.optim.NAdam(
+                param_groups, lr=lr, betas=(momentum, 0.999), weight_decay=weight_decay
+            )
+        elif normalized == "rmsprop":
+            optimizer = torch.optim.RMSprop(
+                param_groups, lr=lr, momentum=momentum, weight_decay=weight_decay
+            )
+        elif normalized == "sgd":
+            optimizer = torch.optim.SGD(
+                param_groups, lr=lr, momentum=momentum, weight_decay=weight_decay
+            )
         else:
-            raise ValueError(f"Unknown optimizer: {name}")
+            raise ValueError(
+                "Unknown optimizer: expected Auto, Adam, AdamW, SGD, RAdam, NAdam, or RMSprop"
+            )
 
         for group in optimizer.param_groups:
             if "momentum" in group:
@@ -703,6 +939,110 @@ class DFINETrainer:
                 group["target_beta1"] = float(beta1)
                 group["target_beta2"] = float(beta2)
         return optimizer
+
+    def _validate_train_options(
+        self,
+        *,
+        patience: int,
+        save_period: int,
+        val_period: int,
+        workers: int,
+        accumulate: int,
+        clip_grad: float,
+        time: float | None,
+    ) -> None:
+        if patience < 0:
+            raise ValueError("patience must be >= 0")
+        if save_period == 0 or save_period < -1:
+            raise ValueError("save_period must be -1 or >= 1")
+        if val_period < 1:
+            raise ValueError("val_period must be >= 1")
+        if workers < 0:
+            raise ValueError("workers must be >= 0")
+        if accumulate < 1:
+            raise ValueError("accumulate must be >= 1")
+        if clip_grad < 0:
+            raise ValueError("clip_grad must be >= 0")
+        if time is not None and time <= 0:
+            raise ValueError("time must be greater than 0 hours")
+
+    def _set_reproducibility(self, seed: int, deterministic: bool) -> None:
+        random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        try:
+            import numpy as np
+
+            np.random.seed(seed)
+        except ImportError:  # pragma: no cover
+            pass
+        torch.backends.cudnn.deterministic = deterministic
+        torch.backends.cudnn.benchmark = not deterministic
+        torch.use_deterministic_algorithms(deterministic, warn_only=True)
+
+    @staticmethod
+    def _epoch_iterator(start_epoch: int, epochs: int, time_limit: float | None):
+        """Use epochs as the stop limit only when no duration was requested."""
+        if time_limit is not None:
+            return itertools.count(start_epoch)
+        return iter(range(start_epoch, epochs))
+
+    @staticmethod
+    def _validate_batch_size(batch: object) -> int:
+        if isinstance(batch, bool) or not isinstance(batch, int) or batch < 1:
+            raise ValueError("batch must be a positive integer")
+        return batch
+
+    @staticmethod
+    def _random_multi_scale_size(imgsz: int, stride: int = 32) -> int:
+        """Select a 0.5x–1.5x training size aligned to the model stride."""
+        lower = max(1, math.ceil((imgsz * 0.5) / stride))
+        upper = max(lower, math.floor((imgsz * 1.5) / stride))
+        return random.randint(lower, upper) * stride
+
+    def _apply_freeze(self, freeze: int | list[int | str] | str | None) -> int:
+        for parameter in self.model.parameters():
+            if parameter.is_floating_point() or parameter.is_complex():
+                parameter.requires_grad_(True)
+        if freeze in (None, 0, [], ""):
+            return 0
+
+        if isinstance(freeze, list):
+            items: list[int | str] = freeze
+        elif isinstance(freeze, (int, str)):
+            items = [freeze]
+        else:
+            return 0
+        children = [name for name, _ in self.model.named_children()]
+        patterns: list[str] = []
+        for item in items:
+            if isinstance(item, int):
+                if item < 0:
+                    raise ValueError("freeze stage indices must be >= 0")
+                if len(items) == 1:
+                    patterns.extend(children[:item])
+                elif item < len(children):
+                    patterns.append(children[item])
+            else:
+                patterns.append(str(item))
+
+        frozen = 0
+        for name, parameter in self.model.named_parameters():
+            if any(
+                name == pattern
+                or name.startswith(f"{pattern}.")
+                or pattern in name
+                or fnmatch.fnmatch(name, pattern)
+                for pattern in patterns
+            ):
+                parameter.requires_grad_(False)
+                frozen += parameter.numel()
+        if frozen == 0:
+            LOGGER.warning("freeze=%r did not match any model parameters", freeze)
+        else:
+            LOGGER.info("Froze %d parameters matching %r", frozen, freeze)
+        return frozen
 
     def _build_scheduler(
         self,
@@ -743,143 +1083,32 @@ class DFINETrainer:
             )
         return load_checkpoint_state(checkpoint_path)
 
-    def _build_train_args(
-        self,
-        data: str,
-        epochs: int,
-        imgsz: int,
-        batch: int,
-        lr0: float,
-        lrf: float,
-        cos_lr: bool,
-        warmup_epochs: float,
-        warmup_momentum: float,
-        warmup_bias_lr: float,
-        optimizer: str,
-        resume: bool,
-        amp: bool,
-        ema: bool,
-        ema_decay: float,
-        project: str,
-        name: str,
-        verbose: bool,
-    ) -> dict[str, object]:
-        return {
-            "data": data,
-            "epochs": epochs,
-            "imgsz": imgsz,
-            "batch": batch,
-            "lr0": lr0,
-            "lrf": lrf,
-            "cos_lr": cos_lr,
-            "warmup_epochs": warmup_epochs,
-            "warmup_momentum": warmup_momentum,
-            "warmup_bias_lr": warmup_bias_lr,
-            "optimizer": optimizer,
-            "resume": resume,
-            "amp": amp,
-            "ema": ema,
-            "ema_decay": ema_decay,
-            "project": project,
-            "name": name,
-            "verbose": verbose,
-        }
+    def _build_train_args(self, **kwargs: object) -> dict[str, object]:
+        return dict(kwargs)
 
     def _resolve_resume_args(
-        self,
-        resume_state: dict[str, object],
-        data: str,
-        imgsz: int,
-        batch: int,
-        lr0: float,
-        lrf: float,
-        cos_lr: bool,
-        warmup_epochs: float,
-        warmup_momentum: float,
-        warmup_bias_lr: float,
-        optimizer: str,
-        amp: bool,
-        ema: bool,
-        ema_decay: float,
-    ) -> tuple[str, int, int, float, float, bool, float, float, float, str, bool, bool, float]:
+        self, resume_state: dict[str, object], current_args: dict[str, object]
+    ) -> dict[str, object]:
         training_state = resume_state.get("training_state")
         if not isinstance(training_state, dict):
-            return (
-                data,
-                imgsz,
-                batch,
-                lr0,
-                lrf,
-                cos_lr,
-                warmup_epochs,
-                warmup_momentum,
-                warmup_bias_lr,
-                optimizer,
-                amp,
-                ema,
-                ema_decay,
-            )
+            return current_args.copy()
+        saved_args = training_state.get("train_args")
+        if not isinstance(saved_args, dict):
+            return current_args.copy()
 
-        train_args = training_state.get("train_args")
-        if not isinstance(train_args, dict):
-            return (
-                data,
-                imgsz,
-                batch,
-                lr0,
-                lrf,
-                cos_lr,
-                warmup_epochs,
-                warmup_momentum,
-                warmup_bias_lr,
-                optimizer,
-                amp,
-                ema,
-                ema_decay,
-            )
-
-        current_args: dict[str, object] = {
-            "data": data,
-            "imgsz": imgsz,
-            "batch": batch,
-            "lr0": lr0,
-            "lrf": lrf,
-            "cos_lr": cos_lr,
-            "warmup_epochs": warmup_epochs,
-            "warmup_momentum": warmup_momentum,
-            "warmup_bias_lr": warmup_bias_lr,
-            "optimizer": optimizer,
-            "amp": amp,
-            "ema": ema,
-            "ema_decay": ema_decay,
-        }
         resolved = current_args.copy()
-
-        for key in current_args:
-            if key in train_args and train_args[key] != current_args[key]:
-                LOGGER.warning(
-                    "resume=True ignored %s=%r and restored saved value %r",
-                    key,
-                    current_args[key],
-                    train_args[key],
-                )
-                resolved[key] = train_args[key]
-
-        return (
-            str(resolved["data"]),
-            _as_int(resolved["imgsz"]),
-            _as_int(resolved["batch"]),
-            _as_float(resolved["lr0"]),
-            _as_float(resolved["lrf"]),
-            bool(resolved["cos_lr"]),
-            _as_float(resolved["warmup_epochs"]),
-            _as_float(resolved["warmup_momentum"]),
-            _as_float(resolved["warmup_bias_lr"]),
-            str(resolved["optimizer"]),
-            bool(resolved["amp"]),
-            bool(resolved["ema"]),
-            _as_float(resolved["ema_decay"]),
-        )
+        for key, current_value in current_args.items():
+            if key in saved_args:
+                saved_value = saved_args[key]
+                if saved_value != current_value:
+                    LOGGER.warning(
+                        "resume=True ignored %s=%r and restored saved value %r",
+                        key,
+                        current_value,
+                        saved_value,
+                    )
+                resolved[key] = saved_value
+        return resolved
 
     def _restore_training_state(
         self,
@@ -889,12 +1118,12 @@ class DFINETrainer:
         scaler,
         ema_model: ModelEMA | None,
         epochs: int,
-    ) -> tuple[list[dict[str, float | int]], float, int]:
+    ) -> tuple[list[dict[str, float | int]], float, int, int, int]:
         training_state = resume_state.get("training_state")
         if not isinstance(training_state, dict):
             self.model.load_state_dict(resume_state["model"])
             self.model.to(self.device)
-            return [], float("-inf"), _as_int(resume_state.get("epoch", 0))
+            return [], float("-inf"), _as_int(resume_state.get("epoch", 0)), 0, 0
 
         raw_model_state = training_state.get("raw_model")
         if raw_model_state is None:
@@ -935,7 +1164,9 @@ class DFINETrainer:
             self.tracking_state = tracking_state.copy()
         best_fitness = _as_float(training_state.get("best_fitness", float("-inf")), float("-inf"))
         start_epoch = _as_int(resume_state.get("epoch", 0))
-        return history, best_fitness, start_epoch
+        best_epoch = _as_int(training_state.get("best_epoch", 0))
+        no_improve = _as_int(training_state.get("epochs_without_improvement", 0))
+        return history, best_fitness, start_epoch, best_epoch, no_improve
 
     def _update_scheduler_horizons(
         self, scheduler, epochs: int, train_args: object | None = None
@@ -1041,7 +1272,7 @@ class DFINETrainer:
             writer.writeheader()
             writer.writerows(history)
 
-    def _finalize_metrics(self, history: list[dict[str, float | int]]) -> dict:
+    def _finalize_metrics(self, history: list[dict[str, float | int]], best_epoch: int = 0) -> dict:
         if history:
             final_row = history[-1]
             return {
@@ -1049,10 +1280,18 @@ class DFINETrainer:
                 "fitness": float(final_row.get("fitness", 0.0)),
                 "mAP50": float(final_row.get("mAP50", 0.0)),
                 "mAP50-95": float(final_row.get("mAP50-95", 0.0)),
+                "best_epoch": best_epoch,
                 "history": history,
             }
 
-        return {"loss": 0.0, "fitness": 0.0, "mAP50": 0.0, "mAP50-95": 0.0, "history": []}
+        return {
+            "loss": 0.0,
+            "fitness": 0.0,
+            "mAP50": 0.0,
+            "mAP50-95": 0.0,
+            "best_epoch": best_epoch,
+            "history": [],
+        }
 
     def _validate_epoch(
         self,
@@ -1062,6 +1301,9 @@ class DFINETrainer:
         batch: int,
         save_dir: Path,
         verbose: bool,
+        plots: bool = True,
+        classes: list[int] | None = None,
+        single_cls: bool = False,
     ) -> dict:
         from dfine.validator import DFINEValidator
 
@@ -1074,7 +1316,9 @@ class DFINETrainer:
             split="val",
             verbose=verbose,
             save_dir=save_dir,
-            plots=True,
+            plots=plots,
+            classes=classes,
+            single_cls=single_cls,
         )
 
     def _primary_loss_stats(self, train_stats: dict[str, float]) -> dict[str, float]:
