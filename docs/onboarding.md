@@ -32,7 +32,7 @@ dfine/              Public Python package — the only thing users import
   predictor.py      Inference worker
   trainer.py        Fine-tuning worker
   validator.py      COCO evaluation worker
-  exporter.py       ONNX / TorchScript / TensorRT export worker
+  exporter.py       ONNX / OpenVINO / TorchScript / TensorRT export worker
   results.py        Results + Boxes return types
   nn/               build_model, build_postprocessor, build_criterion
   utils/            sources.py (LoadSource), plotting, misc helpers
@@ -221,4 +221,4 @@ uv run dfine predict model=dfine_l source=image.jpg conf=0.5
 | [`fine_tuning.md`](fine_tuning.md) | Dataset format, AMP, EMA, all training parameters |
 | [`export.md`](export.md) | ONNX, TorchScript, TensorRT — options and constraints |
 | [`web_app.md`](web_app.md) | Web app setup, REST API, data model, implementation notes. | 
-| [`macos_docker_setup.md`](macos_docker_setup.md) | Setup docker for linux enviroment in MacOS Apple silicon | 
+| [`macos_docker_setup.md`](macos_docker_setup.md) | Setup docker for linux enviroment in MacOS Apple silicon |

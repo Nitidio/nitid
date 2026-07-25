@@ -1,10 +1,12 @@
 """
-DFINEExporter — model export to ONNX, TensorRT, TorchScript.
+DFINEExporter — model export to ONNX, OpenVINO, TensorRT, TorchScript.
 Called internally by DFINE.export(). Not part of the public API.
 """
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 import torch
@@ -54,10 +56,16 @@ class DFINEExporter:
         exist_ok: bool,
     ) -> Path:
         format = format.lower()
-        suffixes = {"onnx": ".onnx", "tensorrt": ".engine", "torchscript": ".torchscript"}
+        suffixes = {
+            "onnx": ".onnx",
+            "openvino": ".xml",
+            "tensorrt": ".engine",
+            "torchscript": ".torchscript",
+        }
         if format not in suffixes:
             raise ValueError(
-                f"Unsupported export format: {format!r}. Choose: onnx, tensorrt, torchscript"
+                "Unsupported export format: "
+                f"{format!r}. Choose: onnx, openvino, tensorrt, torchscript"
             )
         if output is not None:
             out = Path(output)
@@ -70,6 +78,12 @@ class DFINEExporter:
                 project=project, name=name, save_dir=save_dir, exist_ok=exist_ok
             )
             out = run_dir / f"dfine_{imgsz}{suffixes[format]}"
+        if format == "openvino":
+            if out.suffix.lower() != ".xml":
+                raise ValueError("OpenVINO output must use the .xml suffix")
+            weights_out = out.with_suffix(".bin")
+            if weights_out.exists() and not exist_ok:
+                raise FileExistsError(f"Export output already exists: '{weights_out}'")
         write_run_metadata(
             run_dir,
             {
@@ -91,6 +105,8 @@ class DFINEExporter:
         )
         if format == "onnx":
             return self._to_onnx(out, imgsz, batch, dynamic, simplify, opset, verbose)
+        if format == "openvino":
+            return self._to_openvino(out, imgsz, batch, dynamic, simplify, opset, half, verbose)
         if format == "tensorrt":
             return self._to_tensorrt(out, imgsz, batch, dynamic, half, verbose)
         if format == "torchscript":
@@ -111,7 +127,57 @@ class DFINEExporter:
                 model_onnx, ok = onnxsim.simplify(model_onnx)
                 if ok:
                     onnx.save(model_onnx, str(temporary))
-        LOGGER.info(f"ONNX export saved to {out}")
+        if verbose:
+            LOGGER.info("ONNX export saved to %s", out)
+        return out
+
+    # ── OpenVINO ────────────────────────────────────────────────────────────
+
+    def _to_openvino(
+        self,
+        out: Path,
+        imgsz: int,
+        batch: int,
+        dynamic: bool,
+        simplify: bool,
+        opset: int,
+        half: bool,
+        verbose: bool,
+    ) -> Path:
+        """Export the corrected ONNX graph, then convert it to OpenVINO IR."""
+        try:
+            import openvino as ov
+        except ImportError:
+            raise ImportError(
+                "OpenVINO is not installed. Install it with: uv sync --extra openvino"
+            ) from None
+
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=f".{out.stem}.", dir=out.parent) as directory:
+            staging_dir = Path(directory)
+            onnx_path = staging_dir / "model.onnx"
+            ir_path = staging_dir / "model.xml"
+            self._to_onnx(onnx_path, imgsz, batch, dynamic, simplify, opset, verbose=False)
+
+            ov_model = ov.convert_model(onnx_path)
+            ov.save_model(ov_model, ir_path, compress_to_fp16=half)
+
+            # Ensure the serialized IR can be loaded and compiled before publishing it.
+            core = ov.Core()
+            core.compile_model(core.read_model(ir_path), "CPU")
+
+            staged_weights = ir_path.with_suffix(".bin")
+            if not staged_weights.is_file():
+                raise RuntimeError("OpenVINO conversion did not produce the expected .bin file")
+            for staged_file in (staged_weights, ir_path):
+                with staged_file.open("rb") as stream:
+                    os.fsync(stream.fileno())
+
+            # Publish weights first and XML last, so a visible XML always has complete weights.
+            os.replace(staged_weights, out.with_suffix(".bin"))
+            os.replace(ir_path, out)
+
+        LOGGER.info("OpenVINO IR export saved to %s", out)
         return out
 
     def _export_onnx_to_path(

@@ -27,7 +27,7 @@ Commands:
   download Download and wrap an official D-FINE checkpoint
   train    Fine-tune a model on a COCO-format dataset
   val      Evaluate a model and report COCO metrics
-  export   Export a model to ONNX, TorchScript, or TensorRT
+  export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
   info     Show model parameters, GFLOPs, and checkpoint size
 
 Run "dfine COMMAND --help" for command-specific options and examples.
@@ -156,13 +156,13 @@ Usage:
 
 Options:
   model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
-  format=FORMAT       onnx, torchscript, or tensorrt (default: onnx)
+  format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
   imgsz=INT           Square export image size (default: 640)
   batch=INT           Static batch size (default: 1)
   dynamic=BOOL        Enable a dynamic batch axis (default: false)
   simplify=BOOL       Simplify the ONNX graph (default: true)
   opset=INT           ONNX opset version (default: 17)
-  half=BOOL           Enable FP16 TensorRT export (default: false)
+  half=BOOL           Enable FP16 OpenVINO/TensorRT export (default: false)
   device=DEVICE       cpu, cuda, or cuda:N (default: model device)
   project=PATH        Export run root (default: runs/export)
   name=NAME           Export run name (default: exp)
@@ -173,6 +173,7 @@ Options:
 
 Examples:
   dfine export model=dfine_l.pth format=onnx
+  dfine export model=dfine_l.pth format=openvino
   dfine export model=dfine_l.pth format=tensorrt half=true
 """,
     "info": """\

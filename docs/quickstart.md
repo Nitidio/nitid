@@ -17,6 +17,7 @@ Add extras only when you need them:
 ```bash
 uv sync --extra dev   # for developement
 uv sync --extra web     # web application
+uv sync --extra openvino # OpenVINO IR export and runtime
 ```
 
 ## First Run
@@ -62,6 +63,7 @@ metrics = model.val(data="configs/datasets/my_dataset.yml")
 
 # Export
 model.export(format="onnx")
+model.export(format="openvino")
 model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
@@ -198,6 +200,7 @@ model.info()
 
 # Export
 model.export(format="onnx")
+model.export(format="openvino")
 model.export(format="torchscript")
 model.export(format="tensorrt", half=True)
 ```
@@ -257,7 +260,7 @@ uv run dfine export model=dfine_l format=onnx
 
 - `train`: fine-tune a model on a COCO-format dataset YAML.
 - `val`: run COCO-style evaluation on the validation or test split.
-- `export`: convert a wrapped checkpoint to ONNX, TorchScript, or TensorRT.
+- `export`: convert a wrapped checkpoint to ONNX, OpenVINO IR, TorchScript, or TensorRT.
 
 By default, `train` writes wrapped epoch checkpoints to `runs/train/exp/`, while `val` prints metrics to the terminal without creating a run directory.
 
