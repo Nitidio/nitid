@@ -84,7 +84,15 @@ def write_run_metadata(save_dir: str | Path, args: Mapping[str, object]) -> None
     save_dir = Path(save_dir)
     atomic_write_yaml(save_dir / "args.yaml", args)
     packages: dict[str, str | None] = {}
-    for package in ("nitid", "torch", "torchvision", "numpy", "opencv-python", "onnx"):
+    for package in (
+        "nitid",
+        "torch",
+        "torchvision",
+        "numpy",
+        "opencv-python",
+        "onnx",
+        "openvino",
+    ):
         try:
             packages[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:
