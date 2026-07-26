@@ -1,7 +1,13 @@
 import pytest
 import yaml
 
-from dfine.utils.runs import atomic_output_path, increment_path, resolve_run_dir, write_run_metadata
+from dfine.utils.runs import (
+    atomic_output_path,
+    collect_environment,
+    increment_path,
+    resolve_run_dir,
+    write_run_metadata,
+)
 
 
 def test_increment_path_claims_numbered_directories(tmp_path):
@@ -36,4 +42,27 @@ def test_metadata_contains_resolved_args_and_environment(tmp_path):
     args = yaml.safe_load((tmp_path / "args.yaml").read_text())
     environment = yaml.safe_load((tmp_path / "environment.yaml").read_text())
     assert args == {"save_dir": str(tmp_path), "epochs": 1}
-    assert set(environment) >= {"python", "platform", "pytorch", "packages"}
+    assert set(environment) >= {"python", "platform", "pytorch", "gpus", "packages"}
+
+
+def test_collect_environment_contains_diagnostic_fields():
+    environment = collect_environment()
+
+    assert environment["platform"]
+    assert environment["python"]
+    assert "pytorch" in environment
+    assert "cuda_version" in environment
+    assert "cudnn_version" in environment
+    assert "gpus" in environment
+    assert "packages" in environment
+
+
+def test_run_metadata_uses_shared_environment_collector(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "dfine.utils.runs.collect_environment", lambda: {"snapshot_marker": "shared"}
+    )
+
+    write_run_metadata(tmp_path, {})
+
+    environment = yaml.safe_load((tmp_path / "environment.yaml").read_text())
+    assert environment == {"snapshot_marker": "shared"}

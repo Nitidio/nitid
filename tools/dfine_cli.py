@@ -12,15 +12,18 @@ Usage:
 from __future__ import annotations
 
 import sys
+import traceback
+from pathlib import Path
 
-COMMANDS = {"predict", "download", "train", "val", "export", "info"}
+COMMANDS = {"predict", "download", "train", "val", "export", "info", "bugreport"}
+REPORT_COMMANDS = {"predict", "train", "val", "export"}
 HELP_FLAGS = {"-h", "--help"}
 
 GENERAL_HELP = """\
 nitid D-FINE CLI
 
 Usage:
-  dfine COMMAND [key=value ...]
+  dfine COMMAND [key=value ...] [--report]
 
 Commands:
   predict  Run object detection on an image, directory, video, URL, or webcam
@@ -29,8 +32,10 @@ Commands:
   val      Evaluate a model and report COCO metrics
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
   info     Show model parameters, GFLOPs, and checkpoint size
+  bugreport Create an environment-only log for a GitHub issue
 
 Run "dfine COMMAND --help" for command-specific options and examples.
+Add --report to train, predict, val, or export to capture output and environment details.
 """
 
 COMMAND_HELP = {
@@ -53,6 +58,7 @@ Options:
   save_dir=PATH       Exact output directory override
   exist_ok=BOOL       Reuse the requested directory (default: false)
   verbose=BOOL        Print prediction progress (default: true)
+  --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
   dfine predict model=dfine_l.pth source=image.jpg
@@ -123,6 +129,7 @@ Options:
   wandb=BOOL          Enable Weights & Biases logging (default: false)
   mlflow=BOOL         Enable MLflow logging (default: false)
   verbose=BOOL        Print training progress (default: true)
+  --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
   dfine train model=dfine_l.pth data=coco.yaml epochs=50 batch=16 mlflow=true
@@ -146,6 +153,7 @@ Options:
   exist_ok=BOOL       Reuse the requested directory (default: false)
   plots=BOOL          Save PR/confusion plots and results.png (default: true)
   verbose=BOOL        Print validation progress (default: true)
+  --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
   dfine val model=dfine_l.pth data=coco.yaml split=val batch=16
@@ -170,6 +178,7 @@ Options:
   output=PATH         Exact exported artifact path
   exist_ok=BOOL       Reuse/replace an explicit destination (default: false)
   verbose=BOOL        Print export progress (default: true)
+  --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
   dfine export model=dfine_l.pth format=onnx
@@ -186,6 +195,13 @@ Options:
 
 Example:
   dfine info model=dfine_l.pth detailed=true
+""",
+    "bugreport": """\
+Usage:
+  dfine bugreport
+
+Creates an environment-only log containing OS, Python, package, PyTorch,
+CUDA, cuDNN, and GPU information. Attach the resulting file to a GitHub issue.
 """,
 }
 
@@ -244,9 +260,16 @@ def _coerce(v: str):
     return v
 
 
-def main(argv: list[str] | None = None) -> None:
-    argv = argv or sys.argv
+def _execute(argv: list[str]) -> None:
+    """Parse and execute one command without report lifecycle handling."""
     command, kwargs = parse_args(argv)
+
+    if command == "bugreport":
+        from dfine.utils.reporting import write_standalone_report
+
+        path = write_standalone_report()
+        print(f"Bug report saved to {path}")
+        return
 
     if command == "download":
         model_name = kwargs.pop("model", "dfine_l")
@@ -285,6 +308,48 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Exported to {path}")
     elif command == "info":
         model.info(detailed=kwargs.get("detailed", False))
+
+
+def main(argv: list[str] | None = None, report_dir: str | Path = "runs/bugreports") -> None:
+    argv = list(argv or sys.argv)
+    report_requested = "--report" in argv[2:]
+    if report_requested:
+        argv = [token for token in argv if token != "--report"]
+
+    command = argv[1].lower() if len(argv) > 1 else ""
+    if not report_requested:
+        if command == "bugreport":
+            from dfine.utils.reporting import write_standalone_report
+
+            parse_args(argv)
+            path = write_standalone_report(report_dir)
+            print(f"Bug report saved to {path}")
+            return
+        _execute(argv)
+        return
+
+    if command not in REPORT_COMMANDS:
+        print("ERROR: --report is supported only for train, predict, val, and export")
+        raise SystemExit(1)
+
+    from dfine.utils.reporting import capture_command_report
+
+    failure: BaseException | None = None
+    command_exit: SystemExit | None = None
+    with capture_command_report(command, report_dir) as path:
+        try:
+            _execute(argv)
+        except SystemExit as error:
+            command_exit = error
+        except BaseException as error:
+            failure = error
+            traceback.print_exc()
+
+    print(f"Bug report saved to {path}")
+    if command_exit is not None:
+        raise command_exit
+    if failure is not None:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
