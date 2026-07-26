@@ -205,6 +205,22 @@ model.export(format="torchscript")
 model.export(format="tensorrt", half=True)
 ```
 
+### Capture a Python API bug report
+
+```python
+from dfine import DFINE, bugreport
+
+with bugreport("prediction") as report:
+    model = DFINE("dfine_s")
+    results = model.predict("image.jpg")
+
+print(report.path)
+```
+
+The report contains the shared environment snapshot and all stdout/stderr. A
+failure traceback is added to the same log before the original exception is
+re-raised.
+
 ### Key differences from Ultralytics YOLO
 
 | Feature | Ultralytics YOLO | nitid DFINE |

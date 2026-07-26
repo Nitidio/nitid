@@ -77,6 +77,7 @@ uv run dfine train --help
 uv run dfine val --help
 uv run dfine export --help
 uv run dfine info --help
+uv run dfine bugreport --help
 ```
 
 The shorter `-h` flag also works:
@@ -162,6 +163,30 @@ Display model information:
 
 ```bash
 uv run dfine info model=dfine_s
+```
+
+## Create a bug-report log
+
+Add `--report` to a training, prediction, validation, or export command:
+
+```bash
+uv run dfine predict model=dfine_s source=image.jpg --report
+uv run dfine train model=dfine_s data=my_dataset.yml epochs=50 --report
+uv run dfine val model=dfine_s data=my_dataset.yml --report
+uv run dfine export model=dfine_s format=onnx --report
+```
+
+The command continues printing normally while stdout and stderr are copied to a
+single log under `runs/bugreports`. The log begins with the same environment
+snapshot used for each run's `environment.yaml`, including OS, Python, package,
+PyTorch, CUDA, cuDNN, and GPU information. Successful output and crash
+tracebacks are captured, and the final log path is printed for attachment to a
+GitHub issue.
+
+When no model command can run, create an environment-only report:
+
+```bash
+uv run dfine bugreport
 ```
 
 ## Using the development Docker container

@@ -13,6 +13,40 @@ Exports default to `runs/export/exp/dfine_640.onnx` (with the appropriate format
 suffix). Use `output="path/model.onnx"` for an exact artifact path. Checkpoints and
 export artifacts are published atomically.
 
+## Python bug reports
+
+Use the public `bugreport()` context manager to capture Python API operations in
+the same single-file format as the CLI's `--report` flag:
+
+```python
+from dfine import DFINE, bugreport
+
+with bugreport("training") as report:
+    model = DFINE("dfine_s")
+    model.train(data="data.yaml")
+
+print(report.path)
+```
+
+Put model construction inside the context when download, checkpoint, device, or
+import failures also need to be captured. The context tees stdout and stderr to
+the terminal and report, includes the shared `environment.yaml` snapshot, and
+always prints the saved path. If an exception occurs, its traceback is appended
+to the report and the original exception is re-raised unchanged.
+
+One report can cover multiple operations:
+
+```python
+with bugreport("full-experiment") as report:
+    model = DFINE("dfine_s")
+    model.train(data="data.yaml")
+    model.val(data="data.yaml")
+    model.export(format="onnx")
+```
+
+By default reports are written to `runs/bugreports`. Choose another directory
+with `bugreport("training", report_dir="reports")`.
+
 ## `DFINE`
 
 ```python

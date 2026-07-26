@@ -83,6 +83,11 @@ def write_run_metadata(save_dir: str | Path, args: Mapping[str, object]) -> None
     """Write resolved arguments and a reproducibility-oriented environment snapshot."""
     save_dir = Path(save_dir)
     atomic_write_yaml(save_dir / "args.yaml", args)
+    atomic_write_yaml(save_dir / "environment.yaml", collect_environment())
+
+
+def collect_environment() -> dict[str, object]:
+    """Collect the shared run-metadata and bug-report environment snapshot."""
     packages: dict[str, str | None] = {}
     for package in (
         "nitid",
@@ -97,16 +102,33 @@ def write_run_metadata(save_dir: str | Path, args: Mapping[str, object]) -> None
             packages[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:
             packages[package] = None
-    environment = {
+    gpus: list[dict[str, object]] = []
+    if torch.cuda.is_available():
+        for index in range(torch.cuda.device_count()):
+            properties = torch.cuda.get_device_properties(index)
+            gpus.append(
+                {
+                    "index": index,
+                    "name": properties.name,
+                    "total_memory": properties.total_memory,
+                    "compute_capability": [properties.major, properties.minor],
+                }
+            )
+    return {
         "python": platform.python_version(),
         "platform": platform.platform(),
         "pytorch": torch.__version__,
         "cuda_available": torch.cuda.is_available(),
         "cuda_version": torch.version.cuda,
         "cudnn_version": torch.backends.cudnn.version(),
+        "gpus": gpus,
         "packages": packages,
     }
-    atomic_write_yaml(save_dir / "environment.yaml", environment)
+
+
+def environment_yaml() -> str:
+    """Render the shared environment snapshot for a text bug report."""
+    return yaml.safe_dump(_yaml_safe(collect_environment()), sort_keys=False)
 
 
 def _yaml_safe(value: object) -> object:
