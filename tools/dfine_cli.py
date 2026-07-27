@@ -126,6 +126,17 @@ Options:
   fraction=FLOAT      Fraction of training images to use (default: 1.0)
   accumulate=INT      Gradient accumulation steps (default: 1)
   multi_scale=BOOL    Randomly resize batches during training (default: false)
+  augment=BOOL        Enable box-aware training augmentation (default: true)
+  fliplr=FLOAT        Horizontal-flip probability (default: 0.5)
+  scale=FLOAT         Random scale gain (default: 0.5)
+  translate=FLOAT     Random translation gain (default: 0.1)
+  crop=FLOAT          Random crop probability/maximum edge gain (default: 0.0)
+  hsv_h=FLOAT         Hue jitter gain (default: 0.015)
+  hsv_s=FLOAT         Saturation jitter gain (default: 0.7)
+  hsv_v=FLOAT         Brightness jitter gain (default: 0.4)
+  mosaic=FLOAT        Mosaic probability; experimental, off by default
+  mixup=FLOAT         MixUp probability; experimental, off by default
+  close_mosaic=INT    Disable mosaic for the final N epochs (default: 10)
   wandb=BOOL          Enable Weights & Biases logging (default: false)
   mlflow=BOOL         Enable MLflow logging (default: false)
   verbose=BOOL        Print training progress (default: true)

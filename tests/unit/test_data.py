@@ -4,15 +4,98 @@ import json
 
 import numpy as np
 import pytest
+import torch
 import yaml
 from PIL import Image
 
+from dfine.utils.augmentations import (
+    AugmentationConfig,
+    horizontal_flip,
+    letterbox,
+    random_crop,
+    scale_translate,
+)
 from dfine.utils.data import (
     _dataset_cache_dir,
     _load_yolo_annotations,
+    build_detection_dataloader,
     normalize_names,
     resolve_detection_split,
 )
+
+
+def test_letterbox_preserves_aspect_ratio_and_updates_boxes():
+    image = Image.new("RGB", (200, 100))
+    boxes = torch.tensor([[20.0, 10.0, 100.0, 50.0]])
+    output, transformed = letterbox(image, boxes, 100)
+    assert output.size == (100, 100)
+    assert torch.allclose(transformed, torch.tensor([[10.0, 30.0, 50.0, 50.0]]))
+
+
+def test_horizontal_flip_updates_xyxy_boxes():
+    image = Image.new("RGB", (100, 50))
+    _, boxes = horizontal_flip(image, torch.tensor([[10.0, 5.0, 30.0, 25.0]]))
+    assert torch.equal(boxes, torch.tensor([[70.0, 5.0, 90.0, 25.0]]))
+
+
+def test_scale_translate_is_deterministic_and_keeps_boxes_in_bounds():
+    import random
+
+    image = Image.new("RGB", (100, 100))
+    source = torch.tensor([[20.0, 20.0, 80.0, 80.0]])
+    first = scale_translate(image, source, 0.25, 0.1, random.Random(7))[1]
+    second = scale_translate(image, source, 0.25, 0.1, random.Random(7))[1]
+    assert torch.equal(first, second)
+    assert first.min() >= 0 and first.max() <= 100
+
+
+def test_random_crop_updates_boxes_and_returns_label_mask():
+    import random
+
+    image = Image.new("RGB", (100, 100))
+    boxes = torch.tensor([[10.0, 10.0, 60.0, 60.0], [99.5, 99.5, 100.0, 100.0]])
+    cropped, transformed, keep = random_crop(image, boxes, 0.1, random.Random(4))
+    assert cropped.size[0] <= 100 and cropped.size[1] <= 100
+    assert transformed.shape == (1, 4)
+    assert keep.tolist() == [True, False]
+
+
+def test_augmentation_config_rejects_invalid_ranges():
+    with pytest.raises(ValueError, match="fliplr"):
+        AugmentationConfig(fliplr=1.1).validate()
+
+
+def test_augmented_loader_is_deterministic_across_worker_counts(tiny_dataset):
+    config = AugmentationConfig(crop=0.2, mosaic=1.0, mixup=0.5)
+    loaders = [
+        build_detection_dataloader(
+            tiny_dataset, "train", 64, 2, workers=workers, seed=19, augment=config
+        )
+        for workers in (0, 2)
+    ]
+    batches = [next(iter(loader)) for loader in loaders]
+    assert torch.equal(batches[0][0], batches[1][0])
+    for first, second in zip(batches[0][1], batches[1][1]):
+        assert torch.equal(first["boxes"], second["boxes"])
+        assert torch.equal(first["labels"], second["labels"])
+
+
+def test_mosaic_and_mixup_keep_all_boxes_and_labels_aligned(tiny_dataset):
+    mosaic = AugmentationConfig(
+        fliplr=0.0,
+        scale=0.0,
+        translate=0.0,
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.0,
+        mosaic=1.0,
+        mixup=1.0,
+    )
+    loader = build_detection_dataloader(tiny_dataset, "train", 64, 1, seed=3, augment=mosaic)
+    _, targets = next(iter(loader))
+    assert targets[0]["boxes"].shape == (5, 4)
+    assert targets[0]["labels"].shape == (5,)
+    assert torch.all((targets[0]["boxes"] >= 0) & (targets[0]["boxes"] <= 1))
 
 
 def test_normalize_names_accepts_list():

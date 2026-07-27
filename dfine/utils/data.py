@@ -29,17 +29,27 @@ import io
 import json
 import math
 import os
+import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import torch
-import torchvision.transforms as T
 import yaml
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, Subset
 
+from dfine.utils.augmentations import (
+    AugmentationConfig,
+    color_jitter_hsv,
+    horizontal_flip,
+    letterbox,
+    random_crop,
+    sanitize,
+    scale_translate,
+    to_tensor,
+)
 from dfine.utils.logging import LOGGER
 
 IMAGE_SUFFIXES = {".bmp", ".dng", ".jpeg", ".jpg", ".mpo", ".png", ".tif", ".tiff", ".webp"}
@@ -125,6 +135,8 @@ class CocoFinetuneDataset(Dataset):
         classes: list[int] | None = None,
         single_cls: bool = False,
         cache: bool | str = False,
+        augment: AugmentationConfig | None = None,
+        seed: int = 0,
     ) -> None:
         from pycocotools.coco import COCO
 
@@ -132,7 +144,11 @@ class CocoFinetuneDataset(Dataset):
             self.coco = COCO(str(ann_file))
         self.img_dir = Path(img_dir)
         self.ids = sorted(self.coco.imgs)
-        self.transform = T.Compose([T.Resize((imgsz, imgsz)), T.ToTensor()])
+        self.imgsz = imgsz
+        self.augment = augment
+        self.mosaic_enabled = True
+        self.seed = seed
+        self.epoch = 0
 
         if cat_id_to_label is None:
             sorted_cat_ids = sorted(self.coco.cats)
@@ -141,7 +157,7 @@ class CocoFinetuneDataset(Dataset):
         self.classes = set(classes) if classes is not None else None
         self.single_cls = single_cls
         self.cache = cache
-        self._image_cache: dict[int, torch.Tensor] = {}
+        self._image_cache: dict[int, Image.Image] = {}
         if cache is True or str(cache).lower() == "ram":
             for index in range(len(self.ids)):
                 self._image_cache[index] = self._load_image(index)
@@ -152,13 +168,57 @@ class CocoFinetuneDataset(Dataset):
         return len(self.ids)
 
     def __getitem__(self, idx: int):
-        img_id = self.ids[idx]
-        info = self.coco.imgs[img_id]
-        with Image.open(self.img_dir / info["file_name"]) as image:
-            width, height = image.size
+        image, boxes, labels, img_id = self._load_item(idx)
+        rng = random.Random(self.seed + self.epoch * max(len(self), 1) + idx)
+        cfg = self.augment
+        mosaic_active = bool(
+            cfg
+            and cfg.enabled
+            and self.mosaic_enabled
+            and cfg.mosaic > 0
+            and rng.random() < cfg.mosaic
+        )
+        if mosaic_active:
+            image, boxes, labels = self._mosaic(idx, rng)
+        else:
+            image, boxes = letterbox(image, boxes, self.imgsz)
 
+        if cfg and cfg.enabled:
+            if cfg.fliplr and rng.random() < cfg.fliplr:
+                image, boxes = horizontal_flip(image, boxes)
+            if cfg.scale or cfg.translate:
+                image, boxes = scale_translate(image, boxes, cfg.scale, cfg.translate, rng)
+            if cfg.crop and rng.random() < cfg.crop:
+                image, boxes, keep = random_crop(image, boxes, cfg.crop, rng)
+                labels = labels[keep]
+                image, boxes = letterbox(image, boxes, self.imgsz)
+            image = color_jitter_hsv(image, cfg, rng)
+            if cfg.mixup and rng.random() < cfg.mixup:
+                other_idx = rng.randrange(len(self))
+                other_image, other_boxes, other_labels, _ = self._load_item(other_idx)
+                other_image, other_boxes = letterbox(other_image, other_boxes, self.imgsz)
+                ratio = rng.betavariate(32.0, 32.0)
+                image = Image.blend(image, other_image, 1.0 - ratio)
+                boxes = torch.cat((boxes, other_boxes))
+                labels = torch.cat((labels, other_labels))
+
+        boxes, labels = sanitize(boxes, labels, self.imgsz, self.imgsz)
+        boxes = self._normalize_boxes(boxes)
+        target = {
+            "labels": labels,
+            "boxes": boxes,
+            "image_id": torch.tensor([img_id], dtype=torch.long),
+        }
+        return to_tensor(image), target
+
+    def _load_item(self, idx: int) -> tuple[Image.Image, torch.Tensor, torch.Tensor, int]:
+        img_id = self.ids[idx]
+        image = self._image_cache.get(idx)
+        if image is None:
+            image = self._load_image(idx)
+        width, height = image.size
         anns = self.coco.loadAnns(self.coco.getAnnIds(imgIds=img_id, iscrowd=False))
-        boxes, labels = [], []
+        box_values, label_values = [], []
         for ann in anns:
             x, y, w, h = ann["bbox"]
             if w <= 0 or h <= 0:
@@ -166,23 +226,49 @@ class CocoFinetuneDataset(Dataset):
             label = self.cat_id_to_label.get(ann["category_id"], 0)
             if self.classes is not None and label not in self.classes:
                 continue
-            boxes.append([(x + w / 2) / width, (y + h / 2) / height, w / width, h / height])
-            labels.append(0 if self.single_cls else label)
+            box_values.append([x, y, x + w, y + h])
+            label_values.append(0 if self.single_cls else label)
+        boxes = torch.tensor(box_values, dtype=torch.float32).reshape(-1, 4)
+        labels = torch.tensor(label_values, dtype=torch.long)
+        return image.copy(), boxes, labels, img_id
 
-        target = {
-            "labels": torch.tensor(labels, dtype=torch.long),
-            "boxes": torch.tensor(boxes, dtype=torch.float32).reshape(-1, 4),
-            "image_id": torch.tensor([img_id], dtype=torch.long),
-        }
-        image_tensor = self._image_cache.get(idx)
-        if image_tensor is None:
-            image_tensor = self._load_image(idx)
-        return image_tensor.clone(), target
+    def _mosaic(
+        self, idx: int, rng: random.Random
+    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor]:
+        half = self.imgsz // 2
+        canvas = Image.new("RGB", (self.imgsz, self.imgsz), (114, 114, 114))
+        indices = [idx, *(rng.randrange(len(self)) for _ in range(3))]
+        all_boxes, all_labels = [], []
+        offsets = ((0, 0), (half, 0), (0, half), (half, half))
+        for item_idx, (left, top) in zip(indices, offsets):
+            image, boxes, labels, _ = self._load_item(item_idx)
+            image, boxes = letterbox(image, boxes, half)
+            canvas.paste(image, (left, top))
+            boxes[:, [0, 2]] += left
+            boxes[:, [1, 3]] += top
+            all_boxes.append(boxes)
+            all_labels.append(labels)
+        return canvas, torch.cat(all_boxes), torch.cat(all_labels)
 
-    def _load_image(self, idx: int) -> torch.Tensor:
+    def _normalize_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
+        result = boxes.clone()
+        if result.numel():
+            xyxy = result.clone()
+            result[:, 0] = (xyxy[:, 0] + xyxy[:, 2]) / 2 / self.imgsz
+            result[:, 1] = (xyxy[:, 1] + xyxy[:, 3]) / 2 / self.imgsz
+            result[:, 2] = (xyxy[:, 2] - xyxy[:, 0]) / self.imgsz
+            result[:, 3] = (xyxy[:, 3] - xyxy[:, 1]) / self.imgsz
+        return result
+
+    def set_epoch(self, epoch: int, mosaic: bool = True) -> None:
+        """Select the deterministic transform stream and optionally disable mosaic."""
+        self.epoch = epoch
+        self.mosaic_enabled = mosaic
+
+    def _load_image(self, idx: int) -> Image.Image:
         info = self.coco.imgs[self.ids[idx]]
         with Image.open(self.img_dir / info["file_name"]) as image:
-            return self.transform(image.convert("RGB"))
+            return image.convert("RGB").copy()
 
 
 def _collate(batch):
@@ -204,6 +290,7 @@ def build_detection_dataloader(
     classes: list[int] | None = None,
     single_cls: bool = False,
     fraction: float = 1.0,
+    augment: AugmentationConfig | None = None,
 ) -> DataLoader:
     """Build a DataLoader from COCO JSON or YOLO txt labels."""
     cfg = load_data_yaml(data)
@@ -220,6 +307,8 @@ def build_detection_dataloader(
         classes=classes,
         single_cls=single_cls,
         cache=cache,
+        augment=augment if split == "train" else None,
+        seed=seed,
     )
 
     if not 0.0 < fraction <= 1.0:

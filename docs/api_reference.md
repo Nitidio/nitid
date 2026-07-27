@@ -260,7 +260,7 @@ Training controls added to the public API:
 | `val_period` | `int = 1` | Validation interval in epochs. |
 | `plots` | `bool = True` | Save training and validation plots. |
 | `workers` | `int = 0` | DataLoader worker processes. |
-| `cache` | `bool \| str = False` | Cache resized images in RAM with `True`/`"ram"`. |
+| `cache` | `bool \| str = False` | Cache decoded images in RAM with `True`/`"ram"`. |
 | `seed` | `int = 0` | Python, NumPy, PyTorch, sampling, and worker seed. |
 | `deterministic` | `bool = True` | Request deterministic PyTorch behavior. |
 | `freeze` | `int \| str \| list \| None = None` | Freeze early stages or matching parameter names/globs. |
@@ -269,6 +269,14 @@ Training controls added to the public API:
 | `fraction` | `float = 1.0` | Deterministically use a fraction in `(0, 1]`. |
 | `accumulate` | `int = 1` | Batches accumulated per optimizer step. |
 | `multi_scale` | `bool = False` | Random per-batch resizing around `imgsz`. |
+| `augment` | `bool = True` | Enable deterministic box-aware training transforms. |
+| `fliplr` | `float = 0.5` | Horizontal-flip probability. |
+| `scale` | `float = 0.5` | Random isotropic scale gain. |
+| `translate` | `float = 0.1` | Random translation gain. |
+| `crop` | `float = 0.0` | Crop probability and maximum edge fraction. |
+| `hsv_h`, `hsv_s`, `hsv_v` | `0.015`, `0.7`, `0.4` | Hue, saturation, and brightness jitter gains. |
+| `mosaic`, `mixup` | `float = 0.0` | Experimental probabilities; disabled pending positive D-FINE benchmarks. |
+| `close_mosaic` | `int = 10` | Turn mosaic off for the final N epochs. |
 | `time` | `float \| None = None` | Training duration in hours; when set, it overrides `epochs`. |
 | `save_dir` | `str \| Path \| None = None` | Exact requested run directory. |
 | `exist_ok` | `bool = False` | Training still reuses an existing directory only with resume. |

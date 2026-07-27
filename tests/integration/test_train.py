@@ -273,6 +273,17 @@ def test_train_args_match_serialized_training_state(tiny_checkpoint, tiny_datase
         "fraction",
         "accumulate",
         "multi_scale",
+        "augment",
+        "fliplr",
+        "scale",
+        "translate",
+        "crop",
+        "hsv_h",
+        "hsv_s",
+        "hsv_v",
+        "mosaic",
+        "mixup",
+        "close_mosaic",
         "time",
     }
 
