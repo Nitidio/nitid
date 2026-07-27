@@ -11,6 +11,7 @@ Usage:
 """
 
 from dfine.model import DFINE
+from dfine.utils.reporting import BugReport, bugreport
 
 __version__ = "0.1.0"
-__all__ = ["DFINE"]
+__all__ = ["BugReport", "DFINE", "bugreport"]

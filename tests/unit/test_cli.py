@@ -16,6 +16,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, main, parse_args
         ("val", ("data=PATH", "split=NAME", "dfine val")),
         ("export", ("format=FORMAT", "opset=INT", "dfine export")),
         ("info", ("detailed=BOOL", "dfine info")),
+        ("bugreport", ("environment-only", "dfine bugreport")),
     ],
 )
 def test_command_help_exits_successfully_without_loading_model(

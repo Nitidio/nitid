@@ -22,7 +22,15 @@ What you expected to happen.
 
 What actually happened. Include the full traceback if applicable.
 
+## Diagnostic report
+
+Please attach the `.log` produced by rerunning the failing CLI command with
+`--report`, or run `dfine bugreport` if no command can start. The generated log
+contains the console output, traceback, and relevant environment details.
+
 ## Environment
+
+Complete this section only if you cannot attach a diagnostic report.
 
 - nitid version:
 - Python version:
