@@ -192,6 +192,17 @@ class DFINETrainer:
         fraction: float,
         accumulate: int,
         multi_scale: bool,
+        augment: bool,
+        fliplr: float,
+        scale: float,
+        translate: float,
+        crop: float,
+        hsv_h: float,
+        hsv_s: float,
+        hsv_v: float,
+        mosaic: float,
+        mixup: float,
+        close_mosaic: int,
         time_limit: float | None,
         verbose: bool,
         callbacks: object | None = None,
@@ -291,6 +302,17 @@ class DFINETrainer:
                     "fraction": fraction,
                     "accumulate": accumulate,
                     "multi_scale": multi_scale,
+                    "augment": augment,
+                    "fliplr": fliplr,
+                    "scale": scale,
+                    "translate": translate,
+                    "crop": crop,
+                    "hsv_h": hsv_h,
+                    "hsv_s": hsv_s,
+                    "hsv_v": hsv_v,
+                    "mosaic": mosaic,
+                    "mixup": mixup,
+                    "close_mosaic": close_mosaic,
                     "time": time_limit,
                 },
             )
@@ -326,6 +348,20 @@ class DFINETrainer:
             classes = resolved["classes"]  # type: ignore[assignment]
             single_cls, fraction = bool(resolved["single_cls"]), _as_float(resolved["fraction"])
             accumulate, multi_scale = _as_int(resolved["accumulate"]), bool(resolved["multi_scale"])
+            augment = bool(resolved["augment"])
+            fliplr, scale, translate, crop = (
+                _as_float(resolved["fliplr"]),
+                _as_float(resolved["scale"]),
+                _as_float(resolved["translate"]),
+                _as_float(resolved["crop"]),
+            )
+            hsv_h, hsv_s, hsv_v = (
+                _as_float(resolved["hsv_h"]),
+                _as_float(resolved["hsv_s"]),
+                _as_float(resolved["hsv_v"]),
+            )
+            mosaic, mixup = _as_float(resolved["mosaic"]), _as_float(resolved["mixup"])
+            close_mosaic = _as_int(resolved["close_mosaic"])
             time_limit = (
                 resolved["time"] if resolved["time"] is None else _as_float(resolved["time"])
             )
@@ -339,6 +375,22 @@ class DFINETrainer:
             clip_grad=clip_grad,
             time=time_limit,
         )
+        from dfine.utils.augmentations import AugmentationConfig
+
+        augmentation = AugmentationConfig(
+            enabled=augment,
+            fliplr=fliplr,
+            scale=scale,
+            translate=translate,
+            crop=crop,
+            hsv_h=hsv_h,
+            hsv_s=hsv_s,
+            hsv_v=hsv_v,
+            mosaic=mosaic,
+            mixup=mixup,
+            close_mosaic=close_mosaic,
+        )
+        augmentation.validate()
         self._set_reproducibility(seed, deterministic)
         batch = self._validate_batch_size(batch)
         self._apply_freeze(freeze)
@@ -353,6 +405,7 @@ class DFINETrainer:
             classes=classes,
             single_cls=single_cls,
             fraction=fraction,
+            augment=augmentation,
         )
         opt = self._build_optimizer(optimizer, lr0, momentum=momentum, weight_decay=weight_decay)
         warmup_epoch_count = max(float(warmup_epochs), 0.0)
@@ -421,6 +474,17 @@ class DFINETrainer:
             fraction=fraction,
             accumulate=accumulate,
             multi_scale=multi_scale,
+            augment=augment,
+            fliplr=fliplr,
+            scale=scale,
+            translate=translate,
+            crop=crop,
+            hsv_h=hsv_h,
+            hsv_s=hsv_s,
+            hsv_v=hsv_v,
+            mosaic=mosaic,
+            mixup=mixup,
+            close_mosaic=close_mosaic,
             time=time_limit,
             verbose=verbose,
         )
@@ -479,6 +543,11 @@ class DFINETrainer:
 
         epoch_iterator = self._epoch_iterator(start_epoch, epochs, time_limit)
         for epoch in epoch_iterator:
+            self._set_dataset_epoch(
+                dataloader,
+                epoch,
+                mosaic_open=close_mosaic == 0 or epoch < max(epochs - close_mosaic, 0),
+            )
             epoch_start = time.perf_counter()
             epoch_loss = 0.0
             batch_count = 0
@@ -844,6 +913,7 @@ class DFINETrainer:
         classes: list[int] | None = None,
         single_cls: bool = False,
         fraction: float = 1.0,
+        augment=None,
     ):
         from dfine.utils.data import build_coco_dataloader
 
@@ -859,7 +929,16 @@ class DFINETrainer:
             classes=classes,
             single_cls=single_cls,
             fraction=fraction,
+            augment=augment,
         )
+
+    @staticmethod
+    def _set_dataset_epoch(dataloader, epoch: int, mosaic_open: bool) -> None:
+        dataset = dataloader.dataset
+        while hasattr(dataset, "dataset"):
+            dataset = dataset.dataset
+        if hasattr(dataset, "set_epoch"):
+            dataset.set_epoch(epoch, mosaic=mosaic_open)
 
     def _build_optimizer(
         self, name: str, lr: float, momentum: float = 0.9, weight_decay: float = 1e-4
