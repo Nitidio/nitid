@@ -84,6 +84,20 @@ def test_multi_scale_sizes_are_stride_aligned(trainer):
     assert all(400 <= size <= 1200 for size in sizes)
 
 
+def test_set_dataset_epoch_controls_mosaic(trainer):
+    class Dataset:
+        def __init__(self):
+            self.calls = []
+
+        def set_epoch(self, epoch, mosaic=True):
+            self.calls.append((epoch, mosaic))
+
+    dataset = Dataset()
+    loader = type("Loader", (), {"dataset": dataset})()
+    trainer._set_dataset_epoch(loader, 7, mosaic_open=False)
+    assert dataset.calls == [(7, False)]
+
+
 def test_freeze_parameter_pattern(trainer):
     frozen = trainer._apply_freeze("l.weight")
 

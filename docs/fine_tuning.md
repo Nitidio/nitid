@@ -498,7 +498,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `plots` | `bool` | `True` | `True`, `False` | Save training-history and validation plots. |
 | `val_period` | `int` | `1` | `>= 1` | Validate every N epochs and at the final/time-limited epoch. |
 | `workers` | `int` | `0` | `>= 0` | DataLoader worker processes. |
-| `cache` | `bool \| str` | `False` | `False`, `True`, `"ram"` | Cache resized training images in memory. |
+| `cache` | `bool \| str` | `False` | `False`, `True`, `"ram"` | Cache decoded training images in memory. |
 | `seed` | `int` | `0` | any integer | Seed Python, NumPy, PyTorch, dataset sampling, and DataLoader generators. |
 | `deterministic` | `bool` | `True` | `True`, `False` | Request deterministic PyTorch/cuDNN behavior where available. |
 | `freeze` | `int \| str \| list \| None` | `None` | layer count, stage, substring, or glob | Freeze matching parameters before optimizer creation. |
@@ -507,11 +507,33 @@ Use this table as the authoritative reference for train-time arguments.
 | `fraction` | `float` | `1.0` | `(0, 1]` | Deterministically sample this fraction of training images. |
 | `accumulate` | `int` | `1` | `>= 1` | Accumulate gradients across batches before optimizer and EMA steps. |
 | `multi_scale` | `bool` | `False` | `True`, `False` | Randomly resize batches from roughly 0.5× to 1.5× `imgsz`, in multiples of 32. |
+| `augment` | `bool` | `True` | `True`, `False` | Enable box-aware training augmentation. Letterbox preprocessing remains active when disabled. |
+| `fliplr` | `float` | `0.5` | `[0, 1]` | Probability of a horizontal flip. |
+| `scale` | `float` | `0.5` | `[0, 1)` | Maximum random isotropic scale gain. |
+| `translate` | `float` | `0.1` | `[0, 1]` | Maximum translation as a fraction of image width/height. |
+| `crop` | `float` | `0.0` | `[0, 1]` | Crop probability and maximum fraction sampled independently from each edge. |
+| `hsv_h` | `float` | `0.015` | `[0, 0.5]` | Hue jitter gain. |
+| `hsv_s` | `float` | `0.7` | `[0, 1]` | Saturation jitter gain. |
+| `hsv_v` | `float` | `0.4` | `[0, 1]` | Brightness/value jitter gain. |
+| `mosaic` | `float` | `0.0` | `[0, 1]` | Mosaic probability. Experimental and disabled until a D-FINE benchmark demonstrates a gain. |
+| `mixup` | `float` | `0.0` | `[0, 1]` | MixUp probability. Experimental and disabled until benchmarked. |
+| `close_mosaic` | `int` | `10` | `>= 0` | Disable mosaic for the final N epochs; zero keeps it active. |
 | `time` | `float \| None` | `None` | positive hours or `None` | Training duration in hours. When supplied, this overrides `epochs` as the loop's stopping limit. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
 | `callbacks` | `object \| dict \| None` | `None` | callback object or hook mapping | Optional lifecycle hooks for custom logging, experiment tracking, or other training-time integrations. |
 | `wandb` | `bool \| dict` | `False` | `True`, `False`, or WandB options | Enables the optional Weights & Biases integration. |
 | `mlflow` | `bool \| dict` | `False` | `True`, `False`, or MLflow options | Enables the optional Ultralytics-style MLflow integration. |
+
+Images are first resized with aspect ratio preserved and padded to `imgsz`. Every
+geometric transform operates on absolute `xyxy` boxes, clips them to the visible
+image, removes empty boxes and their labels, and only then converts targets to the
+normalized `cxcywh` format expected by D-FINE. The sample/epoch seed makes transform
+choices independent of DataLoader worker scheduling. All resolved values above are
+written to `args.yaml` and restored from `last.pth` on resume.
+
+Mosaic and MixUp are implemented as opt-in benchmark candidates, not selected
+defaults. See [augmentation benchmarks](augmentation_benchmarks.md) for the required
+comparison protocol and current evidence status.
 
 ## Resume training
 
