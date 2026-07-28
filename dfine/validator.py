@@ -15,6 +15,7 @@ from typing import Protocol, TypedDict, cast
 import numpy as np
 import torch
 from torchvision.ops import box_iou
+from tqdm.auto import tqdm
 
 from dfine.utils.logging import LOGGER
 
@@ -105,6 +106,7 @@ class DFINEValidator:
         plots: bool = True,
         classes: list[int] | None = None,
         single_cls: bool = False,
+        show_progress: bool | None = None,
     ) -> dict:
         """
         Evaluate on a COCO-format dataset split.
@@ -147,8 +149,16 @@ class DFINEValidator:
         coco_results: list[dict[str, object]] = []
 
         self.model.eval()
+        progress = tqdm(
+            dataloader,
+            total=len(dataloader),
+            desc=f"val:{split}",
+            leave=False,
+            unit="batch",
+            disable=not (verbose if show_progress is None else show_progress),
+        )
         with _dynamic_eval_geometry(self.model, imgsz), torch.no_grad():
-            for images, targets in dataloader:
+            for images, targets in progress:
                 images = images.to(self.device)
                 orig_sizes = torch.tensor(
                     [[imgsz, imgsz]] * len(images),
@@ -313,8 +323,42 @@ class DFINEValidator:
         recalls = np.zeros_like(thresholds)
         f1_scores = np.zeros_like(thresholds)
 
+        # Greedily match each image once in descending confidence order. Lower-confidence
+        # predictions cannot change matches already assigned to higher-confidence ones, so
+        # threshold metrics are just cumulative slices of this single matching pass.
+        prediction_scores: list[float] = []
+        prediction_is_tp: list[bool] = []
+        total_gt = sum(len(gt["boxes"]) for gt in gt_records)
+        for gt, pred in zip(gt_records, pred_records):
+            gt_boxes, gt_labels = gt["boxes"], gt["labels"]
+            pred_order = torch.argsort(pred["scores"], descending=True)
+            matched_gt: set[int] = set()
+            for pred_idx in pred_order.tolist():
+                score = float(pred["scores"][pred_idx])
+                label = int(pred["labels"][pred_idx])
+                candidate_indices = [
+                    gt_idx
+                    for gt_idx, gt_label in enumerate(gt_labels.tolist())
+                    if int(gt_label) == label and gt_idx not in matched_gt
+                ]
+                is_tp = False
+                if candidate_indices:
+                    candidate_boxes = gt_boxes[candidate_indices]
+                    ious = box_iou(pred["boxes"][pred_idx : pred_idx + 1], candidate_boxes)[0]
+                    best_iou, best_relative_idx = torch.max(ious, dim=0)
+                    if float(best_iou) >= 0.5:
+                        matched_gt.add(candidate_indices[int(best_relative_idx)])
+                        is_tp = True
+                prediction_scores.append(score)
+                prediction_is_tp.append(is_tp)
+
+        scores = np.asarray(prediction_scores, dtype=np.float32)
+        true_positives = np.asarray(prediction_is_tp, dtype=np.bool_)
         for i, threshold in enumerate(thresholds):
-            tp, fp, fn = self._count_matches(gt_records, pred_records, conf_thresh=float(threshold))
+            selected = scores >= threshold
+            tp = int(np.count_nonzero(true_positives & selected))
+            fp = int(np.count_nonzero(~true_positives & selected))
+            fn = total_gt - tp
             precision = tp / (tp + fp) if (tp + fp) else 0.0
             recall = tp / (tp + fn) if (tp + fn) else 0.0
             f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0

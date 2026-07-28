@@ -679,6 +679,7 @@ class DFINETrainer:
                     plots=plots,
                     classes=classes,
                     single_cls=single_cls,
+                    show_progress=verbose,
                 )
                 self.current_val_metrics = val_metrics
                 self._run_callbacks("on_val_end")
@@ -1383,6 +1384,7 @@ class DFINETrainer:
         plots: bool = True,
         classes: list[int] | None = None,
         single_cls: bool = False,
+        show_progress: bool = False,
     ) -> dict:
         from dfine.validator import DFINEValidator
 
@@ -1398,6 +1400,7 @@ class DFINETrainer:
             plots=plots,
             classes=classes,
             single_cls=single_cls,
+            show_progress=show_progress,
         )
 
     def _primary_loss_stats(self, train_stats: dict[str, float]) -> dict[str, float]:
