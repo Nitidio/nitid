@@ -688,6 +688,7 @@ class DFINETrainer:
 
             row: dict[str, float | int] = {
                 "epoch": epoch + 1,
+                "validated": int(should_validate),
                 "time": epoch_time,
                 "s_per_it": seconds_per_iter,
                 "lr": opt.param_groups[0]["lr"],
@@ -1496,14 +1497,22 @@ class DFINETrainer:
         plt.close(fig)
 
     def _format_epoch_row(self, epoch: int, epochs: int, row: dict[str, float | int]) -> str:
+        validated = bool(row.get("validated", True))
+        val_fields = (
+            [
+                f"P={float(row.get('precision', 0.0)):.3f}",
+                f"R={float(row.get('recall', 0.0)):.3f}",
+                f"mAP50={float(row.get('mAP50', 0.0)):.3f}",
+                f"mAP50-95={float(row.get('mAP50-95', 0.0)):.3f}",
+                f"fitness={float(row.get('fitness', 0.0)):.3f}",
+            ]
+            if validated
+            else ["validation=skipped"]
+        )
         parts = [
             f"Epoch {epoch}/{epochs}",
             f"loss={float(row.get('loss', 0.0)):.4f}",
-            f"P={float(row.get('precision', 0.0)):.3f}",
-            f"R={float(row.get('recall', 0.0)):.3f}",
-            f"mAP50={float(row.get('mAP50', 0.0)):.3f}",
-            f"mAP50-95={float(row.get('mAP50-95', 0.0)):.3f}",
-            f"fitness={float(row.get('fitness', 0.0)):.3f}",
+            *val_fields,
             f"instances={int(row.get('instances', 0))}",
             f"imgsz={int(row.get('imgsz', 0))}",
             f"mem={float(row.get('memory_mb', 0.0)):.1f}MB",
