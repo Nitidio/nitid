@@ -431,7 +431,6 @@ class DFINETrainer:
         self.ema_model = ema_model
 
         criterion.train()
-        weight_dict = criterion.weight_dict
         history: list[dict[str, float | int]] = []
         best_fitness = float("-inf")
         best_epoch = 0
@@ -611,7 +610,12 @@ class DFINETrainer:
                 with torch.amp.autocast(device_type=device_type, enabled=amp):
                     outputs = self.model(images, targets=targets)
                     loss_dict = criterion(outputs, targets)
-                    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
+                    # DFINECriterion has already applied weight_dict to every returned
+                    # primary, auxiliary, encoder, pre-decoder, and denoising term.
+                    # Upstream D-FINE optimizes their direct sum. Filtering by the base
+                    # weight-dict keys would discard all suffixed supervision terms, and
+                    # applying the weights here would weight primary losses twice.
+                    loss = self._sum_loss_terms(loss_dict)
                     scaled_loss = loss / accumulate
 
                 if scaler is not None:
@@ -1152,6 +1156,17 @@ class DFINETrainer:
         from dfine.nn.criterion import build_criterion
 
         return build_criterion(self.cfg)
+
+    @staticmethod
+    def _sum_loss_terms(loss_dict: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """Sum D-FINE criterion outputs, which are already individually weighted."""
+        if not loss_dict:
+            raise RuntimeError("D-FINE criterion returned no loss terms")
+        terms = iter(loss_dict.values())
+        total = next(terms)
+        for term in terms:
+            total = total + term
+        return total
 
     def _build_ema(self, decay: float) -> ModelEMA:
         return ModelEMA(self.model, decay=decay)

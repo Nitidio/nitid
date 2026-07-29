@@ -241,6 +241,29 @@ def test_compute_warmup_iters_has_small_dataset_floor(trainer):
     assert trainer._compute_warmup_iters(warmup_epochs=0.5, total_batches=300) == 150
 
 
+def test_sum_loss_terms_includes_weighted_primary_auxiliary_and_denoising(trainer):
+    parameter = torch.tensor(2.0, requires_grad=True)
+    loss_dict = {
+        # These values represent the already-weighted tensors returned by
+        # DFINECriterion. Suffixed terms must not be filtered out.
+        "loss_bbox": parameter * 3.0,
+        "loss_bbox_aux_0": parameter * 5.0,
+        "loss_vfl_enc_0": parameter * 7.0,
+        "loss_giou_dn_0": parameter * 11.0,
+    }
+
+    loss = trainer._sum_loss_terms(loss_dict)
+    loss.backward()
+
+    assert loss.item() == pytest.approx(52.0)
+    assert parameter.grad.item() == pytest.approx(26.0)
+
+
+def test_sum_loss_terms_rejects_empty_criterion_output(trainer):
+    with pytest.raises(RuntimeError, match="returned no loss terms"):
+        trainer._sum_loss_terms({})
+
+
 # ── ModelEMA ─────────────────────────────────────────────────────────────────
 
 
