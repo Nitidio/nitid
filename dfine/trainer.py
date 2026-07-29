@@ -159,6 +159,7 @@ class DFINETrainer:
         imgsz: int,
         batch: int,
         lr0: float,
+        backbone_lr: float | None,
         lrf: float,
         cos_lr: bool,
         warmup_epochs: float,
@@ -218,6 +219,7 @@ class DFINETrainer:
             imgsz:      Input image size (square).
             batch:      Batch size.
             lr0:        Initial learning rate.
+            backbone_lr: Optional lower learning rate for backbone parameters.
             lrf:        Final LR as a fraction of lr0 at the end of training.
             cos_lr:     Use cosine LR decay instead of linear decay.
             warmup_epochs: Number of warmup epochs before the main decay schedule.
@@ -274,6 +276,7 @@ class DFINETrainer:
                     "imgsz": imgsz,
                     "batch": batch,
                     "lr0": lr0,
+                    "backbone_lr": backbone_lr,
                     "lrf": lrf,
                     "cos_lr": cos_lr,
                     "warmup_epochs": warmup_epochs,
@@ -320,6 +323,9 @@ class DFINETrainer:
             imgsz = _as_int(resolved["imgsz"])
             batch = _as_int(resolved["batch"])
             lr0, lrf = _as_float(resolved["lr0"]), _as_float(resolved["lrf"])
+            backbone_lr = (
+                None if resolved["backbone_lr"] is None else _as_float(resolved["backbone_lr"])
+            )
             cos_lr = bool(resolved["cos_lr"])
             warmup_epochs = _as_float(resolved["warmup_epochs"])
             warmup_momentum = _as_float(resolved["warmup_momentum"])
@@ -407,7 +413,13 @@ class DFINETrainer:
             fraction=fraction,
             augment=augmentation,
         )
-        opt = self._build_optimizer(optimizer, lr0, momentum=momentum, weight_decay=weight_decay)
+        opt = self._build_optimizer(
+            optimizer,
+            lr0,
+            momentum=momentum,
+            weight_decay=weight_decay,
+            backbone_lr=backbone_lr,
+        )
         warmup_epoch_count = max(float(warmup_epochs), 0.0)
         decay_epochs = max(epochs - int(warmup_epoch_count), 1)
         scheduler = self._build_scheduler(opt, epochs=decay_epochs, lrf=lrf, cos_lr=cos_lr)
@@ -442,6 +454,7 @@ class DFINETrainer:
             imgsz=imgsz,
             batch=batch,
             lr0=lr0,
+            backbone_lr=backbone_lr,
             lrf=lrf,
             cos_lr=cos_lr,
             warmup_epochs=warmup_epochs,
@@ -947,38 +960,44 @@ class DFINETrainer:
             dataset.set_epoch(epoch, mosaic=mosaic_open)
 
     def _build_optimizer(
-        self, name: str, lr: float, momentum: float = 0.9, weight_decay: float = 1e-4
+        self,
+        name: str,
+        lr: float,
+        momentum: float = 0.9,
+        weight_decay: float = 1e-4,
+        backbone_lr: float | None = None,
     ):
-        # Keep a dedicated bias group so warmup_bias_lr can match Ultralytics-style warmup.
-        weights: list[torch.nn.Parameter] = []
-        biases: list[torch.nn.Parameter] = []
+        if lr <= 0:
+            raise ValueError("lr must be greater than 0")
+        if backbone_lr is not None and backbone_lr <= 0:
+            raise ValueError("backbone_lr must be greater than 0")
+
+        # D-FINE fine-tuning uses a lower LR for the pretrained backbone and no
+        # weight decay on normalization parameters or biases. Keep bias groups
+        # distinct so the optional warmup_bias_lr behavior remains intact.
+        grouped: dict[tuple[float, float, bool, str], list[torch.nn.Parameter]] = {}
         for param_name, param in self.model.named_parameters():
             if not param.requires_grad:
                 continue
-            if param_name.endswith(".bias"):
-                biases.append(param)
-            else:
-                weights.append(param)
+            is_backbone = param_name == "backbone" or param_name.startswith("backbone.")
+            group_lr = backbone_lr if is_backbone and backbone_lr is not None else lr
+            is_bias = param_name.endswith(".bias")
+            lowered = param_name.lower()
+            is_norm = param.ndim == 1 or "norm" in lowered or ".bn" in lowered
+            decay = 0.0 if is_bias or is_norm else weight_decay
+            role = "backbone" if is_backbone else "main"
+            grouped.setdefault((group_lr, decay, is_bias, role), []).append(param)
 
         param_groups: list[dict[str, object]] = []
-        if weights:
+        for (group_lr, decay, is_bias, role), params in grouped.items():
             param_groups.append(
                 {
-                    "params": weights,
-                    "lr": lr,
-                    "initial_lr": lr,
-                    "is_bias_group": False,
-                    "weight_decay": weight_decay,
-                }
-            )
-        if biases:
-            param_groups.append(
-                {
-                    "params": biases,
-                    "lr": lr,
-                    "initial_lr": lr,
-                    "is_bias_group": True,
-                    "weight_decay": 0.0,
+                    "params": params,
+                    "lr": group_lr,
+                    "initial_lr": group_lr,
+                    "is_bias_group": is_bias,
+                    "weight_decay": decay,
+                    "parameter_role": role,
                 }
             )
 
