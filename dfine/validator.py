@@ -10,7 +10,7 @@ import importlib
 import io
 from collections import defaultdict
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import Any, Protocol, TypedDict, cast
 
 import numpy as np
 import torch
@@ -20,8 +20,13 @@ from tqdm.auto import tqdm
 from dfine.utils.logging import LOGGER
 
 
+class CocoApi(Protocol):
+    imgs: dict[int, dict[str, Any]]
+
+
 class CocoLikeDataset(Protocol):
     cat_id_to_label: dict[int, int]
+    coco: CocoApi
 
 
 class GTRecord(TypedDict):
@@ -51,6 +56,19 @@ PerClassRow = TypedDict(
 def _cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
     cx, cy, w, h = boxes.unbind(-1)
     return torch.stack((cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), dim=-1)
+
+
+def _restore_original_coordinates(
+    boxes: torch.Tensor, original_width: int, original_height: int, imgsz: int
+) -> torch.Tensor:
+    """Map absolute xyxy boxes from D-FINE's square resize to original pixels."""
+    restored = boxes.clone()
+    if restored.numel():
+        restored[:, [0, 2]] *= original_width / imgsz
+        restored[:, [1, 3]] *= original_height / imgsz
+        restored[:, [0, 2]].clamp_(0, original_width)
+        restored[:, [1, 3]].clamp_(0, original_height)
+    return restored
 
 
 def _as_float(value: object, default: float = 0.0) -> float:
@@ -181,9 +199,16 @@ class DFINEValidator:
                         {"boxes": pred_boxes, "scores": pred_scores, "labels": pred_labels}
                     )
 
+                    image_info = dataset.coco.imgs[img_id]
+                    coco_boxes = _restore_original_coordinates(
+                        pred_boxes,
+                        original_width=int(image_info["width"]),
+                        original_height=int(image_info["height"]),
+                        imgsz=imgsz,
+                    )
                     mask = pred_scores > conf
                     for box, score, label in zip(
-                        pred_boxes[mask].tolist(),
+                        coco_boxes[mask].tolist(),
                         pred_scores[mask].tolist(),
                         pred_labels[mask].tolist(),
                     ):
@@ -200,24 +225,41 @@ class DFINEValidator:
         with contextlib.redirect_stdout(io.StringIO()):
             coco_gt = COCO(str(ann_file))
         coco_eval = None
-        coco_metrics = {"mAP50-95": 0.0, "mAP50": 0.0, "AR1": 0.0, "AR100": 0.0}
+        coco_metrics = {
+            "mAP50-95": 0.0,
+            "mAP50": 0.0,
+            "AR1": 0.0,
+            "AR100": 0.0,
+            "AR300": 0.0,
+        }
         per_class_rows: list[PerClassRow] = []
 
         if coco_results:
             with contextlib.redirect_stdout(io.StringIO()):
                 coco_dt = coco_gt.loadRes(coco_results)
             coco_eval = COCOeval(coco_gt, coco_dt, "bbox")
+            # D-FINE emits 300 predictions and Ultralytics evaluates detection with
+            # max_det=300. COCO's default cap of 100 is particularly inappropriate
+            # for dense datasets such as SKU-110K (often >100 objects per image).
+            coco_eval.params.maxDets = [1, 10, 100, 300]
             with contextlib.redirect_stdout(io.StringIO()):
                 coco_eval.evaluate()
                 coco_eval.accumulate()
-                coco_eval.summarize()
+            precision_values = coco_eval.eval["precision"]
+            recall_values = coco_eval.eval["recall"]
 
-            stats = coco_eval.stats if len(coco_eval.stats) >= 12 else [0.0] * 12
+            def mean_valid(values: np.ndarray) -> float:
+                valid = values[values > -1]
+                return float(np.mean(valid)) if valid.size else 0.0
+
             coco_metrics = {
-                "mAP50-95": float(stats[0]),
-                "mAP50": float(stats[1]),
-                "AR1": float(stats[6]),
-                "AR100": float(stats[8]),
+                # precision: [IoU, recall, class, area, max_detections]
+                "mAP50-95": mean_valid(precision_values[:, :, :, 0, -1]),
+                "mAP50": mean_valid(precision_values[0, :, :, 0, -1]),
+                # recall: [IoU, class, area, max_detections]
+                "AR1": mean_valid(recall_values[:, :, 0, 0]),
+                "AR100": mean_valid(recall_values[:, :, 0, 2]),
+                "AR300": mean_valid(recall_values[:, :, 0, -1]),
             }
             per_class_rows = self._per_class_ap(coco_eval, gt_records, cat_id_to_label)
         elif verbose:
