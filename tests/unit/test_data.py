@@ -14,6 +14,7 @@ from dfine.utils.augmentations import (
     letterbox,
     random_crop,
     scale_translate,
+    stretch_resize,
 )
 from dfine.utils.data import (
     _dataset_cache_dir,
@@ -30,6 +31,14 @@ def test_letterbox_preserves_aspect_ratio_and_updates_boxes():
     output, transformed = letterbox(image, boxes, 100)
     assert output.size == (100, 100)
     assert torch.allclose(transformed, torch.tensor([[10.0, 30.0, 50.0, 50.0]]))
+
+
+def test_stretch_resize_matches_dfine_preprocessing_and_updates_boxes():
+    image = Image.new("RGB", (200, 100))
+    boxes = torch.tensor([[20.0, 10.0, 100.0, 50.0]])
+    output, transformed = stretch_resize(image, boxes, 100)
+    assert output.size == (100, 100)
+    assert torch.allclose(transformed, torch.tensor([[10.0, 10.0, 50.0, 50.0]]))
 
 
 def test_horizontal_flip_updates_xyxy_boxes():

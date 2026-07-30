@@ -108,10 +108,11 @@ The workflow is:
 ```text
 DFINE("dfine_s")
 -> nitid checks the model registry
+-> resolves the default Objects365-to-COCO weight variant
 -> downloads the official D-FINE checkpoint
 -> reads the matching D-FINE config from extern/dfine
 -> reads COCO names from configs/datasets/coco.yml
--> writes dfine_s_wrapped.pth
+-> writes dfine_s_obj2coco_wrapped.pth
 ```
 
 If the internet connection, D-FINE submodule, or class names file is missing, the download or wrapping step can fail.
@@ -143,6 +144,7 @@ uv run dfine download model=dfine_s output=models force=true
 ```
 
 Supported model names are `dfine_s`, `dfine_m`, `dfine_l`, and `dfine_x`.
+Supported weight variants are `obj2coco` (the default) and `coco`.
 
 ## Raw D-FINE checkpoint gives `KeyError: 'config'`
 

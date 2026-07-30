@@ -1,8 +1,17 @@
-"""Unit tests for validation resolution handling."""
+"""Unit tests for validation geometry handling."""
 
+import torch
 import torch.nn as nn
 
-from dfine.validator import _dynamic_eval_geometry
+from dfine.validator import _dynamic_eval_geometry, _restore_original_coordinates
+
+
+def test_restore_original_coordinates_reverses_dfine_square_resize():
+    resized = torch.tensor([[10.0, 10.0, 50.0, 50.0]])
+    restored = _restore_original_coordinates(
+        resized, original_width=200, original_height=100, imgsz=100
+    )
+    assert torch.allclose(restored, torch.tensor([[20.0, 10.0, 100.0, 50.0]]))
 
 
 def test_non_native_eval_size_temporarily_uses_dynamic_geometry():

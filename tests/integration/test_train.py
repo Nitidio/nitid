@@ -265,6 +265,7 @@ def test_train_args_match_serialized_training_state(tiny_checkpoint, tiny_datase
         "seed",
         "deterministic",
         "momentum",
+        "backbone_lr",
         "weight_decay",
         "clip_grad",
         "freeze",

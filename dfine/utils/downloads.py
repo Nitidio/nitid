@@ -5,49 +5,88 @@ from __future__ import annotations
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
 from tools.convert_checkpoint import convert as convert_checkpoint
 
 _ROOT = Path(__file__).parents[2]
+_RELEASE_ROOT = "https://github.com/Peterande/storage/releases/download/dfinev1.0"
+_CONFIG_ROOT = _ROOT / "extern" / "dfine" / "configs" / "dfine"
 
 
 @dataclass(frozen=True)
 class ModelAsset:
-    name: str
+    """One pretrained-weight variant for a D-FINE architecture."""
+
+    model: str
+    weights: str
     url: str
     config: Path
     filename: str
 
+    @property
+    def name(self) -> str:
+        """Compatibility label used in messages and checkpoint metadata."""
+        return self.model
 
-MODEL_REGISTRY = {
-    "dfine_s": ModelAsset(
-        name="dfine_s",
-        url="https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_coco.pth",
-        config=_ROOT / "extern" / "dfine" / "configs" / "dfine" / "dfine_hgnetv2_s_coco.yml",
-        filename="dfine_s_wrapped.pth",
-    ),
-    "dfine_m": ModelAsset(
-        name="dfine_m",
-        url="https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_coco.pth",
-        config=_ROOT / "extern" / "dfine" / "configs" / "dfine" / "dfine_hgnetv2_m_coco.yml",
-        filename="dfine_m_wrapped.pth",
-    ),
-    "dfine_l": ModelAsset(
-        name="dfine_l",
-        url="https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_coco.pth",
-        config=_ROOT / "extern" / "dfine" / "configs" / "dfine" / "dfine_hgnetv2_l_coco.yml",
-        filename="dfine_l_wrapped.pth",
-    ),
-    "dfine_x": ModelAsset(
-        name="dfine_x",
-        url="https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_coco.pth",
-        config=_ROOT / "extern" / "dfine" / "configs" / "dfine" / "dfine_hgnetv2_x_coco.yml",
-        filename="dfine_x_wrapped.pth",
-    ),
+
+def _asset(
+    model: str,
+    weights: str,
+    checkpoint: str,
+    config: str,
+) -> ModelAsset:
+    return ModelAsset(
+        model=model,
+        weights=weights,
+        url=f"{_RELEASE_ROOT}/{checkpoint}",
+        config=_CONFIG_ROOT / config,
+        filename=f"{model}_{weights}_wrapped.pth",
+    )
+
+
+MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
+    "dfine_s": {
+        "obj2coco": _asset(
+            "dfine_s",
+            "obj2coco",
+            "dfine_s_obj2coco.pth",
+            "objects365/dfine_hgnetv2_s_obj2coco.yml",
+        ),
+        "coco": _asset("dfine_s", "coco", "dfine_s_coco.pth", "dfine_hgnetv2_s_coco.yml"),
+    },
+    "dfine_m": {
+        "obj2coco": _asset(
+            "dfine_m",
+            "obj2coco",
+            "dfine_m_obj2coco.pth",
+            "objects365/dfine_hgnetv2_m_obj2coco.yml",
+        ),
+        "coco": _asset("dfine_m", "coco", "dfine_m_coco.pth", "dfine_hgnetv2_m_coco.yml"),
+    },
+    "dfine_l": {
+        "obj2coco": _asset(
+            "dfine_l",
+            "obj2coco",
+            "dfine_l_obj2coco_e25.pth",
+            "objects365/dfine_hgnetv2_l_obj2coco.yml",
+        ),
+        "coco": _asset("dfine_l", "coco", "dfine_l_coco.pth", "dfine_hgnetv2_l_coco.yml"),
+    },
+    "dfine_x": {
+        "obj2coco": _asset(
+            "dfine_x",
+            "obj2coco",
+            "dfine_x_obj2coco.pth",
+            "objects365/dfine_hgnetv2_x_obj2coco.yml",
+        ),
+        "coco": _asset("dfine_x", "coco", "dfine_x_coco.pth", "dfine_hgnetv2_x_coco.yml"),
+    },
 }
 
-_ALIASES = {
+DEFAULT_WEIGHTS = "obj2coco"
+_MODEL_ALIASES = {
     "s": "dfine_s",
     "m": "dfine_m",
     "l": "dfine_l",
@@ -57,21 +96,55 @@ _ALIASES = {
     "d_fine_l": "dfine_l",
     "d_fine_x": "dfine_x",
 }
+_WEIGHT_ALIASES = {
+    "default": DEFAULT_WEIGHTS,
+    "objects365_coco": "obj2coco",
+    "objects365_to_coco": "obj2coco",
+    "coco_only": "coco",
+}
+
+
+def _normalize_model(model: str) -> str:
+    key = model.lower().replace("-", "_")
+    return _MODEL_ALIASES.get(key, key)
+
+
+def _normalize_weights(weights: str) -> str:
+    if not isinstance(weights, str):
+        raise TypeError("weights must be a string")
+    key = weights.lower().replace("-", "_")
+    return _WEIGHT_ALIASES.get(key, key)
 
 
 def list_models() -> list[str]:
-    """Return supported model names."""
+    """Return supported D-FINE architecture names."""
     return sorted(MODEL_REGISTRY)
 
 
-def get_model_asset(model: str) -> ModelAsset:
-    """Return metadata for a supported D-FINE model name."""
-    key = model.lower().replace("-", "_")
-    key = _ALIASES.get(key, key)
-    if key not in MODEL_REGISTRY:
+def list_weights(model: str) -> list[str]:
+    """Return canonical pretrained-weight variants for an architecture."""
+    model_key = _normalize_model(model)
+    if model_key not in MODEL_REGISTRY:
         choices = ", ".join(list_models())
         raise ValueError(f"Unknown model {model!r}. Choose one of: {choices}")
-    return MODEL_REGISTRY[key]
+    return sorted(MODEL_REGISTRY[model_key])
+
+
+def get_model_asset(model: str, weights: str = "default") -> ModelAsset:
+    """Resolve a model architecture and pretrained-weight variant."""
+    model_key = _normalize_model(model)
+    if model_key not in MODEL_REGISTRY:
+        choices = ", ".join(list_models())
+        raise ValueError(f"Unknown model {model!r}. Choose one of: {choices}")
+
+    weights_key = _normalize_weights(weights)
+    variants = MODEL_REGISTRY[model_key]
+    if weights_key not in variants:
+        choices = ", ".join(sorted(variants))
+        raise ValueError(
+            f"Unknown weights {weights!r} for {model_key}. Choose one of: {choices}, default"
+        )
+    return variants[weights_key]
 
 
 def resolve_output_path(asset: ModelAsset, output: str | Path | None = None) -> Path:
@@ -87,21 +160,13 @@ def resolve_output_path(asset: ModelAsset, output: str | Path | None = None) -> 
 
 def download_model(
     model: str,
+    *,
+    weights: str = "default",
     output: str | Path | None = None,
     force: bool = False,
 ) -> Path:
-    """
-    Download a raw D-FINE checkpoint and convert it to nitid's wrapped format.
-
-    Args:
-        model: Supported model name: dfine_s, dfine_m, dfine_l, or dfine_x.
-        output: Optional output file path or directory. Defaults to current directory.
-        force: Overwrite an existing wrapped checkpoint when True.
-
-    Returns:
-        Path to the wrapped checkpoint.
-    """
-    asset = get_model_asset(model)
+    """Download and wrap an official checkpoint for ``model`` and ``weights``."""
+    asset = get_model_asset(model, weights)
     out_path = resolve_output_path(asset, output)
 
     if out_path.exists() and not force:
@@ -119,9 +184,10 @@ def download_model(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    raw_filename = Path(urlparse(asset.url).path).name
     with tempfile.TemporaryDirectory(prefix="nitid-download-") as tmp_dir:
-        raw_path = Path(tmp_dir) / f"{asset.name}_coco.pth"
-        print(f"Downloading {asset.name} from {asset.url}")
+        raw_path = Path(tmp_dir) / raw_filename
+        print(f"Downloading {asset.model} weights={asset.weights} from {asset.url}")
         urlretrieve(asset.url, raw_path)
         print(f"Converting to nitid checkpoint: {out_path}")
         convert_checkpoint(

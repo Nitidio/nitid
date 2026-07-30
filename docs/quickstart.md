@@ -29,6 +29,7 @@ download, wrap, and load the corresponding checkpoint on first use.
 from dfine import DFINE
 
 model = DFINE("dfine_s")
+# Default: Objects365 → COCO. Use weights="coco" for COCO-only weights.
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```

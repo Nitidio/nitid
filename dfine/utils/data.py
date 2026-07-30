@@ -44,10 +44,10 @@ from dfine.utils.augmentations import (
     AugmentationConfig,
     color_jitter_hsv,
     horizontal_flip,
-    letterbox,
     random_crop,
     sanitize,
     scale_translate,
+    stretch_resize,
     to_tensor,
 )
 from dfine.utils.logging import LOGGER
@@ -181,7 +181,7 @@ class CocoFinetuneDataset(Dataset):
         if mosaic_active:
             image, boxes, labels = self._mosaic(idx, rng)
         else:
-            image, boxes = letterbox(image, boxes, self.imgsz)
+            image, boxes = stretch_resize(image, boxes, self.imgsz)
 
         if cfg and cfg.enabled:
             if cfg.fliplr and rng.random() < cfg.fliplr:
@@ -191,12 +191,12 @@ class CocoFinetuneDataset(Dataset):
             if cfg.crop and rng.random() < cfg.crop:
                 image, boxes, keep = random_crop(image, boxes, cfg.crop, rng)
                 labels = labels[keep]
-                image, boxes = letterbox(image, boxes, self.imgsz)
+                image, boxes = stretch_resize(image, boxes, self.imgsz)
             image = color_jitter_hsv(image, cfg, rng)
             if cfg.mixup and rng.random() < cfg.mixup:
                 other_idx = rng.randrange(len(self))
                 other_image, other_boxes, other_labels, _ = self._load_item(other_idx)
-                other_image, other_boxes = letterbox(other_image, other_boxes, self.imgsz)
+                other_image, other_boxes = stretch_resize(other_image, other_boxes, self.imgsz)
                 ratio = rng.betavariate(32.0, 32.0)
                 image = Image.blend(image, other_image, 1.0 - ratio)
                 boxes = torch.cat((boxes, other_boxes))
@@ -242,7 +242,7 @@ class CocoFinetuneDataset(Dataset):
         offsets = ((0, 0), (half, 0), (0, half), (half, half))
         for item_idx, (left, top) in zip(indices, offsets):
             image, boxes, labels, _ = self._load_item(item_idx)
-            image, boxes = letterbox(image, boxes, half)
+            image, boxes = stretch_resize(image, boxes, half)
             canvas.paste(image, (left, top))
             boxes[:, [0, 2]] += left
             boxes[:, [1, 3]] += top

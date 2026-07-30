@@ -99,10 +99,17 @@ uv run dfine download model=dfine_s
 ```
 
 Supported model names are `dfine_s`, `dfine_m`, `dfine_l`, and `dfine_x`.
+The default weight variant is `obj2coco` (Objects365→COCO). Select a variant
+explicitly with `weights=obj2coco` or `weights=coco`:
+
+```bash
+uv run dfine download model=dfine_s weights=coco
+```
+
 Without `output=`, the wrapped checkpoint is saved in the current directory:
 
 ```text
-dfine_s_wrapped.pth
+dfine_s_obj2coco_wrapped.pth
 ```
 
 Save it in a model directory:

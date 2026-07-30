@@ -1,6 +1,7 @@
 """Unit tests for command-line help output."""
 
 import sys
+import types
 
 import pytest
 
@@ -11,7 +12,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, main, parse_args
     ("command", "expected_text"),
     [
         ("predict", ("source=SOURCE", "conf=FLOAT", "save=BOOL", "dfine predict")),
-        ("download", ("model=NAME", "force=BOOL", "dfine download")),
+        ("download", ("model=NAME", "weights=NAME", "force=BOOL", "dfine download")),
         ("train", ("data=PATH", "epochs=INT", "dfine train")),
         ("val", ("data=PATH", "split=NAME", "dfine val")),
         ("export", ("format=FORMAT", "opset=INT", "dfine export")),
@@ -73,3 +74,23 @@ def test_train_cli_parses_list_controls():
     assert command == "train"
     assert args["classes"] == [0, 2]
     assert args["freeze"] == ["backbone", "decoder"]
+
+
+def test_cli_passes_weights_to_model_constructor(monkeypatch):
+    observed = {}
+
+    class FakeDFINE:
+        def __init__(self, model, *, weights="default"):
+            observed.update(model=model, weights=weights)
+
+        def predict(self, source, **kwargs):
+            observed["source"] = source
+            return []
+
+    fake_module = types.ModuleType("dfine")
+    fake_module.DFINE = FakeDFINE
+    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+
+    main(["dfine", "predict", "model=dfine_s", "weights=coco", "source=image.jpg"])
+
+    assert observed == {"model": "dfine_s", "weights": "coco", "source": "image.jpg"}
