@@ -4,7 +4,7 @@ dfine-wrap: Ultralytics-style wrapper for D-FINE object detection.
 Usage:
     from dfine import DFINE
 
-    model = DFINE("dfine_l.pth")
+    model = DFINE("dfine_l")
     results = model("image.jpg")
     model.train(data="coco.yaml", epochs=50)
     model.export(format="onnx")

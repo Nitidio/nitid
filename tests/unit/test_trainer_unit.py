@@ -47,6 +47,34 @@ def test_build_optimizer_splits_bias_group(trainer):
     assert opt.param_groups[1]["weight_decay"] == pytest.approx(0.0)
 
 
+def test_build_optimizer_uses_backbone_lr_and_no_decay_for_norms():
+    class Model(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.backbone = nn.Sequential(nn.Linear(4, 4), nn.LayerNorm(4))
+            self.decoder = nn.Linear(4, 2)
+
+    trainer = DFINETrainer(model=Model(), cfg={}, device="cpu", names={})
+    opt = trainer._build_optimizer("AdamW", lr=2.5e-4, backbone_lr=1.25e-4, weight_decay=1.25e-4)
+    groups_by_parameter = {
+        id(parameter): group for group in opt.param_groups for parameter in group["params"]
+    }
+
+    for parameter_name, parameter in trainer.model.named_parameters():
+        group = groups_by_parameter[id(parameter)]
+        expected_lr = 1.25e-4 if parameter_name.startswith("backbone.") else 2.5e-4
+        assert group["lr"] == pytest.approx(expected_lr)
+        if parameter_name.endswith(".bias") or parameter.ndim == 1:
+            assert group["weight_decay"] == pytest.approx(0.0)
+        else:
+            assert group["weight_decay"] == pytest.approx(1.25e-4)
+
+
+def test_build_optimizer_rejects_non_positive_backbone_lr(trainer):
+    with pytest.raises(ValueError, match="backbone_lr"):
+        trainer._build_optimizer("AdamW", lr=1e-3, backbone_lr=0.0)
+
+
 def test_build_optimizer_invalid(trainer):
     with pytest.raises(ValueError, match="Unknown optimizer"):
         trainer._build_optimizer("LAMB", lr=1e-3)

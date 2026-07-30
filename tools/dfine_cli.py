@@ -2,11 +2,11 @@
 dfine CLI — mirrors the `yolo` command from Ultralytics.
 
 Usage:
-    dfine predict  model=dfine_l.pth  source=image.jpg  conf=0.5
-    dfine download model=dfine_l
-    dfine train    model=dfine_l.pth  data=coco.yaml    epochs=50
-    dfine val      model=dfine_l.pth  data=coco.yaml
-    dfine export   model=dfine_l.pth  format=onnx
+    dfine predict  model=dfine_l weights=obj2coco source=image.jpg conf=0.5
+    dfine download model=dfine_l weights=coco
+    dfine train    model=dfine_l data=coco.yaml epochs=50
+    dfine val      model=dfine_l data=coco.yaml
+    dfine export   model=dfine_l format=onnx
 """
 
 from __future__ import annotations
@@ -47,7 +47,8 @@ Required:
   source=SOURCE       Image, directory, video, URL, webcam index, or stream URL
 
 Options:
-  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  weights=NAME        default, obj2coco, or coco (default: default)
   conf=FLOAT          Confidence threshold (default: 0.5)
   imgsz=INT           Square inference image size (default: 640)
   stream=BOOL         Return results as a generator (default: false)
@@ -61,9 +62,9 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
-  dfine predict model=dfine_l.pth source=image.jpg
-  dfine predict model=dfine_l.pth source=image.jpg save=true
-  dfine predict model=dfine_l.pth source=video.mp4 conf=0.3 stream=true
+  dfine predict model=dfine_l source=image.jpg
+  dfine predict model=dfine_l weights=coco source=image.jpg save=true
+  dfine predict model=dfine_l source=video.mp4 conf=0.3 stream=true
 """,
     "download": """\
 Usage:
@@ -71,14 +72,16 @@ Usage:
 
 Options:
   model=NAME          dfine_s, dfine_m, dfine_l, or dfine_x (default: dfine_l)
+  weights=NAME        default, obj2coco, or coco (default: default)
   output=PATH         Output directory or .pth file (default: current directory)
   force=BOOL          Overwrite an existing wrapped checkpoint (default: false)
 
 The command downloads the official raw checkpoint and converts it to nitid's
-wrapped .pth format. The default filename is MODEL_wrapped.pth.
+wrapped .pth format. The filename includes the resolved weight variant.
 
 Examples:
   dfine download model=dfine_s
+  dfine download model=dfine_s weights=coco
   dfine download model=dfine_m output=models
   dfine download model=dfine_l output=models/custom.pth force=true
 """,
@@ -90,7 +93,8 @@ Required:
   data=PATH           Dataset YAML file using COCO-format annotations
 
 Options:
-  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  weights=NAME        default, obj2coco, or coco (default: default)
   epochs=INT          Number of training epochs (default: 50)
   imgsz=INT           Square training image size (default: 640)
   batch=INT           Batch size (default: 16)
@@ -143,7 +147,7 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
-  dfine train model=dfine_l.pth data=coco.yaml epochs=50 batch=16 mlflow=true
+  dfine train model=dfine_l data=coco.yaml epochs=50 batch=16 mlflow=true
 """,
     "val": """\
 Usage:
@@ -153,7 +157,8 @@ Required:
   data=PATH           Dataset YAML file using COCO-format annotations
 
 Options:
-  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  weights=NAME        default, obj2coco, or coco (default: default)
   imgsz=INT           Square validation image size (default: 640)
   batch=INT           Batch size (default: 16)
   conf=FLOAT          Confidence threshold (default: 0.001)
@@ -167,14 +172,15 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
-  dfine val model=dfine_l.pth data=coco.yaml split=val batch=16
+  dfine val model=dfine_l data=coco.yaml split=val batch=16
 """,
     "export": """\
 Usage:
   dfine export model=MODEL [key=value ...]
 
 Options:
-  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  weights=NAME        default, obj2coco, or coco (default: default)
   format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
   imgsz=INT           Square export image size (default: 640)
   batch=INT           Static batch size (default: 1)
@@ -192,20 +198,21 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
-  dfine export model=dfine_l.pth format=onnx
-  dfine export model=dfine_l.pth format=openvino
-  dfine export model=dfine_l.pth format=tensorrt half=true
+  dfine export model=dfine_l format=onnx
+  dfine export model=dfine_l weights=coco format=openvino
+  dfine export model=dfine_l format=tensorrt half=true
 """,
     "info": """\
 Usage:
   dfine info model=MODEL [key=value ...]
 
 Options:
-  model=PATH          Wrapped checkpoint path (default: dfine_l.pth)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  weights=NAME        default, obj2coco, or coco (default: default)
   detailed=BOOL       Include per-layer parameter counts (default: false)
 
 Example:
-  dfine info model=dfine_l.pth detailed=true
+  dfine info model=dfine_l weights=obj2coco detailed=true
 """,
     "bugreport": """\
 Usage:
@@ -284,19 +291,21 @@ def _execute(argv: list[str]) -> None:
 
     if command == "download":
         model_name = kwargs.pop("model", "dfine_l")
+        weights = kwargs.pop("weights", "default")
         output = kwargs.pop("output", None)
         force = kwargs.pop("force", False)
         from dfine.utils.downloads import download_model
 
-        path = download_model(model=model_name, output=output, force=force)
+        path = download_model(model=model_name, weights=weights, output=output, force=force)
         print(f"Downloaded wrapped checkpoint to {path}")
         return
 
-    model_path = kwargs.pop("model", "dfine_l.pth")
+    model_path = kwargs.pop("model", "dfine_l")
+    weights = kwargs.pop("weights", "default")
 
     from dfine import DFINE
 
-    model = DFINE(model_path)
+    model = DFINE(model_path, weights=weights)
 
     if command == "predict":
         source = kwargs.pop("source", None)

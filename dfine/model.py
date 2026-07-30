@@ -21,12 +21,13 @@ class DFINE:
     D-FINE object detection wrapper.
 
     Args:
-        model:   Path to .pth checkpoint (config serialised inside).
+        model:   D-FINE architecture name or path to a wrapped .pth checkpoint.
+        weights: Official weight variant: ``default``, ``obj2coco``, or ``coco``.
         device:  "cuda", "cpu", "cuda:N", or None for auto-select.
         verbose: Print model info on load.
 
     Example:
-        model = DFINE("dfine_l.pth")
+        model = DFINE("dfine_l", weights="obj2coco")
         results = model("image.jpg", conf=0.5)
         model.train(data="coco.yaml", epochs=50)
         model.export(format="tensorrt")
@@ -34,7 +35,9 @@ class DFINE:
 
     def __init__(
         self,
-        model: str = "dfine_l.pth",
+        model: str | Path = "dfine_l",
+        *,
+        weights: str = "default",
         device: str | int | None = None,
         verbose: bool = True,
     ) -> None:
@@ -44,8 +47,9 @@ class DFINE:
         self._cfg: dict[str, Any]
         self._names: dict[int, str]
         self._path: str
+        self._weights: str | None = None
         self._callbacks: dict[str, list[ModelCallback]] = {}
-        self._load(model)
+        self._load(str(model), weights=weights)
 
     # ── Inference ──────────────────────────────────────────────────────────
 
@@ -433,6 +437,11 @@ class DFINE:
         return "detect"
 
     @property
+    def weights(self) -> str | None:
+        """Resolved official weight variant, or None for a user checkpoint path."""
+        return self._weights
+
+    @property
     def predictor(self):
         from dfine.predictor import DFINEPredictor
 
@@ -440,7 +449,7 @@ class DFINE:
 
     # ── Internal ────────────────────────────────────────────────────────────
 
-    def _load(self, path: str) -> None:
+    def _load(self, path: str, weights: str = "default") -> None:
         """Load checkpoint, deserialise config, build model."""
         from pathlib import Path
 
@@ -449,9 +458,19 @@ class DFINE:
         from dfine.utils.downloads import download_model, get_model_asset
 
         self._device_str = resolve_device(self._device_str)
+        if not isinstance(weights, str):
+            raise TypeError("weights must be a string")
+        default_weights_requested = weights.lower().replace("-", "_") == "default"
 
         path_obj = Path(path)
-        if not path_obj.exists():
+        if path_obj.exists():
+            if not default_weights_requested:
+                raise ValueError(
+                    "weights= selects official registry weights and cannot be combined with "
+                    f"an existing checkpoint path: {path_obj}"
+                )
+            self._weights = None
+        else:
             # Check if it is a known model name or alias (e.g. "dfine_l", "dfine_l.pth", etc.)
             name_to_check = path_obj.name
             if name_to_check.endswith(".pth"):
@@ -460,17 +479,26 @@ class DFINE:
                 name_to_check = name_to_check[:-8]
 
             try:
-                asset = get_model_asset(name_to_check)
+                asset = get_model_asset(name_to_check, weights=weights)
                 if path_obj.suffix == ".pth":
-                    resolved_path = download_model(asset.name, output=path_obj)
+                    resolved_path = download_model(
+                        asset.model, weights=asset.weights, output=path_obj
+                    )
                 else:
                     parent = path_obj.parent
                     if str(parent) in (".", ""):
-                        resolved_path = download_model(asset.name, output=None)
+                        resolved_path = download_model(
+                            asset.model, weights=asset.weights, output=None
+                        )
                     else:
-                        resolved_path = download_model(asset.name, output=parent)
+                        resolved_path = download_model(
+                            asset.model, weights=asset.weights, output=parent
+                        )
                 path = str(resolved_path)
+                self._weights = asset.weights
             except ValueError:
+                if not default_weights_requested:
+                    raise
                 # Not a known model/alias, let load_checkpoint raise FileNotFoundError
                 pass
 
