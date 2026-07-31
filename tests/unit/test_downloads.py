@@ -7,8 +7,9 @@ import pytest
 from dfine.utils import downloads
 
 
-def test_model_registry_contains_coco_variants():
+def test_model_registry_contains_architectures_and_weight_variants():
     assert downloads.list_models() == ["dfine_l", "dfine_m", "dfine_s", "dfine_x"]
+    assert downloads.list_weights("dfine_s") == ["coco", "obj2coco"]
 
 
 @pytest.mark.parametrize(
@@ -20,31 +21,64 @@ def test_model_registry_contains_coco_variants():
         ("x", "dfine_x"),
     ],
 )
-def test_get_model_asset_accepts_aliases(name, expected):
-    assert downloads.get_model_asset(name).name == expected
+def test_get_model_asset_accepts_model_aliases(name, expected):
+    asset = downloads.get_model_asset(name)
+    assert asset.model == expected
+    assert asset.weights == "obj2coco"
 
 
-def test_get_model_asset_rejects_unknown_model():
+@pytest.mark.parametrize(
+    ("weights", "expected"),
+    [
+        ("default", "obj2coco"),
+        ("obj2coco", "obj2coco"),
+        ("objects365-coco", "obj2coco"),
+        ("coco", "coco"),
+        ("coco-only", "coco"),
+    ],
+)
+def test_get_model_asset_resolves_weight_variants(weights, expected):
+    assert downloads.get_model_asset("dfine_s", weights=weights).weights == expected
+
+
+def test_get_model_asset_rejects_unknown_model_or_weights():
     with pytest.raises(ValueError, match="Unknown model"):
         downloads.get_model_asset("dfine_tiny")
+    with pytest.raises(ValueError, match="Unknown weights"):
+        downloads.get_model_asset("dfine_s", weights="imagenet")
+    with pytest.raises(TypeError, match="weights must be a string"):
+        downloads.get_model_asset("dfine_s", weights=True)
 
 
-def test_resolve_output_path_defaults_to_wrapped_filename():
+def test_resolve_output_path_uses_variant_specific_filename():
     asset = downloads.get_model_asset("dfine_s")
-    assert downloads.resolve_output_path(asset) == Path("dfine_s_wrapped.pth")
-
-
-def test_resolve_output_path_accepts_directory():
-    asset = downloads.get_model_asset("dfine_s")
-    assert downloads.resolve_output_path(asset, "models") == Path("models/dfine_s_wrapped.pth")
-
-
-def test_resolve_output_path_accepts_file():
-    asset = downloads.get_model_asset("dfine_s")
+    assert downloads.resolve_output_path(asset) == Path("dfine_s_obj2coco_wrapped.pth")
+    assert downloads.resolve_output_path(asset, "models") == Path(
+        "models/dfine_s_obj2coco_wrapped.pth"
+    )
     assert downloads.resolve_output_path(asset, "custom.pth") == Path("custom.pth")
 
 
-def test_download_model_converts_checkpoint(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ("weights", "raw_suffix", "config_suffix", "wrapped_name"),
+    [
+        (
+            "default",
+            "dfine_s_obj2coco.pth",
+            "objects365/dfine_hgnetv2_s_obj2coco.yml",
+            "dfine_s_obj2coco_wrapped.pth",
+        ),
+        (
+            "coco",
+            "dfine_s_coco.pth",
+            "dfine_hgnetv2_s_coco.yml",
+            "dfine_s_coco_wrapped.pth",
+        ),
+    ],
+)
+def test_download_model_converts_selected_checkpoint(
+    monkeypatch, tmp_path, weights, raw_suffix, config_suffix, wrapped_name
+):
     calls = {}
 
     def fake_urlretrieve(url, filename):
@@ -61,18 +95,18 @@ def test_download_model_converts_checkpoint(monkeypatch, tmp_path):
     monkeypatch.setattr(downloads, "urlretrieve", fake_urlretrieve)
     monkeypatch.setattr(downloads, "convert_checkpoint", fake_convert)
 
-    out = downloads.download_model("dfine_s", output=tmp_path)
+    out = downloads.download_model("dfine_s", weights=weights, output=tmp_path)
 
-    assert out == tmp_path / "dfine_s_wrapped.pth"
+    assert out == tmp_path / wrapped_name
     assert out.read_bytes() == b"wrapped"
-    assert calls["url"].endswith("dfine_s_coco.pth")
-    assert calls["weights"].endswith("dfine_s_coco.pth")
-    assert calls["config"].endswith("dfine_hgnetv2_s_coco.yml")
+    assert calls["url"].endswith(raw_suffix)
+    assert calls["weights"].endswith(raw_suffix)
+    assert calls["config"].endswith(config_suffix)
     assert calls["names_file"].endswith("configs/datasets/coco.yml")
 
 
-def test_download_model_skips_existing_output(monkeypatch, tmp_path):
-    out = tmp_path / "dfine_s_wrapped.pth"
+def test_download_model_skips_existing_variant_output(monkeypatch, tmp_path):
+    out = tmp_path / "dfine_s_obj2coco_wrapped.pth"
     out.write_bytes(b"existing")
 
     def fail_urlretrieve(url, filename):

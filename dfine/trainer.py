@@ -159,6 +159,7 @@ class DFINETrainer:
         imgsz: int,
         batch: int,
         lr0: float,
+        backbone_lr: float | None,
         lrf: float,
         cos_lr: bool,
         warmup_epochs: float,
@@ -218,6 +219,7 @@ class DFINETrainer:
             imgsz:      Input image size (square).
             batch:      Batch size.
             lr0:        Initial learning rate.
+            backbone_lr: Optional lower learning rate for backbone parameters.
             lrf:        Final LR as a fraction of lr0 at the end of training.
             cos_lr:     Use cosine LR decay instead of linear decay.
             warmup_epochs: Number of warmup epochs before the main decay schedule.
@@ -274,6 +276,7 @@ class DFINETrainer:
                     "imgsz": imgsz,
                     "batch": batch,
                     "lr0": lr0,
+                    "backbone_lr": backbone_lr,
                     "lrf": lrf,
                     "cos_lr": cos_lr,
                     "warmup_epochs": warmup_epochs,
@@ -320,6 +323,9 @@ class DFINETrainer:
             imgsz = _as_int(resolved["imgsz"])
             batch = _as_int(resolved["batch"])
             lr0, lrf = _as_float(resolved["lr0"]), _as_float(resolved["lrf"])
+            backbone_lr = (
+                None if resolved["backbone_lr"] is None else _as_float(resolved["backbone_lr"])
+            )
             cos_lr = bool(resolved["cos_lr"])
             warmup_epochs = _as_float(resolved["warmup_epochs"])
             warmup_momentum = _as_float(resolved["warmup_momentum"])
@@ -407,7 +413,13 @@ class DFINETrainer:
             fraction=fraction,
             augment=augmentation,
         )
-        opt = self._build_optimizer(optimizer, lr0, momentum=momentum, weight_decay=weight_decay)
+        opt = self._build_optimizer(
+            optimizer,
+            lr0,
+            momentum=momentum,
+            weight_decay=weight_decay,
+            backbone_lr=backbone_lr,
+        )
         warmup_epoch_count = max(float(warmup_epochs), 0.0)
         decay_epochs = max(epochs - int(warmup_epoch_count), 1)
         scheduler = self._build_scheduler(opt, epochs=decay_epochs, lrf=lrf, cos_lr=cos_lr)
@@ -431,7 +443,6 @@ class DFINETrainer:
         self.ema_model = ema_model
 
         criterion.train()
-        weight_dict = criterion.weight_dict
         history: list[dict[str, float | int]] = []
         best_fitness = float("-inf")
         best_epoch = 0
@@ -443,6 +454,7 @@ class DFINETrainer:
             imgsz=imgsz,
             batch=batch,
             lr0=lr0,
+            backbone_lr=backbone_lr,
             lrf=lrf,
             cos_lr=cos_lr,
             warmup_epochs=warmup_epochs,
@@ -611,7 +623,12 @@ class DFINETrainer:
                 with torch.amp.autocast(device_type=device_type, enabled=amp):
                     outputs = self.model(images, targets=targets)
                     loss_dict = criterion(outputs, targets)
-                    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
+                    # DFINECriterion has already applied weight_dict to every returned
+                    # primary, auxiliary, encoder, pre-decoder, and denoising term.
+                    # Upstream D-FINE optimizes their direct sum. Filtering by the base
+                    # weight-dict keys would discard all suffixed supervision terms, and
+                    # applying the weights here would weight primary losses twice.
+                    loss = self._sum_loss_terms(loss_dict)
                     scaled_loss = loss / accumulate
 
                 if scaler is not None:
@@ -679,6 +696,7 @@ class DFINETrainer:
                     plots=plots,
                     classes=classes,
                     single_cls=single_cls,
+                    show_progress=verbose,
                 )
                 self.current_val_metrics = val_metrics
                 self._run_callbacks("on_val_end")
@@ -687,6 +705,7 @@ class DFINETrainer:
 
             row: dict[str, float | int] = {
                 "epoch": epoch + 1,
+                "validated": int(should_validate),
                 "time": epoch_time,
                 "s_per_it": seconds_per_iter,
                 "lr": opt.param_groups[0]["lr"],
@@ -941,38 +960,44 @@ class DFINETrainer:
             dataset.set_epoch(epoch, mosaic=mosaic_open)
 
     def _build_optimizer(
-        self, name: str, lr: float, momentum: float = 0.9, weight_decay: float = 1e-4
+        self,
+        name: str,
+        lr: float,
+        momentum: float = 0.9,
+        weight_decay: float = 1e-4,
+        backbone_lr: float | None = None,
     ):
-        # Keep a dedicated bias group so warmup_bias_lr can match Ultralytics-style warmup.
-        weights: list[torch.nn.Parameter] = []
-        biases: list[torch.nn.Parameter] = []
+        if lr <= 0:
+            raise ValueError("lr must be greater than 0")
+        if backbone_lr is not None and backbone_lr <= 0:
+            raise ValueError("backbone_lr must be greater than 0")
+
+        # D-FINE fine-tuning uses a lower LR for the pretrained backbone and no
+        # weight decay on normalization parameters or biases. Keep bias groups
+        # distinct so the optional warmup_bias_lr behavior remains intact.
+        grouped: dict[tuple[float, float, bool, str], list[torch.nn.Parameter]] = {}
         for param_name, param in self.model.named_parameters():
             if not param.requires_grad:
                 continue
-            if param_name.endswith(".bias"):
-                biases.append(param)
-            else:
-                weights.append(param)
+            is_backbone = param_name == "backbone" or param_name.startswith("backbone.")
+            group_lr = backbone_lr if is_backbone and backbone_lr is not None else lr
+            is_bias = param_name.endswith(".bias")
+            lowered = param_name.lower()
+            is_norm = param.ndim == 1 or "norm" in lowered or ".bn" in lowered
+            decay = 0.0 if is_bias or is_norm else weight_decay
+            role = "backbone" if is_backbone else "main"
+            grouped.setdefault((group_lr, decay, is_bias, role), []).append(param)
 
         param_groups: list[dict[str, object]] = []
-        if weights:
+        for (group_lr, decay, is_bias, role), params in grouped.items():
             param_groups.append(
                 {
-                    "params": weights,
-                    "lr": lr,
-                    "initial_lr": lr,
-                    "is_bias_group": False,
-                    "weight_decay": weight_decay,
-                }
-            )
-        if biases:
-            param_groups.append(
-                {
-                    "params": biases,
-                    "lr": lr,
-                    "initial_lr": lr,
-                    "is_bias_group": True,
-                    "weight_decay": 0.0,
+                    "params": params,
+                    "lr": group_lr,
+                    "initial_lr": group_lr,
+                    "is_bias_group": is_bias,
+                    "weight_decay": decay,
+                    "parameter_role": role,
                 }
             )
 
@@ -1150,6 +1175,17 @@ class DFINETrainer:
         from dfine.nn.criterion import build_criterion
 
         return build_criterion(self.cfg)
+
+    @staticmethod
+    def _sum_loss_terms(loss_dict: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """Sum D-FINE criterion outputs, which are already individually weighted."""
+        if not loss_dict:
+            raise RuntimeError("D-FINE criterion returned no loss terms")
+        terms = iter(loss_dict.values())
+        total = next(terms)
+        for term in terms:
+            total = total + term
+        return total
 
     def _build_ema(self, decay: float) -> ModelEMA:
         return ModelEMA(self.model, decay=decay)
@@ -1383,6 +1419,7 @@ class DFINETrainer:
         plots: bool = True,
         classes: list[int] | None = None,
         single_cls: bool = False,
+        show_progress: bool = False,
     ) -> dict:
         from dfine.validator import DFINEValidator
 
@@ -1398,6 +1435,7 @@ class DFINETrainer:
             plots=plots,
             classes=classes,
             single_cls=single_cls,
+            show_progress=show_progress,
         )
 
     def _primary_loss_stats(self, train_stats: dict[str, float]) -> dict[str, float]:
@@ -1493,14 +1531,22 @@ class DFINETrainer:
         plt.close(fig)
 
     def _format_epoch_row(self, epoch: int, epochs: int, row: dict[str, float | int]) -> str:
+        validated = bool(row.get("validated", True))
+        val_fields = (
+            [
+                f"P={float(row.get('precision', 0.0)):.3f}",
+                f"R={float(row.get('recall', 0.0)):.3f}",
+                f"mAP50={float(row.get('mAP50', 0.0)):.3f}",
+                f"mAP50-95={float(row.get('mAP50-95', 0.0)):.3f}",
+                f"fitness={float(row.get('fitness', 0.0)):.3f}",
+            ]
+            if validated
+            else ["validation=skipped"]
+        )
         parts = [
             f"Epoch {epoch}/{epochs}",
             f"loss={float(row.get('loss', 0.0)):.4f}",
-            f"P={float(row.get('precision', 0.0)):.3f}",
-            f"R={float(row.get('recall', 0.0)):.3f}",
-            f"mAP50={float(row.get('mAP50', 0.0)):.3f}",
-            f"mAP50-95={float(row.get('mAP50-95', 0.0)):.3f}",
-            f"fitness={float(row.get('fitness', 0.0)):.3f}",
+            *val_fields,
             f"instances={int(row.get('instances', 0))}",
             f"imgsz={int(row.get('imgsz', 0))}",
             f"mem={float(row.get('memory_mb', 0.0)):.1f}MB",

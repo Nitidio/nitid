@@ -66,6 +66,19 @@ def letterbox(
     return canvas, result
 
 
+def stretch_resize(
+    image: Image.Image, boxes: torch.Tensor, size: int
+) -> tuple[Image.Image, torch.Tensor]:
+    """Resize to a square like upstream D-FINE, updating absolute xyxy boxes."""
+    width, height = image.size
+    scale_x, scale_y = size / width, size / height
+    result = boxes.clone()
+    if result.numel():
+        result[:, [0, 2]] *= scale_x
+        result[:, [1, 3]] *= scale_y
+    return image.resize((size, size), Image.Resampling.BILINEAR), result
+
+
 def horizontal_flip(image: Image.Image, boxes: torch.Tensor) -> tuple[Image.Image, torch.Tensor]:
     """Flip an image and absolute xyxy boxes horizontally."""
     width, _ = image.size

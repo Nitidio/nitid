@@ -89,9 +89,9 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     download_calls = []
     load_calls = []
 
-    def fake_download_model(model, output=None, force=False):
-        download_calls.append((model, output))
-        asset = downloads.get_model_asset(model)
+    def fake_download_model(model, *, weights="default", output=None, force=False):
+        download_calls.append((model, weights, output))
+        asset = downloads.get_model_asset(model, weights=weights)
         out_path = downloads.resolve_output_path(asset, output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(b"dummy_weights")
@@ -116,12 +116,12 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     # It should download to default filename in current working dir (None)
     _ = DFINE("dfine_s", device="cpu", verbose=False)
     assert len(download_calls) == 1
-    assert download_calls[0] == ("dfine_s", None)
-    assert load_calls[0] == "dfine_s_wrapped.pth"
+    assert download_calls[0] == ("dfine_s", "obj2coco", None)
+    assert load_calls[0] == "dfine_s_obj2coco_wrapped.pth"
     import os
 
-    if os.path.exists("dfine_s_wrapped.pth"):
-        os.remove("dfine_s_wrapped.pth")
+    if os.path.exists("dfine_s_obj2coco_wrapped.pth"):
+        os.remove("dfine_s_obj2coco_wrapped.pth")
 
     # 2. Test specifying path with .pth suffix (e.g. path/to/dfine_s.pth)
     download_calls.clear()
@@ -129,6 +129,49 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     custom_path = tmp_path / "custom_dir" / "dfine_s.pth"
     _ = DFINE(str(custom_path), device="cpu", verbose=False)
     assert len(download_calls) == 1
-    assert download_calls[0][0] == "dfine_s"
-    assert str(download_calls[0][1]) == str(custom_path)
+    assert download_calls[0][0:2] == ("dfine_s", "obj2coco")
+    assert str(download_calls[0][2]) == str(custom_path)
     assert load_calls[0] == str(custom_path)
+
+
+def test_model_weights_selects_official_variant(monkeypatch):
+    from dfine import DFINE
+    from dfine.utils import checkpoint, downloads
+
+    observed = {}
+
+    def fake_download_model(model, *, weights="default", output=None, force=False):
+        observed.update(model=model, weights=weights)
+        return downloads.resolve_output_path(downloads.get_model_asset(model, weights), output)
+
+    def fake_load_checkpoint(path, device="cpu"):
+        class DummyModel:
+            def eval(self):
+                pass
+
+            def parameters(self):
+                return []
+
+        return DummyModel(), {}, {}
+
+    monkeypatch.setattr(downloads, "download_model", fake_download_model)
+    monkeypatch.setattr(checkpoint, "load_checkpoint", fake_load_checkpoint)
+
+    model = DFINE("dfine_s", weights="coco", device="cpu", verbose=False)
+
+    assert observed == {"model": "dfine_s", "weights": "coco"}
+    assert model.weights == "coco"
+
+
+def test_existing_checkpoint_rejects_registry_weights(tiny_checkpoint):
+    from dfine import DFINE
+
+    with pytest.raises(ValueError, match="cannot be combined"):
+        DFINE(tiny_checkpoint, weights="coco", device="cpu", verbose=False)
+
+
+def test_existing_checkpoint_accepts_default_weights_sentinel(tiny_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, weights="DEFAULT", device="cpu", verbose=False)
+    assert model.weights is None

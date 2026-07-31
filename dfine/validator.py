@@ -10,17 +10,23 @@ import importlib
 import io
 from collections import defaultdict
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import Any, Protocol, TypedDict, cast
 
 import numpy as np
 import torch
 from torchvision.ops import box_iou
+from tqdm.auto import tqdm
 
 from dfine.utils.logging import LOGGER
 
 
+class CocoApi(Protocol):
+    imgs: dict[int, dict[str, Any]]
+
+
 class CocoLikeDataset(Protocol):
     cat_id_to_label: dict[int, int]
+    coco: CocoApi
 
 
 class GTRecord(TypedDict):
@@ -50,6 +56,19 @@ PerClassRow = TypedDict(
 def _cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
     cx, cy, w, h = boxes.unbind(-1)
     return torch.stack((cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), dim=-1)
+
+
+def _restore_original_coordinates(
+    boxes: torch.Tensor, original_width: int, original_height: int, imgsz: int
+) -> torch.Tensor:
+    """Map absolute xyxy boxes from D-FINE's square resize to original pixels."""
+    restored = boxes.clone()
+    if restored.numel():
+        restored[:, [0, 2]] *= original_width / imgsz
+        restored[:, [1, 3]] *= original_height / imgsz
+        restored[:, [0, 2]].clamp_(0, original_width)
+        restored[:, [1, 3]].clamp_(0, original_height)
+    return restored
 
 
 def _as_float(value: object, default: float = 0.0) -> float:
@@ -105,6 +124,7 @@ class DFINEValidator:
         plots: bool = True,
         classes: list[int] | None = None,
         single_cls: bool = False,
+        show_progress: bool | None = None,
     ) -> dict:
         """
         Evaluate on a COCO-format dataset split.
@@ -147,8 +167,16 @@ class DFINEValidator:
         coco_results: list[dict[str, object]] = []
 
         self.model.eval()
+        progress = tqdm(
+            dataloader,
+            total=len(dataloader),
+            desc=f"val:{split}",
+            leave=False,
+            unit="batch",
+            disable=not (verbose if show_progress is None else show_progress),
+        )
         with _dynamic_eval_geometry(self.model, imgsz), torch.no_grad():
-            for images, targets in dataloader:
+            for images, targets in progress:
                 images = images.to(self.device)
                 orig_sizes = torch.tensor(
                     [[imgsz, imgsz]] * len(images),
@@ -171,9 +199,16 @@ class DFINEValidator:
                         {"boxes": pred_boxes, "scores": pred_scores, "labels": pred_labels}
                     )
 
+                    image_info = dataset.coco.imgs[img_id]
+                    coco_boxes = _restore_original_coordinates(
+                        pred_boxes,
+                        original_width=int(image_info["width"]),
+                        original_height=int(image_info["height"]),
+                        imgsz=imgsz,
+                    )
                     mask = pred_scores > conf
                     for box, score, label in zip(
-                        pred_boxes[mask].tolist(),
+                        coco_boxes[mask].tolist(),
                         pred_scores[mask].tolist(),
                         pred_labels[mask].tolist(),
                     ):
@@ -190,24 +225,41 @@ class DFINEValidator:
         with contextlib.redirect_stdout(io.StringIO()):
             coco_gt = COCO(str(ann_file))
         coco_eval = None
-        coco_metrics = {"mAP50-95": 0.0, "mAP50": 0.0, "AR1": 0.0, "AR100": 0.0}
+        coco_metrics = {
+            "mAP50-95": 0.0,
+            "mAP50": 0.0,
+            "AR1": 0.0,
+            "AR100": 0.0,
+            "AR300": 0.0,
+        }
         per_class_rows: list[PerClassRow] = []
 
         if coco_results:
             with contextlib.redirect_stdout(io.StringIO()):
                 coco_dt = coco_gt.loadRes(coco_results)
             coco_eval = COCOeval(coco_gt, coco_dt, "bbox")
+            # D-FINE emits 300 predictions and Ultralytics evaluates detection with
+            # max_det=300. COCO's default cap of 100 is particularly inappropriate
+            # for dense datasets such as SKU-110K (often >100 objects per image).
+            coco_eval.params.maxDets = [1, 10, 100, 300]
             with contextlib.redirect_stdout(io.StringIO()):
                 coco_eval.evaluate()
                 coco_eval.accumulate()
-                coco_eval.summarize()
+            precision_values = coco_eval.eval["precision"]
+            recall_values = coco_eval.eval["recall"]
 
-            stats = coco_eval.stats if len(coco_eval.stats) >= 12 else [0.0] * 12
+            def mean_valid(values: np.ndarray) -> float:
+                valid = values[values > -1]
+                return float(np.mean(valid)) if valid.size else 0.0
+
             coco_metrics = {
-                "mAP50-95": float(stats[0]),
-                "mAP50": float(stats[1]),
-                "AR1": float(stats[6]),
-                "AR100": float(stats[8]),
+                # precision: [IoU, recall, class, area, max_detections]
+                "mAP50-95": mean_valid(precision_values[:, :, :, 0, -1]),
+                "mAP50": mean_valid(precision_values[0, :, :, 0, -1]),
+                # recall: [IoU, class, area, max_detections]
+                "AR1": mean_valid(recall_values[:, :, 0, 0]),
+                "AR100": mean_valid(recall_values[:, :, 0, 2]),
+                "AR300": mean_valid(recall_values[:, :, 0, -1]),
             }
             per_class_rows = self._per_class_ap(coco_eval, gt_records, cat_id_to_label)
         elif verbose:
@@ -313,8 +365,42 @@ class DFINEValidator:
         recalls = np.zeros_like(thresholds)
         f1_scores = np.zeros_like(thresholds)
 
+        # Greedily match each image once in descending confidence order. Lower-confidence
+        # predictions cannot change matches already assigned to higher-confidence ones, so
+        # threshold metrics are just cumulative slices of this single matching pass.
+        prediction_scores: list[float] = []
+        prediction_is_tp: list[bool] = []
+        total_gt = sum(len(gt["boxes"]) for gt in gt_records)
+        for gt, pred in zip(gt_records, pred_records):
+            gt_boxes, gt_labels = gt["boxes"], gt["labels"]
+            pred_order = torch.argsort(pred["scores"], descending=True)
+            matched_gt: set[int] = set()
+            for pred_idx in pred_order.tolist():
+                score = float(pred["scores"][pred_idx])
+                label = int(pred["labels"][pred_idx])
+                candidate_indices = [
+                    gt_idx
+                    for gt_idx, gt_label in enumerate(gt_labels.tolist())
+                    if int(gt_label) == label and gt_idx not in matched_gt
+                ]
+                is_tp = False
+                if candidate_indices:
+                    candidate_boxes = gt_boxes[candidate_indices]
+                    ious = box_iou(pred["boxes"][pred_idx : pred_idx + 1], candidate_boxes)[0]
+                    best_iou, best_relative_idx = torch.max(ious, dim=0)
+                    if float(best_iou) >= 0.5:
+                        matched_gt.add(candidate_indices[int(best_relative_idx)])
+                        is_tp = True
+                prediction_scores.append(score)
+                prediction_is_tp.append(is_tp)
+
+        scores = np.asarray(prediction_scores, dtype=np.float32)
+        true_positives = np.asarray(prediction_is_tp, dtype=np.bool_)
         for i, threshold in enumerate(thresholds):
-            tp, fp, fn = self._count_matches(gt_records, pred_records, conf_thresh=float(threshold))
+            selected = scores >= threshold
+            tp = int(np.count_nonzero(true_positives & selected))
+            fp = int(np.count_nonzero(~true_positives & selected))
+            fn = total_gt - tp
             precision = tp / (tp + fp) if (tp + fp) else 0.0
             recall = tp / (tp + fn) if (tp + fn) else 0.0
             f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0

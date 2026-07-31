@@ -53,15 +53,17 @@ with `bugreport("training", report_dir="reports")`.
 from dfine import DFINE
 ```
 
-The single public class. Instantiate with a path to a nitid-wrapped `.pth` checkpoint, or a registry model name (e.g. `"dfine_s"`, `"dfine_l"`) to automatically download, wrap, and load the official weights.
+The single public class. Instantiate with a path to a nitid-wrapped `.pth` checkpoint, or use a registry architecture name and select its official pretrained weights.
 
 ```python
 model = DFINE("dfine_s", device="cuda:0")
+model_coco = DFINE("dfine_s", weights="coco", device="cuda:0")
 ```
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str` | `"dfine_l.pth"` | Path to wrapped checkpoint or a registry model name (`"dfine_s"`, `"dfine_m"`, `"dfine_l"`, `"dfine_x"`) |
+| `model`   | `str \| Path` | `"dfine_l"` | Wrapped checkpoint path or architecture name (`"dfine_s"`, `"dfine_m"`, `"dfine_l"`, `"dfine_x"`) |
+| `weights` | `str` | `"default"` | Official variant for registry models: `"default"`/`"obj2coco"` (Objects365→COCO) or `"coco"`. Do not combine a non-default value with a checkpoint path. |
 | `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
 | `verbose` | `bool`| `True`  | Print load summary |
 
