@@ -38,6 +38,9 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     assert (tmp_path / "test" / "f1_curve.png").exists()
     assert (tmp_path / "test" / "args.yaml").exists()
     assert (tmp_path / "test" / "environment.yaml").exists()
+    assert model.names == {0: "person", 1: "car"}
+    assert model._cfg["num_classes"] == 2
+    assert model._model.decoder.num_classes == 2
 
 
 def test_repeated_train_calls_increment_run_directory(tiny_checkpoint, tiny_dataset, tmp_path):

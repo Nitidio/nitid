@@ -158,7 +158,34 @@ class DFINE:
         mlflow: bool | dict[str, Any] = False,
     ) -> dict:
         """Fine-tune on a custom dataset. Returns final metrics plus per-epoch history."""
+        from dfine.nn.transfer import adapt_model_to_classes
         from dfine.trainer import DFINETrainer
+        from dfine.utils.data import load_data_yaml, normalize_names
+
+        data_config = load_data_yaml(data)
+        dataset_names = {0: "object"} if single_cls else normalize_names(data_config)
+        declared_nc = data_config.get("nc")
+        if isinstance(declared_nc, int) and declared_nc != len(dataset_names):
+            raise ValueError(
+                f"Dataset YAML declares nc={declared_nc} but defines {len(dataset_names)} names"
+            )
+        transfer = adapt_model_to_classes(
+            self._model,
+            self._cfg,
+            self._names,
+            dataset_names,
+        )
+        self._model = transfer.model
+        self._cfg = transfer.config
+        self._names = dataset_names
+        if transfer.changed and self.verbose:
+            mapped = list(transfer.mapped_proposal_scorer) or "unavailable"
+            print(
+                f"[D-FINE] Configured {len(dataset_names)} dataset classes: "
+                f"transferred {transfer.transferred} pretrained tensors; "
+                f"mean-mapped proposal scorer {mapped}; "
+                f"initialized {len(transfer.initialized)} class-specific tensors"
+            )
 
         trainer = DFINETrainer(
             model=self._model,
