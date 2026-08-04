@@ -1,6 +1,7 @@
 """Unit tests for DFINETrainer helper methods (no D-FINE submodule needed)."""
 
 import itertools
+import math
 
 import pytest
 import torch
@@ -342,7 +343,7 @@ def test_ema_update_integer_params():
 
 def test_ema_update_decay(tiny_model):
     """With decay=0.5 the EMA weight should be 0.5*old + 0.5*new."""
-    ema = ModelEMA(tiny_model, decay=0.5)
+    ema = ModelEMA(tiny_model, decay=0.5, warmups=0)
     initial = {n: p.clone() for n, p in ema.ema.named_parameters()}
     with torch.no_grad():
         for p in tiny_model.parameters():
@@ -351,6 +352,22 @@ def test_ema_update_decay(tiny_model):
     for name, p_ema in ema.ema.named_parameters():
         expected = 0.5 * initial[name] + 0.5 * 10.0
         assert torch.allclose(p_ema, expected)
+
+
+def test_ema_ramps_decay_during_early_updates(tiny_model):
+    ema = ModelEMA(tiny_model, decay=0.9999, warmups=1000)
+    initial = {name: parameter.clone() for name, parameter in ema.ema.named_parameters()}
+    with torch.no_grad():
+        for parameter in tiny_model.parameters():
+            parameter.fill_(10.0)
+
+    ema.update(tiny_model)
+
+    effective_decay = 0.9999 * (1.0 - math.exp(-1.0 / 1000))
+    for name, parameter in ema.ema.named_parameters():
+        expected = effective_decay * initial[name] + (1.0 - effective_decay) * 10.0
+        assert torch.allclose(parameter, expected)
+    assert ema.updates == 1
 
 
 def test_ema_buffers_copied(tiny_model):
@@ -377,6 +394,7 @@ def test_build_ema_returns_model_ema(trainer):
     ema = trainer._build_ema(decay=0.9999)
     assert isinstance(ema, ModelEMA)
     assert ema.decay == pytest.approx(0.9999)
+    assert ema.warmups == 1000
 
 
 def test_add_callback_registers_and_runs(trainer):
@@ -525,6 +543,21 @@ def test_public_train_runs_error_callbacks_and_reraises_original(monkeypatch, ti
             handled.append(error)
 
     monkeypatch.setattr("dfine.trainer.DFINETrainer", FailingTrainer)
+    monkeypatch.setattr("dfine.utils.data.load_data_yaml", lambda _path: {"names": {0: "object"}})
+
+    class UnchangedTransfer:
+        changed = False
+        config = {}
+        mapped_proposal_scorer = ()
+        initialized = ()
+
+        def __init__(self, model):
+            self.model = model
+
+    monkeypatch.setattr(
+        "dfine.nn.transfer.adapt_model_to_classes",
+        lambda model, *_args: UnchangedTransfer(model),
+    )
     model = object.__new__(DFINE)
     model._model = tiny_model
     model._cfg = {}

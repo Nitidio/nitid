@@ -79,6 +79,12 @@ names:
   2: bicycle
 ```
 
+When `model.train(...)` starts, nitid reads this taxonomy and automatically
+rebuilds the detection head when it differs from the checkpoint. Backbone and
+localization weights are retained, the pretrained encoder scorer is converted
+to generic objectness for proposal selection, and only taxonomy-specific class
+heads are initialized from scratch. No manual head replacement is required.
+
 nitid derives annotation file paths automatically:
 `<path>/annotations/instances_<split_dirname>.json`
 
@@ -485,7 +491,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `resume` | `bool` | `False` | `True`, `False` | Restore the latest run state from `project/name/last.pth`. |
 | `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
 | `ema` | `bool` | `False` | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. |
-| `ema_decay` | `float` | `0.9999` | usually `0 < x < 1` | EMA smoothing factor. Higher values adapt more slowly; `0.9999` is the standard default for longer runs. |
+| `ema_decay` | `float` | `0.9999` | usually `0 < x < 1` | Target EMA smoothing factor. The effective decay ramps over the first 1,000 optimizer updates so newly initialized custom heads are not stale during early validation. |
 | `device` | `str \| None` | `None` | e.g. `"cpu"`, `"cuda"`, `"cuda:0"` | Optional override for the training device. If omitted, training uses the device selected when the `DFINE` object was created. |
 | `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
 | `name` | `str` | `"exp"` | any filesystem-friendly name | Run subdirectory created under `project`. |
