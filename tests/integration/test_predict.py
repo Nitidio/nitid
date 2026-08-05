@@ -70,6 +70,100 @@ def test_predict_stream_is_generator(tiny_checkpoint):
     assert isinstance(gen, types.GeneratorType)
 
 
+def test_track_runs_processor_in_pipeline_and_returns_persistent_ids(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+    from dfine.media import FrameSink
+    from dfine.results import Boxes
+    from dfine.tracking import ResultTracker
+
+    class ConstantIdTracker(ResultTracker):
+        def __init__(self):
+            self.calls = 0
+
+        def update(self, result):
+            self.calls += 1
+            assert result.boxes is not None
+            detections = result.boxes.data
+            ids = torch.full(
+                (len(detections), 1),
+                23,
+                dtype=detections.dtype,
+                device=detections.device,
+            )
+            tracked = torch.cat([detections[:, :4], ids, detections[:, 4:]], dim=1)
+            result.boxes = Boxes(tracked, result.boxes.orig_shape)
+            return result
+
+        def reset(self):
+            self.calls = 0
+
+    class RecordingSink(FrameSink):
+        def __init__(self):
+            self.frames = []
+            self.closed = False
+
+        def write(self, frame):
+            self.frames.append(frame)
+
+        def close(self):
+            self.closed = True
+
+    video_path = tmp_path / "tracking.mp4"
+    _write_test_video(video_path, frame_values=[50, 50, 50])
+    tracker = ConstantIdTracker()
+    sink = RecordingSink()
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    results = model.track(
+        str(video_path),
+        conf=0.0,
+        tracker=tracker,
+        save=True,
+        project=str(tmp_path / "runs"),
+        exist_ok=True,
+        sink=sink,
+    )
+
+    assert len(results) == 3
+    assert tracker.calls == 3
+    assert all(result.frame_metadata is not None for result in results)
+    assert [result.frame_metadata.frame_index for result in results] == [0, 1, 2]
+    assert all(result.boxes.is_track for result in results)
+    assert all(set(result.boxes.id.tolist()) == {23} for result in results)
+    assert len(sink.frames) == 3
+    assert sink.closed
+    assert all(np.any(frame.image != 0) for frame in sink.frames)
+    assert (tmp_path / "runs" / "exp" / "tracking.mp4").exists()
+    metadata = (tmp_path / "runs" / "exp" / "args.yaml").read_text(encoding="utf-8")
+    assert "mode: track" in metadata
+    assert "tracker: ConstantIdTracker" in metadata
+
+
+def test_model_track_with_real_bytetrack_returns_persistent_ids(tiny_checkpoint, tmp_path):
+    pytest.importorskip("trackers")
+    pytest.importorskip("supervision")
+    from dfine import DFINE
+
+    video_path = tmp_path / "bytetrack.mp4"
+    _write_test_video(video_path, frame_values=[80, 80, 80])
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    results = model.track(
+        str(video_path),
+        conf=0.0,
+        tracker_kwargs={
+            "track_activation_threshold": 0.0,
+            "high_conf_det_threshold": 0.0,
+            "minimum_iou_threshold": 0.0,
+            "minimum_consecutive_frames": 0,
+        },
+    )
+
+    assert len(results) == 3
+    assert all(result.boxes is not None and result.boxes.is_track for result in results)
+    confirmed_ids = [set(result.boxes.id[result.boxes.id >= 0].tolist()) for result in results]
+    assert confirmed_ids[1]
+    assert confirmed_ids[1] & confirmed_ids[2]
+
+
 def test_predict_vid_stride_skips_video_frames_and_keeps_order(tiny_checkpoint, tmp_path):
     from dfine import DFINE
 

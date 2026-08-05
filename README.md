@@ -61,6 +61,7 @@ The canonical quickstart lives in [docs/quickstart.md](docs/quickstart.md); use 
 from dfine import DFINE
 
 model = DFINE("dfine_s")
+# Equivalent explicit selection: DFINE("dfine_s", weights="obj2coco")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -94,6 +95,19 @@ model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
 
+Capture Python API output, environment details, and failure tracebacks in one
+attachable log:
+
+```python
+from dfine import DFINE, bugreport
+
+with bugreport("prediction") as report:
+    model = DFINE("dfine_s")
+    model.predict("image.jpg")
+
+print(report.path)
+```
+
 
 ### Command Line Interface
 
@@ -102,6 +116,8 @@ uv run dfine predict model=dfine_s source=image.jpg
 uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
 uv run dfine val model=dfine_s data=my_dataset.yml
 uv run dfine export model=dfine_s format=onnx
+uv run dfine predict model=dfine_s source=image.jpg --report
+uv run dfine bugreport
 ```
 
 For the full guide:
@@ -114,15 +130,15 @@ For the full guide:
 
 ## Official Models
 
-> 💡 Passing `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` automatically downloads, wraps, and loads the corresponding official D-FINE checkpoint.
+> 💡 Passing `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` downloads the recommended Objects365→COCO weights. Use `weights="coco"` for the COCO-only checkpoint or `weights="obj2coco"` to make the default provenance explicit.
 
 | Model | COCO mAP<sup>50-95</sup> *(vs YOLO11)* | Speed<sup>T4 TRT10 FP16</sup> *(vs YOLO11)* | Params | FLOPs | Config | Official Checkpoint |
 |:------|---------------------------------------:|--------------------------------------------:|-------:|------:|:------:|:-------------------:|
 | **D-FINE-N** | **42.8** *(40.9)* | **2.12 ms** *(1.70)* | 4.0M | 7B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth) |
-| **D-FINE-S** | **48.5** *(48.6)* | **3.49 ms** *(2.50)* | 10.0M | 25B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_s_coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_coco.pth) |
-| **D-FINE-M** | **52.3** *(53.1)* | **5.62 ms** *(4.70)* | 19.0M | 57B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_m_coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_coco.pth) |
-| **D-FINE-L** | **54.0** *(55.0)* | **8.07 ms** *(6.20)* | 31.0M | 91B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_l_coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_coco.pth) |
-| **D-FINE-X** | **55.8** *(57.5)* | **12.89 ms** *(11.80)* | 62.0M | 202B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_x_coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_coco.pth) |
+| **D-FINE-S** | **50.7** *(48.6)* | **3.49 ms** *(2.50)* | 10.0M | 25B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth) |
+| **D-FINE-M** | **55.1** *(53.1)* | **5.62 ms** *(4.70)* | 19.0M | 57B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth) |
+| **D-FINE-L** | **57.3** *(55.0)* | **8.07 ms** *(6.20)* | 31.0M | 91B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
+| **D-FINE-X** | **59.3** *(57.5)* | **12.89 ms** *(11.80)* | 62.0M | 202B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth) |
 
 *Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference.*
 
@@ -135,8 +151,8 @@ nitid includes a browser-based UI for running detection without writing code. Up
 # Install web extras
 uv sync --extra web
 
-# Place a wrapped checkpoint
-mkdir -p models && cp dfine_l_wrapped.pth models/
+# Download the recommended wrapped checkpoint into models/
+uv run dfine download model=dfine_l output=models
 
 # Start the API (single worker — inference is not thread-safe)
 uv run uvicorn web.api.main:app --workers 1

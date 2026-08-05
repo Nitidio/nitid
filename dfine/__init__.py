@@ -10,8 +10,17 @@ Usage:
     model.export(format="onnx")
 """
 
+from dfine.media import Frame, FrameMetadata, FrameSink, FrameSource
 from dfine.model import DFINE
 from dfine.utils.reporting import BugReport, bugreport
 
 __version__ = "0.1.0"
-__all__ = ["BugReport", "DFINE", "bugreport"]
+__all__ = [
+    "BugReport",
+    "DFINE",
+    "Frame",
+    "FrameMetadata",
+    "FrameSink",
+    "FrameSource",
+    "bugreport",
+]

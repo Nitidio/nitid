@@ -45,6 +45,10 @@ train = [
     "pycocotools>=2.0",
 ]
 
+track = [
+    "trackers>=2.5,<3",
+]
+
 openvino = [
     "openvino>=2024.0",
 ]

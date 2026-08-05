@@ -35,11 +35,16 @@ def plot_results(result, conf: bool, labels: bool, line_width, font_size) -> np.
         x1, y1, x2, y2 = result.boxes.xyxy[i].int().tolist()
         cls_id = int(result.boxes.cls[i])
         score = float(result.boxes.conf[i])
-        color = PALETTE[cls_id % len(PALETTE)]
+        track_ids = result.boxes.id
+        track_id = int(track_ids[i]) if track_ids is not None else None
+        color_index = track_id if track_id is not None and track_id >= 0 else cls_id
+        color = PALETTE[color_index % len(PALETTE)]
         cv2.rectangle(img, (x1, y1), (x2, y2), color, lw)
 
         if labels or conf:
             name = result.names.get(cls_id, str(cls_id))
+            if track_id is not None and track_id >= 0:
+                name = f"{name} #{track_id}"
             text = f"{name} {score:.2f}" if conf else name
             (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, fs * 0.5, 1)
             cv2.rectangle(img, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)
