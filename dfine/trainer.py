@@ -57,20 +57,31 @@ class ModelEMA:
     Args:
         model: The model being trained.
         decay: EMA decay factor. Higher = slower update (0.9999 is typical).
+        warmups: Updates over which the effective decay ramps toward ``decay``.
     """
 
-    def __init__(self, model: torch.nn.Module, decay: float = 0.9999) -> None:
+    def __init__(self, model: torch.nn.Module, decay: float = 0.9999, warmups: int = 1000) -> None:
+        if not 0.0 <= decay <= 1.0:
+            raise ValueError("EMA decay must be between 0 and 1")
+        if warmups < 0:
+            raise ValueError("EMA warmups must be non-negative")
         self.ema = copy.deepcopy(model).eval()
         self.decay = decay
+        self.warmups = warmups
+        self.updates = 0
         for p in self.ema.parameters():
             p.requires_grad_(False)
 
     def update(self, model: torch.nn.Module) -> None:
         """Update shadow weights from the current model state."""
         with torch.no_grad():
+            self.updates += 1
+            decay = self.decay
+            if self.warmups:
+                decay *= 1.0 - math.exp(-self.updates / self.warmups)
             for ema_p, model_p in zip(self.ema.parameters(), model.parameters()):
                 if ema_p.is_floating_point():
-                    ema_p.data.mul_(self.decay).add_(model_p.data, alpha=1.0 - self.decay)
+                    ema_p.data.mul_(decay).add_(model_p.data, alpha=1.0 - decay)
                 else:
                     ema_p.data.copy_(model_p.data)
             for ema_buf, model_buf in zip(self.ema.buffers(), model.buffers()):
@@ -1271,6 +1282,12 @@ class DFINETrainer:
             decay = ema_state.get("decay")
             if isinstance(decay, (int, float)):
                 ema_model.decay = float(decay)
+            warmups = ema_state.get("warmups")
+            if isinstance(warmups, int):
+                ema_model.warmups = warmups
+            updates = ema_state.get("updates")
+            if isinstance(updates, int):
+                ema_model.updates = updates
 
         history_raw = training_state.get("history", [])
         history = self._coerce_history(history_raw)
@@ -1355,6 +1372,8 @@ class DFINETrainer:
             training_state["ema"] = {
                 "state_dict": ema_model.ema.state_dict(),
                 "decay": ema_model.decay,
+                "warmups": ema_model.warmups,
+                "updates": ema_model.updates,
             }
         return training_state
 
