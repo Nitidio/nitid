@@ -31,6 +31,11 @@ If you're new to nitid, follow these guides in order:
 - [API Reference](api_reference.md)
 - [Troubleshooting](troubleshooting.md)
 
+## Project Direction
+
+- [Roadmap](roadmap.md) — what is in scope, what is not, and how the phases are sequenced
+- [Decision records](adr/index.md) — why the project is built the way it is
+
 ## For Contributors
 
 If you're planning to contribute to nitid, start with the [Onboarding Guide](onboarding.md).
