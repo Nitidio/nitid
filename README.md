@@ -21,6 +21,8 @@ Example prediction using D-FINE-S on a street image.
 - Automatic download and wrapping of official D-FINE checkpoints
 - Python API, CLI and web interface
 - ByteTrack object tracking with persistent IDs and annotated video output
+- Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented recording
+- ONVIF camera discovery, profile selection, and secure RTSP resolution
 - Fine-tuning and validation
 - ONNX, TorchScript and TensorRT export
 
@@ -94,6 +96,46 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 The annotated video is saved under `runs/track/exp/`. Tracking dependencies
 are optional; install them with `uv sync --extra track`.
 
+For resilient RTSP ingest, use an OpenCV build compiled with GStreamer:
+
+```python
+for result in model.track(
+    "rtsp://camera/live",
+    backend="gstreamer",
+    reconnect=True,
+    conf=0.5,
+    stream=True,
+):
+    ...
+```
+
+See [docs/gstreamer.md](docs/gstreamer.md) for system requirements, explicit
+pipelines, hardware-decoder examples, and reconnect semantics.
+
+Inspect available codec paths before selecting acceleration:
+
+```bash
+dfine gstreamer-info
+```
+
+Named profiles are `software`, `vaapi`, `v4l2`, `nvidia`, and `jetson`.
+
+Discover ONVIF cameras and inspect their streams:
+
+```bash
+dfine onvif action=discover timeout=3
+ONVIF_USERNAME=operator ONVIF_PASSWORD=secret \
+  dfine onvif action=profiles host=192.0.2.10
+```
+
+Annotated tracking can also be published or segmented without buffering
+results in Python:
+
+```bash
+dfine track model=dfine_s source=video.mp4 \
+  output=runs/segments segment_duration=60
+```
+
 ### Validation
 
 ```python
@@ -145,6 +187,8 @@ For the full guide:
 - Fine-tuning and validation: [docs/fine_tuning.md](docs/fine_tuning.md)
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
+- GStreamer and RTSP: [docs/gstreamer.md](docs/gstreamer.md)
+- ONVIF cameras: [docs/onvif.md](docs/onvif.md)
 
 
 ## Official Models

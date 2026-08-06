@@ -55,6 +55,17 @@ class DFINEPredictor:
         save_dir: str | Path | None,
         exist_ok: bool,
         verbose: bool,
+        backend: str = "opencv",
+        gst_pipeline: str | None = None,
+        reconnect: bool = False,
+        reconnect_initial_delay: float = 1.0,
+        reconnect_max_delay: float = 30.0,
+        reconnect_attempts: int | None = None,
+        rtsp_latency: int = 200,
+        rtsp_transport: str = "tcp",
+        hardware_profile: str | None = None,
+        rtsp_username: str | None = None,
+        rtsp_password: str | None = None,
         iou: float = 0.85,
         result_processor: Callable[[Results], Results] | None = None,
         run_mode: str = "predict",
@@ -62,7 +73,23 @@ class DFINEPredictor:
         frame_sink: FrameSink | None = None,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
-        loader = LoadSource(source, imgsz=imgsz, device=self.device, vid_stride=vid_stride)
+        loader = LoadSource(
+            source,
+            imgsz=imgsz,
+            device=self.device,
+            vid_stride=vid_stride,
+            backend=backend,
+            gst_pipeline=gst_pipeline,
+            reconnect=reconnect,
+            reconnect_initial_delay=reconnect_initial_delay,
+            reconnect_max_delay=reconnect_max_delay,
+            reconnect_attempts=reconnect_attempts,
+            rtsp_latency=rtsp_latency,
+            rtsp_transport=rtsp_transport,
+            hardware_profile=hardware_profile,
+            rtsp_username=rtsp_username,
+            rtsp_password=rtsp_password,
+        )
         if save:
             from dfine.utils.runs import resolve_run_dir, write_run_metadata
 
@@ -84,6 +111,17 @@ class DFINEPredictor:
                 "save_dir": str(save_dir),
                 "exist_ok": exist_ok,
                 "verbose": verbose,
+                "backend": backend,
+                "gst_pipeline": gst_pipeline,
+                "reconnect": reconnect,
+                "reconnect_initial_delay": reconnect_initial_delay,
+                "reconnect_max_delay": reconnect_max_delay,
+                "reconnect_attempts": reconnect_attempts,
+                "rtsp_latency": rtsp_latency,
+                "rtsp_transport": rtsp_transport,
+                "hardware_profile": hardware_profile,
+                "rtsp_username": rtsp_username,
+                "rtsp_authenticated": rtsp_username is not None,
                 "iou": iou,
             }
             if run_metadata:

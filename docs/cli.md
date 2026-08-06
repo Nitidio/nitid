@@ -182,6 +182,98 @@ uv run dfine track \
 activation and association thresholds operate afterward. Run
 `uv run dfine track --help` for every supported ByteTrack option.
 
+Use the GStreamer backend for a reconnecting RTSP source:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=rtsp://camera/live \
+    backend=gstreamer \
+    reconnect=true \
+    reconnect_max_delay=30 \
+    conf=0.5
+```
+
+The first frame after a successful reconnect is marked as a discontinuity,
+which resets ByteTrack before it assigns IDs. `reconnect_attempts` limits the
+number of attempts for each connection failure; omit it to keep retrying until
+the process is stopped. See [GStreamer and RTSP](gstreamer.md) for installation
+requirements and explicit pipelines.
+
+Publish annotated tracking to an RTSP server that supports client publishing:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=rtsp://camera/input \
+    backend=gstreamer \
+    reconnect=true \
+    output=rtsp://media-server/nitid \
+    output_rtsp_transport=tcp
+```
+
+Record annotated MP4 segments instead:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=rtsp://camera/input \
+    backend=gstreamer \
+    reconnect=true \
+    output=runs/segments/camera-1 \
+    segment_duration=60
+```
+
+`output=` activates the GStreamer output sink and is separate from `save=true`.
+Use `output_pipeline=` for a fully custom appsrc pipeline and `output_encoder=`
+to select a platform encoder.
+
+Inspect named hardware profiles on the current host:
+
+```bash
+uv run dfine gstreamer-info
+```
+
+The command reports input and output availability independently. Select a
+validated H.264 RTSP decoder with `hardware_profile=vaapi` and a validated
+output encoder with `output_hardware_profile=vaapi`. Missing elements are an
+error; nitid does not silently switch to software.
+
+## ONVIF cameras
+
+Discover cameras on the local IPv4 network:
+
+```bash
+uv run dfine onvif action=discover timeout=3
+```
+
+List profiles and resolve a profile's RTSP URI:
+
+```bash
+export ONVIF_USERNAME=operator
+export ONVIF_PASSWORD='camera password'
+
+uv run dfine onvif action=profiles host=192.0.2.10
+uv run dfine onvif action=uri host=192.0.2.10 profile='Main Stream'
+```
+
+The URI command does not insert credentials. Feed it to tracking with a
+password environment variable:
+
+```bash
+export CAMERA_RTSP_PASSWORD='camera password'
+uv run dfine track \
+    model=dfine_s \
+    source=rtsp://192.0.2.10/Streaming/Channels/101 \
+    backend=gstreamer \
+    rtsp_username=operator \
+    rtsp_password_env=CAMERA_RTSP_PASSWORD \
+    reconnect=true
+```
+
+Direct `password=` and `rtsp_password=` CLI arguments are rejected because
+process arguments may be visible to other users. See [ONVIF cameras](onvif.md).
+
 Fine-tune a model:
 
 ```bash

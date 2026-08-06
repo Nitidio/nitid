@@ -12,11 +12,23 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 import traceback
 from pathlib import Path
 
-COMMANDS = {"predict", "track", "download", "train", "val", "export", "info", "bugreport"}
+COMMANDS = {
+    "predict",
+    "track",
+    "download",
+    "train",
+    "val",
+    "export",
+    "info",
+    "gstreamer-info",
+    "onvif",
+    "bugreport",
+}
 REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
 HELP_FLAGS = {"-h", "--help"}
 TRACKER_OPTIONS = {
@@ -42,6 +54,8 @@ Commands:
   val      Evaluate a model and report COCO metrics
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
   info     Show model parameters, GFLOPs, and checkpoint size
+  gstreamer-info  Show GStreamer and hardware codec profile availability
+  onvif    Discover cameras, list media profiles, or resolve an RTSP URI
   bugreport Create an environment-only log for a GitHub issue
 
 Run "dfine COMMAND --help" for command-specific options and examples.
@@ -62,6 +76,24 @@ Options:
   conf=FLOAT          Confidence threshold (default: 0.5)
   imgsz=INT           Square inference image size (default: 640)
   stream=BOOL         Return results as a generator (default: false)
+  backend=NAME        Video backend: opencv or gstreamer (default: opencv)
+  gst_pipeline=TEXT   Explicit GStreamer pipeline ending before or at appsink
+  reconnect=BOOL      Reconnect a live GStreamer source after failure (default: false)
+  reconnect_initial_delay=FLOAT  Initial reconnect delay in seconds (default: 1)
+  reconnect_max_delay=FLOAT      Maximum reconnect delay in seconds (default: 30)
+  reconnect_attempts=INT         Retry limit; omitted means unlimited
+  rtsp_latency=INT    GStreamer RTSP jitter-buffer latency in ms (default: 200)
+  rtsp_transport=NAME RTSP transport: tcp or udp (default: tcp)
+  hardware_profile=NAME  H.264 RTSP decoder: software, vaapi, v4l2, nvidia, jetson
+  rtsp_username=USER RTSP username passed as a GStreamer property
+  rtsp_password_env=NAME  Environment variable containing the RTSP password
+  output=DEST         Annotated MP4 path, segment directory, or RTSP publish URL
+  output_pipeline=TEXT  Explicit GStreamer appsrc output pipeline
+  output_fps=FLOAT    Override output FPS (default: source FPS)
+  segment_duration=FLOAT  Split local output every N seconds
+  output_encoder=TEXT GStreamer encoder element and properties (default: x264enc)
+  output_hardware_profile=NAME  Encoder: software, vaapi, v4l2, nvidia, jetson
+  output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
   save=BOOL           Save annotated images (default: false)
@@ -93,6 +125,24 @@ Options:
   classes=LIST        Track only selected class IDs, e.g. classes=[0,2]
   stream=BOOL         Process results incrementally (CLI default: true)
   vid_stride=INT      Process every Nth source frame (default: 1)
+  backend=NAME        Video backend: opencv or gstreamer (default: opencv)
+  gst_pipeline=TEXT   Explicit GStreamer pipeline ending before or at appsink
+  reconnect=BOOL      Reconnect a live GStreamer source after failure (default: false)
+  reconnect_initial_delay=FLOAT  Initial reconnect delay in seconds (default: 1)
+  reconnect_max_delay=FLOAT      Maximum reconnect delay in seconds (default: 30)
+  reconnect_attempts=INT         Retry limit; omitted means unlimited
+  rtsp_latency=INT    GStreamer RTSP jitter-buffer latency in ms (default: 200)
+  rtsp_transport=NAME RTSP transport: tcp or udp (default: tcp)
+  hardware_profile=NAME  H.264 RTSP decoder: software, vaapi, v4l2, nvidia, jetson
+  rtsp_username=USER RTSP username passed as a GStreamer property
+  rtsp_password_env=NAME  Environment variable containing the RTSP password
+  output=DEST         Annotated MP4 path, segment directory, or RTSP publish URL
+  output_pipeline=TEXT  Explicit GStreamer appsrc output pipeline
+  output_fps=FLOAT    Override output FPS (default: source FPS)
+  segment_duration=FLOAT  Split local output every N seconds
+  output_encoder=TEXT GStreamer encoder element and properties (default: x264enc)
+  output_hardware_profile=NAME  Encoder: software, vaapi, v4l2, nvidia, jetson
+  output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
   save=BOOL           Save annotated output with persistent IDs (default: false)
@@ -118,6 +168,9 @@ Examples:
   dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
   dfine track model=dfine_s source=0 classes=[0] stream=true
   dfine track model=dfine_s source=rtsp://camera/stream lost_track_buffer=60
+  dfine track model=dfine_s source=rtsp://camera/stream backend=gstreamer reconnect=true
+  dfine track model=dfine_s source=video.mp4 output=runs/segments segment_duration=60
+  dfine track model=dfine_s source=rtsp://camera/stream backend=gstreamer hardware_profile=vaapi
 """,
     "download": """\
 Usage:
@@ -267,6 +320,41 @@ Options:
 Example:
   dfine info model=dfine_l weights=obj2coco detailed=true
 """,
+    "gstreamer-info": """\
+Usage:
+  dfine gstreamer-info
+
+Reports whether OpenCV has GStreamer enabled, whether gst-inspect-1.0 is
+available, and which named decode/encode profiles have all required elements.
+
+Profiles:
+  software  libav/x264 CPU path
+  vaapi     Intel/AMD VA-API
+  v4l2      Linux V4L2 memory-to-memory
+  nvidia    NVIDIA desktop CUDA/NVENC
+  jetson    NVIDIA Jetson NVMM/V4L2
+""",
+    "onvif": """\
+Usage:
+  dfine onvif action=discover [timeout=SECONDS] [interface=IP]
+  dfine onvif action=profiles host=HOST [username=USER] [password_env=NAME]
+  dfine onvif action=uri host=HOST [profile=TOKEN_OR_NAME] [username=USER]
+
+Options:
+  action=NAME         discover, profiles, or uri (default: discover)
+  host=HOST           Camera host or complete ONVIF device-service URL
+  port=INT            Override the ONVIF HTTP(S) port
+  timeout=FLOAT       Discovery or SOAP timeout in seconds (default: 3 or 5)
+  interface=IP        IPv4 interface address used for multicast discovery
+  username=USER       ONVIF username (default: ONVIF_USERNAME environment variable)
+  password_env=NAME   Environment variable containing the password (default: ONVIF_PASSWORD)
+  profile=VALUE       Profile token or case-insensitive profile name
+  verify_ssl=BOOL     Verify camera HTTPS certificates (default: true)
+  time_offset=FLOAT   Camera clock correction for WS-Security, in seconds
+
+Passwords are intentionally read from the environment instead of command-line
+arguments, which may be visible to other local processes.
+""",
     "bugreport": """\
 Usage:
   dfine bugreport
@@ -331,6 +419,133 @@ def _coerce(v: str):
     return v
 
 
+def _configure_output_sink(kwargs: dict) -> str | None:
+    """Convert CLI output options into a lazy GStreamer frame sink."""
+    destination = kwargs.pop("output", None)
+    pipeline = kwargs.pop("output_pipeline", None)
+    option_names = {
+        "output_fps": "fps",
+        "segment_duration": "segment_duration",
+        "output_encoder": "encoder",
+        "output_rtsp_transport": "rtsp_transport",
+        "output_hardware_profile": "hardware_profile",
+    }
+    provided_options = [name for name in option_names if name in kwargs]
+    sink_options = {
+        sink_name: kwargs.pop(cli_name)
+        for cli_name, sink_name in option_names.items()
+        if cli_name in kwargs
+    }
+    if destination is None and pipeline is None:
+        if sink_options:
+            names = ", ".join(sorted(provided_options))
+            raise ValueError(f"output options require output= or output_pipeline=: {names}")
+        return None
+
+    from dfine import GStreamerVideoSink
+
+    kwargs["sink"] = GStreamerVideoSink(
+        destination,
+        pipeline=pipeline,
+        **sink_options,
+    )
+    return str(destination) if destination is not None else "custom GStreamer pipeline"
+
+
+def _configure_rtsp_credentials(kwargs: dict) -> None:
+    """Resolve an RTSP password from the environment without exposing it in argv."""
+    if "rtsp_password" in kwargs:
+        print("ERROR: use rtsp_password_env=NAME instead of placing an RTSP password in argv")
+        raise SystemExit(1)
+    password_env = kwargs.pop("rtsp_password_env", None)
+    if password_env is None:
+        return
+    password = os.environ.get(str(password_env))
+    if password is None:
+        print(f"ERROR: RTSP password environment variable '{password_env}' is not set")
+        raise SystemExit(1)
+    username = kwargs.get("rtsp_username") or os.environ.get("ONVIF_USERNAME")
+    if username is None:
+        print("ERROR: rtsp_username= or ONVIF_USERNAME is required with rtsp_password_env")
+        raise SystemExit(1)
+    kwargs["rtsp_username"] = username
+    kwargs["rtsp_password"] = password
+
+
+def _execute_onvif(kwargs: dict) -> None:
+    """Execute ONVIF discovery and read-only Media1 operations."""
+    from dfine.onvif import ONVIFCamera, discover_onvif_devices
+
+    action = str(kwargs.pop("action", "discover")).lower()
+    if "password" in kwargs:
+        print(
+            "ERROR: use password_env=NAME instead of placing an ONVIF password on the command line"
+        )
+        raise SystemExit(1)
+
+    if action == "discover":
+        timeout = float(kwargs.pop("timeout", 3.0))
+        interface = kwargs.pop("interface", None)
+        if kwargs:
+            print(f"ERROR: unsupported ONVIF discovery options: {', '.join(sorted(kwargs))}")
+            raise SystemExit(1)
+        devices = discover_onvif_devices(timeout=timeout, interface=interface)
+        print(f"Discovered {len(devices)} ONVIF device{'s' if len(devices) != 1 else ''}")
+        for index, device in enumerate(devices):
+            endpoint = device.endpoint_reference or "unknown endpoint"
+            print(f"  [{index}] {device.service_url or 'no service URL'} ({endpoint})")
+        return
+
+    if action not in {"profiles", "uri"}:
+        print("ERROR: ONVIF action must be discover, profiles, or uri")
+        raise SystemExit(1)
+
+    host = kwargs.pop("host", None)
+    if host is None:
+        print(f"ERROR: host= is required for ONVIF action={action}")
+        raise SystemExit(1)
+    username = kwargs.pop("username", os.environ.get("ONVIF_USERNAME"))
+    password_env = str(kwargs.pop("password_env", "ONVIF_PASSWORD"))
+    password = os.environ.get(password_env)
+    port_value = kwargs.pop("port", None)
+    port = int(port_value) if port_value is not None else None
+    timeout = float(kwargs.pop("timeout", 5.0))
+    verify_ssl = kwargs.pop("verify_ssl", True)
+    time_offset = float(kwargs.pop("time_offset", 0.0))
+    profile_selector = kwargs.pop("profile", None)
+    if action == "profiles" and profile_selector is not None:
+        print("ERROR: profile= is valid only for ONVIF action=uri")
+        raise SystemExit(1)
+    if kwargs:
+        print(f"ERROR: unsupported ONVIF options: {', '.join(sorted(kwargs))}")
+        raise SystemExit(1)
+
+    camera = ONVIFCamera(
+        str(host),
+        username=username,
+        password=password,
+        port=port,
+        timeout=timeout,
+        verify_ssl=verify_ssl,
+        time_offset=time_offset,
+    )
+    if action == "profiles":
+        profiles = camera.get_profiles()
+        print(f"Found {len(profiles)} media profile{'s' if len(profiles) != 1 else ''}")
+        for profile in profiles:
+            resolution = (
+                f"{profile.width}x{profile.height}"
+                if profile.width is not None and profile.height is not None
+                else "unknown resolution"
+            )
+            fps = f" {profile.frame_rate:g}fps" if profile.frame_rate is not None else ""
+            encoding = profile.encoding or "unknown codec"
+            print(f"  {profile.token}: {profile.name} — {encoding} {resolution}{fps}")
+        return
+
+    print(camera.get_stream_uri(profile_selector))
+
+
 def _execute(argv: list[str]) -> None:
     """Parse and execute one command without report lifecycle handling."""
     command, kwargs = parse_args(argv)
@@ -353,6 +568,32 @@ def _execute(argv: list[str]) -> None:
         print(f"Downloaded wrapped checkpoint to {path}")
         return
 
+    if command == "gstreamer-info":
+        from dfine.gstreamer import inspect_gstreamer_capabilities
+
+        capabilities = inspect_gstreamer_capabilities()
+        print("OpenCV GStreamer: " + ("yes" if capabilities["opencv_gstreamer"] else "no"))
+        print("gst-inspect-1.0: " + ("yes" if capabilities["gst_inspect"] else "no"))
+        print("Profiles:")
+        profiles = capabilities["profiles"]
+        assert isinstance(profiles, dict)
+        for name, status in profiles.items():
+            assert isinstance(status, dict)
+            decode = "yes" if status["decode"] else "no"
+            encode = "yes" if status["encode"] else "no"
+            print(f"  {name:<8} decode={decode:<3} encode={encode:<3} {status['description']}")
+        return
+
+    if command == "onvif":
+        from dfine.onvif import ONVIFError
+
+        try:
+            _execute_onvif(kwargs)
+        except ONVIFError as exc:
+            print(f"ERROR: {exc}")
+            raise SystemExit(1) from None
+        return
+
     model_path = kwargs.pop("model", "dfine_l")
     weights = kwargs.pop("weights", "default")
 
@@ -365,12 +606,16 @@ def _execute(argv: list[str]) -> None:
         if source is None:
             print(f"ERROR: source= is required for {command}")
             sys.exit(1)
+        _configure_rtsp_credentials(kwargs)
+        output_label = _configure_output_sink(kwargs)
         if command == "predict":
             results = model.predict(source, **kwargs)
             for r in results:
                 print(r)
                 if getattr(r, "save_path", None):
                     print(f"Saved {r.save_path}")
+            if output_label is not None:
+                print(f"Wrote annotated output to {output_label}")
         else:
             tracker_kwargs = {key: kwargs.pop(key) for key in TRACKER_OPTIONS if key in kwargs}
             if tracker_kwargs:
@@ -386,6 +631,8 @@ def _execute(argv: list[str]) -> None:
             print(f"Tracked {frame_count} frame{'s' if frame_count != 1 else ''}")
             for save_path in save_paths:
                 print(f"Saved {save_path}")
+            if output_label is not None:
+                print(f"Wrote annotated output to {output_label}")
     elif command == "train":
         metrics = model.train(**kwargs)
         print(metrics)

@@ -5,8 +5,21 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dfine.media import Frame, FrameMetadata, FrameSource, OpenCVVideoSink
-from dfine.utils.sources import LoadSource, OpenCVFrameSource
+from dfine.media import (
+    Frame,
+    FrameMetadata,
+    FrameSource,
+    GStreamerVideoSink,
+    OpenCVVideoSink,
+    build_gstreamer_output_pipeline,
+)
+from dfine.utils.sources import (
+    GStreamerFrameSource,
+    LoadSource,
+    OpenCVFrameSource,
+    build_gstreamer_pipeline,
+    gstreamer_available,
+)
 
 
 def test_frame_metadata_validates_timeline_fields():
@@ -133,6 +146,293 @@ def test_opencv_source_releases_when_iteration_stops_early(monkeypatch):
     iterator.close()
 
     assert capture.released
+
+
+def test_gstreamer_pipeline_builder_handles_rtsp_files_and_explicit_pipelines(tmp_path):
+    rtsp = build_gstreamer_pipeline(
+        'rtsp://user:p"ass@camera/live', rtsp_latency=350, rtsp_transport="udp"
+    )
+    assert 'location="rtsp://user:p\\"ass@camera/live"' in rtsp
+    assert "latency=350" in rtsp
+    assert "protocols=udp" in rtsp
+    assert "video/x-raw,format=BGR" in rtsp
+    assert "drop=true max-buffers=1 sync=false" in rtsp
+
+    video = tmp_path / "clip.mp4"
+    video.touch()
+    file_pipeline = build_gstreamer_pipeline(video)
+    assert video.resolve().as_uri() in file_pipeline
+
+    explicit = "videotestsrc num-buffers=1 ! appsink sync=false"
+    assert build_gstreamer_pipeline("ignored", pipeline=explicit) == explicit
+
+
+def test_gstreamer_pipeline_builder_validates_configuration(tmp_path):
+    with pytest.raises(ValueError, match="rtsp_latency"):
+        build_gstreamer_pipeline("rtsp://camera/live", rtsp_latency=-1)
+    with pytest.raises(ValueError, match="rtsp_transport"):
+        build_gstreamer_pipeline("rtsp://camera/live", rtsp_transport="http")
+    with pytest.raises(ValueError, match="cannot be empty"):
+        build_gstreamer_pipeline("ignored", pipeline="  ")
+    with pytest.raises(FileNotFoundError, match="not found"):
+        build_gstreamer_pipeline(tmp_path / "missing.mp4")
+
+
+def test_gstreamer_source_reconnects_and_marks_discontinuity():
+    image_a = np.full((4, 6, 3), 10, dtype=np.uint8)
+    image_b = np.full((4, 6, 3), 20, dtype=np.uint8)
+
+    class FakeCapture:
+        def __init__(self, reads):
+            self.reads = iter(reads)
+            self.released = False
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            return next(self.reads, (False, None))
+
+        def get(self, prop):
+            return 25.0
+
+        def release(self):
+            self.released = True
+
+    captures = [
+        FakeCapture([(True, image_a), (False, None)]),
+        FakeCapture([(True, image_b)]),
+    ]
+    sleeps = []
+    source = GStreamerFrameSource(
+        "rtsp://camera/live",
+        reconnect=True,
+        reconnect_initial_delay=0.25,
+        _capture_factory=lambda pipeline: captures.pop(0),
+        _sleep=sleeps.append,
+    )
+
+    iterator = iter(source)
+    first = next(iterator)
+    recovered = next(iterator)
+    iterator.close()
+
+    assert first.metadata.frame_index == 0
+    assert not first.metadata.discontinuity
+    assert recovered.metadata.frame_index == 1
+    assert recovered.metadata.discontinuity
+    assert recovered.metadata.fps == 25.0
+    assert sleeps == [0.25]
+    assert not captures
+
+
+def test_gstreamer_source_retries_initial_connection_with_bounded_backoff():
+    image = np.zeros((4, 6, 3), dtype=np.uint8)
+
+    class FakeCapture:
+        def __init__(self, opened, reads=()):
+            self.opened = opened
+            self.reads = iter(reads)
+            self.released = False
+
+        def isOpened(self):
+            return self.opened and not self.released
+
+        def read(self):
+            return next(self.reads, (False, None))
+
+        def get(self, prop):
+            return 0.0
+
+        def release(self):
+            self.released = True
+
+    captures = [FakeCapture(False), FakeCapture(False), FakeCapture(True, [(True, image)])]
+    sleeps = []
+    source = GStreamerFrameSource(
+        "rtsp://camera/live",
+        reconnect=True,
+        reconnect_initial_delay=0.1,
+        reconnect_max_delay=0.15,
+        reconnect_attempts=3,
+        _capture_factory=lambda pipeline: captures.pop(0),
+        _sleep=sleeps.append,
+    )
+
+    iterator = iter(source)
+    frame = next(iterator)
+    iterator.close()
+
+    assert frame.metadata.frame_index == 0
+    assert not frame.metadata.discontinuity
+    assert sleeps == [0.1, 0.15]
+
+
+def test_gstreamer_source_reports_exhausted_reconnect_attempts():
+    class ClosedCapture:
+        def isOpened(self):
+            return False
+
+        def release(self):
+            pass
+
+    source = GStreamerFrameSource(
+        "rtsp://camera/live",
+        reconnect=True,
+        reconnect_initial_delay=0,
+        reconnect_max_delay=0,
+        reconnect_attempts=2,
+        _capture_factory=lambda pipeline: ClosedCapture(),
+        _sleep=lambda delay: None,
+    )
+
+    with pytest.raises(RuntimeError, match=r"after 2 attempt\(s\)"):
+        list(source)
+
+
+@pytest.mark.skipif(not gstreamer_available(), reason="OpenCV was built without GStreamer")
+def test_real_gstreamer_videotestsrc_pipeline():
+    source = GStreamerFrameSource(
+        "videotestsrc num-buffers=3 ! video/x-raw,width=32,height=24,framerate=5/1",
+        mode="stream",
+    )
+
+    frames = list(source)
+
+    assert len(frames) == 3
+    assert all(frame.image.shape == (24, 32, 3) for frame in frames)
+    assert [frame.metadata.frame_index for frame in frames] == [0, 1, 2]
+
+
+def test_gstreamer_output_pipeline_builder_supports_rtsp_segments_and_files(tmp_path):
+    rtsp = build_gstreamer_output_pipeline('rtsp://server/publish"here', rtsp_transport="udp")
+    assert "appsrc format=time" in rtsp
+    assert "queue leaky=downstream max-size-buffers=4" in rtsp
+    assert "rtph264pay config-interval=1" in rtsp
+    assert 'location="rtsp://server/publish\\"here"' in rtsp
+    assert "protocols=udp" in rtsp
+
+    segments = build_gstreamer_output_pipeline(tmp_path / "segments", segment_duration=2.5)
+    assert "splitmuxsink" in segments
+    assert "segment_%05d.mp4" in segments
+    assert "max-size-time=2500000000" in segments
+
+    named_segments = build_gstreamer_output_pipeline(tmp_path / "camera.mp4", segment_duration=60)
+    assert "camera_%05d.mp4" in named_segments
+    assert "max-size-time=60000000000" in named_segments
+
+    output_file = build_gstreamer_output_pipeline(tmp_path / "annotated.mp4")
+    assert "mp4mux faststart=true" in output_file
+    assert str((tmp_path / "annotated.mp4").resolve()) in output_file
+
+
+def test_gstreamer_output_pipeline_builder_validates_options():
+    with pytest.raises(ValueError, match="destination or pipeline"):
+        build_gstreamer_output_pipeline()
+    with pytest.raises(ValueError, match="segment_duration"):
+        build_gstreamer_output_pipeline("segments", segment_duration=0)
+    with pytest.raises(ValueError, match="RTSP destination"):
+        build_gstreamer_output_pipeline("rtsp://server/live", segment_duration=10)
+    with pytest.raises(ValueError, match="custom output pipeline"):
+        build_gstreamer_output_pipeline("out.mp4", pipeline="fakesink")
+    with pytest.raises(ValueError, match="RTSP URL or local path"):
+        build_gstreamer_output_pipeline("udp://127.0.0.1:5000")
+    with pytest.raises(ValueError, match="must end in .mp4"):
+        build_gstreamer_output_pipeline("runs/annotated")
+    with pytest.raises(ValueError, match="rtsp_transport"):
+        build_gstreamer_output_pipeline("rtsp://server/live", rtsp_transport="http")
+
+    custom = build_gstreamer_output_pipeline(pipeline="videoconvert ! fakesink")
+    assert custom.startswith("appsrc format=time ! videoconvert")
+    with_appsrc = "appsrc ! videoconvert ! fakesink"
+    assert build_gstreamer_output_pipeline(pipeline=with_appsrc) == with_appsrc
+
+
+def test_gstreamer_video_sink_opens_lazily_uses_effective_fps_and_closes(tmp_path):
+    class FakeWriter:
+        def __init__(self):
+            self.frames = []
+            self.releases = 0
+
+        def isOpened(self):
+            return True
+
+        def write(self, image):
+            self.frames.append(image.copy())
+
+        def release(self):
+            self.releases += 1
+
+    observed = {}
+    writer = FakeWriter()
+
+    def make_writer(pipeline, fps, frame_size):
+        observed.update(pipeline=pipeline, fps=fps, frame_size=frame_size)
+        return writer
+
+    destination = tmp_path / "nested" / "segments"
+    sink = GStreamerVideoSink(
+        destination,
+        segment_duration=10,
+        _writer_factory=make_writer,
+    )
+    assert sink.pipeline is None
+    metadata = FrameMetadata("camera", 0, fps=20.0, frame_stride=2)
+    sink.write(Frame(np.zeros((4, 6, 3), dtype=np.uint8), metadata))
+
+    assert destination.is_dir()
+    assert observed["fps"] == 10.0
+    assert observed["frame_size"] == (6, 4)
+    assert "splitmuxsink" in observed["pipeline"]
+    assert len(writer.frames) == 1
+
+    with pytest.raises(ValueError, match="does not match"):
+        sink.write(Frame(np.zeros((5, 6, 3), dtype=np.uint8), metadata))
+
+    sink.close()
+    sink.close()
+    assert writer.releases == 1
+    with pytest.raises(RuntimeError, match="closed"):
+        sink.write(Frame(np.zeros((4, 6, 3), dtype=np.uint8), metadata))
+
+
+def test_gstreamer_video_sink_releases_failed_writer(tmp_path):
+    class ClosedWriter:
+        def __init__(self):
+            self.released = False
+
+        def isOpened(self):
+            return False
+
+        def release(self):
+            self.released = True
+
+    writer = ClosedWriter()
+    sink = GStreamerVideoSink(
+        tmp_path / "out.mp4",
+        _writer_factory=lambda pipeline, fps, frame_size: writer,
+    )
+    frame = Frame(np.zeros((4, 6, 3), dtype=np.uint8), FrameMetadata("source", 0))
+
+    with pytest.raises(RuntimeError, match="Failed to open"):
+        sink.write(frame)
+
+    assert writer.released
+    sink.close()
+
+
+@pytest.mark.skipif(not gstreamer_available(), reason="OpenCV was built without GStreamer")
+def test_real_gstreamer_video_sink(tmp_path):
+    output = tmp_path / "output.mp4"
+    sink = GStreamerVideoSink(output, fps=5)
+    metadata = FrameMetadata("test", 0, fps=5)
+    for index in range(3):
+        image = np.full((24, 32, 3), index * 30, dtype=np.uint8)
+        sink.write(Frame(image, metadata))
+    sink.close()
+
+    assert output.is_file()
+    assert output.stat().st_size > 0
 
 
 def test_video_sink_validates_size_and_is_idempotently_closeable(monkeypatch, tmp_path):

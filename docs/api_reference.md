@@ -87,6 +87,10 @@ results = model.predict(
     save=False,       # save annotated outputs to project/name
     project="runs/detect",
     name="exp",
+    backend="opencv", # or "gstreamer" for video/live sources
+    gst_pipeline=None, # optional explicit GStreamer pipeline
+    reconnect=False,  # retry a live GStreamer source after failure
+    hardware_profile=None, # software, vaapi, v4l2, nvidia, or jetson
     iou=0.85,          # IoU threshold for TTA NMS
     sink=None,         # optional FrameSink receiving annotated frames
 )
@@ -242,6 +246,15 @@ results = model.track(
     save_dir=None,
     exist_ok=False,
     verbose=True,
+    backend="opencv",
+    gst_pipeline=None,
+    reconnect=False,
+    reconnect_initial_delay=1.0,
+    reconnect_max_delay=30.0,
+    reconnect_attempts=None,
+    rtsp_latency=200,
+    rtsp_transport="tcp",
+    hardware_profile=None,
     iou=0.85,
     tracker="bytetrack",
     tracker_kwargs=None,
@@ -313,13 +326,95 @@ and closes the sink when iteration finishes or the generator is closed.
 The public media types can be imported directly:
 
 ```python
-from dfine import Frame, FrameMetadata, FrameSink, FrameSource
+from dfine import (
+    Frame,
+    FrameMetadata,
+    FrameSink,
+    FrameSource,
+    GStreamerVideoSink,
+)
 ```
 
 A `FrameSource` yields ordered BGR frames with stable metadata. Both
 `predict()` and `track()` accept a `FrameSource` anywhere they accept a file or
 camera source. A `FrameSink` receives annotated frames through `sink=`. Sources
 and sinks have explicit `close()` methods and support context-manager use.
+
+`GStreamerFrameSource` is the built-in accelerated/live-stream implementation:
+
+```python
+from dfine import GStreamerFrameSource
+
+source = GStreamerFrameSource(
+    "rtsp://camera/live",
+    reconnect=True,
+    reconnect_initial_delay=1,
+    reconnect_max_delay=30,
+)
+for result in model.track(source, stream=True):
+    ...
+```
+
+Alternatively, pass the same settings directly to `predict()` or `track()`
+using `backend="gstreamer"`. See [GStreamer and RTSP](gstreamer.md).
+
+Use `GStreamerVideoSink` to send annotated results to a file, segmented files,
+an RTSP publishing endpoint, or a custom appsrc pipeline. The sink opens on its
+first frame, so width, height, and source FPS do not need to be known upfront:
+
+```python
+sink = GStreamerVideoSink("runs/segments/camera", segment_duration=60)
+for result in model.track("video.mp4", stream=True, sink=sink):
+    ...
+```
+
+```python
+sink = GStreamerVideoSink("rtsp://media-server/nitid")
+for result in model.track("rtsp://camera/input", stream=True, sink=sink):
+    ...
+```
+
+The predictor sends `result.plot()` to the sink after tracking, so output
+frames contain persistent IDs. The sink is closed when inference finishes or
+when the streaming generator is explicitly closed.
+
+Set `hardware_profile=` on `GStreamerVideoSink` to select a named encoder. The
+input `hardware_profile=` argument and the sink profile are independent because
+decode and encode support may differ on the same host. Use
+`inspect_gstreamer_capabilities()` or `dfine gstreamer-info` before deployment.
+
+#### ONVIF camera discovery
+
+```python
+from dfine import ONVIFCamera, discover_onvif_devices
+
+devices = discover_onvif_devices(timeout=3, interface=None)
+camera = ONVIFCamera(
+    devices[0].service_url,
+    username="operator",
+    password="secret",
+    timeout=5,
+    verify_ssl=True,
+    time_offset=0,
+)
+```
+
+`discover_onvif_devices()` returns `list[ONVIFDevice]`. Each device exposes
+`endpoint_reference`, `xaddrs`, `scopes`, `types`, and a preferred
+`service_url`.
+
+```python
+profiles = camera.get_profiles()
+profile = camera.select_profile("Main Stream")  # token or name
+uri = camera.get_stream_uri(profile)            # credentials are not inserted
+source = camera.gstreamer_source(profile, hardware_profile="vaapi")
+```
+
+`ONVIFMediaProfile` contains `token`, `name`, `encoding`, `width`, `height`,
+`frame_rate`, and the optional `(width, height)` `resolution` property.
+`gstreamer_source()` returns a `GStreamerFrameSource`, defaults to reconnection,
+and passes credentials as source properties rather than putting secrets in the
+URI. See [ONVIF cameras](onvif.md) for networking and authentication details.
 
 ---
 

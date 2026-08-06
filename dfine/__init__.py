@@ -10,9 +10,29 @@ Usage:
     model.export(format="onnx")
 """
 
-from dfine.media import Frame, FrameMetadata, FrameSink, FrameSource
+from dfine.gstreamer import (
+    GStreamerHardwareProfile,
+    get_hardware_profile,
+    inspect_gstreamer_capabilities,
+)
+from dfine.media import (
+    Frame,
+    FrameMetadata,
+    FrameSink,
+    FrameSource,
+    GStreamerVideoSink,
+    build_gstreamer_output_pipeline,
+)
 from dfine.model import DFINE
+from dfine.onvif import (
+    ONVIFCamera,
+    ONVIFDevice,
+    ONVIFError,
+    ONVIFMediaProfile,
+    discover_onvif_devices,
+)
 from dfine.utils.reporting import BugReport, bugreport
+from dfine.utils.sources import GStreamerFrameSource
 
 __version__ = "0.1.0"
 __all__ = [
@@ -22,5 +42,16 @@ __all__ = [
     "FrameMetadata",
     "FrameSink",
     "FrameSource",
+    "GStreamerVideoSink",
+    "ONVIFCamera",
+    "ONVIFDevice",
+    "ONVIFError",
+    "ONVIFMediaProfile",
+    "GStreamerFrameSource",
+    "GStreamerHardwareProfile",
+    "build_gstreamer_output_pipeline",
+    "get_hardware_profile",
+    "inspect_gstreamer_capabilities",
+    "discover_onvif_devices",
     "bugreport",
 ]

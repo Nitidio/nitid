@@ -94,6 +94,47 @@ objects with persistent IDs in `result.boxes.id`. With `save=True`, the
 annotated video defaults to `runs/track/exp/video.mp4`. Prefer `stream=True`
 for video and live sources so results are not retained in memory.
 
+For a live RTSP camera, select GStreamer explicitly and enable reconnection:
+
+```python
+for result in model.track(
+    "rtsp://camera/live",
+    backend="gstreamer",
+    reconnect=True,
+    conf=0.5,
+    stream=True,
+):
+    track_ids = result.boxes.id
+```
+
+This requires an OpenCV build compiled with GStreamer. See
+[GStreamer and RTSP](gstreamer.md) for verification and pipeline examples.
+
+Write annotated one-minute segments from the CLI:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 \
+    output=runs/segments segment_duration=60 conf=0.5
+```
+
+Discover an ONVIF camera, select a media profile, and hand it directly to the
+tracking pipeline:
+
+```python
+from dfine import DFINE, ONVIFCamera, discover_onvif_devices
+
+device = discover_onvif_devices(timeout=3)[0]
+camera = ONVIFCamera(device.service_url, username="operator", password="secret")
+source = camera.gstreamer_source("Main Stream", hardware_profile="vaapi")
+
+model = DFINE("dfine_s")
+for result in model.track(source, stream=True, conf=0.5):
+    ...
+```
+
+See [ONVIF cameras](onvif.md) for CLI credential handling, network discovery,
+profile selection, and clock troubleshooting.
+
 ## Coming from D-FINE
 
 If you already have a raw D-FINE checkpoint, nitid wraps it in a self-contained
