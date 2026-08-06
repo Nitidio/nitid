@@ -206,6 +206,7 @@ class DFINETracker:
         **predict_kwargs: Any,
     ):
         processor = create_tracker(tracker, **(tracker_kwargs or {}))
+        processor.reset()
         tracker_name = tracker if isinstance(tracker, str) else type(tracker).__name__
         return self.predictor.run(
             source,

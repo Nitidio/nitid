@@ -3,6 +3,7 @@ dfine CLI — mirrors the `yolo` command from Ultralytics.
 
 Usage:
     dfine predict  model=dfine_l weights=obj2coco source=image.jpg conf=0.5
+    dfine track    model=dfine_s source=video.mp4 conf=0.5 save=true
     dfine download model=dfine_l weights=coco
     dfine train    model=dfine_l data=coco.yaml epochs=50
     dfine val      model=dfine_l data=coco.yaml
@@ -15,9 +16,17 @@ import sys
 import traceback
 from pathlib import Path
 
-COMMANDS = {"predict", "download", "train", "val", "export", "info", "bugreport"}
-REPORT_COMMANDS = {"predict", "train", "val", "export"}
+COMMANDS = {"predict", "track", "download", "train", "val", "export", "info", "bugreport"}
+REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
 HELP_FLAGS = {"-h", "--help"}
+TRACKER_OPTIONS = {
+    "frame_rate",
+    "lost_track_buffer",
+    "track_activation_threshold",
+    "minimum_consecutive_frames",
+    "minimum_iou_threshold",
+    "high_conf_det_threshold",
+}
 
 GENERAL_HELP = """\
 nitid D-FINE CLI
@@ -27,6 +36,7 @@ Usage:
 
 Commands:
   predict  Run object detection on an image, directory, video, URL, or webcam
+  track    Detect and track objects with persistent IDs across video frames
   download Download and wrap an official D-FINE checkpoint
   train    Fine-tune a model on a COCO-format dataset
   val      Evaluate a model and report COCO metrics
@@ -35,7 +45,7 @@ Commands:
   bugreport Create an environment-only log for a GitHub issue
 
 Run "dfine COMMAND --help" for command-specific options and examples.
-Add --report to train, predict, val, or export to capture output and environment details.
+Add --report to train, predict, track, val, or export to capture output and environment details.
 """
 
 COMMAND_HELP = {
@@ -53,6 +63,7 @@ Options:
   imgsz=INT           Square inference image size (default: 640)
   stream=BOOL         Return results as a generator (default: false)
   augment=BOOL        Use test-time augmentation (default: false)
+  iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
   save=BOOL           Save annotated images (default: false)
   project=PATH        Parent output directory when save=true (default: runs/detect)
   name=NAME           Run directory name when save=true (default: exp)
@@ -65,6 +76,48 @@ Examples:
   dfine predict model=dfine_l source=image.jpg
   dfine predict model=dfine_l weights=coco source=image.jpg save=true
   dfine predict model=dfine_l source=video.mp4 conf=0.3 stream=true
+""",
+    "track": """\
+Usage:
+  dfine track model=MODEL source=SOURCE [key=value ...]
+
+Required:
+  source=SOURCE       Video, webcam index, or stream URL
+
+Options:
+  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  weights=NAME        default, obj2coco, or coco (default: default)
+  tracker=NAME        Tracking algorithm; currently bytetrack (default: bytetrack)
+  conf=FLOAT          Detection confidence threshold (default: 0.1)
+  imgsz=INT           Square inference image size (default: 640)
+  classes=LIST        Track only selected class IDs, e.g. classes=[0,2]
+  stream=BOOL         Process results incrementally (CLI default: true)
+  vid_stride=INT      Process every Nth source frame (default: 1)
+  augment=BOOL        Use test-time augmentation (default: false)
+  iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
+  save=BOOL           Save annotated output with persistent IDs (default: false)
+  project=PATH        Parent output directory when save=true (default: runs/track)
+  name=NAME           Run directory name when save=true (default: exp)
+  save_dir=PATH       Exact output directory override
+  exist_ok=BOOL       Reuse the requested directory (default: false)
+  verbose=BOOL        Print tracking progress (default: true)
+
+ByteTrack options:
+  track_activation_threshold=FLOAT  New-track confidence threshold (default: 0.25)
+  high_conf_det_threshold=FLOAT     High-score association cutoff (default: 0.6)
+  minimum_iou_threshold=FLOAT       Minimum association IoU (default: 0.1)
+  minimum_consecutive_frames=INT    Frames required to confirm a track (default: 1)
+  lost_track_buffer=INT             Frames to retain a lost track (default: 30)
+  frame_rate=FLOAT                  Override effective source FPS (default: auto)
+  --report                          Capture output and environment details in a log
+
+Install tracking support first with: uv sync --extra track
+
+Examples:
+  dfine track model=dfine_s source=video.mp4
+  dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
+  dfine track model=dfine_s source=0 classes=[0] stream=true
+  dfine track model=dfine_s source=rtsp://camera/stream lost_track_buffer=60
 """,
     "download": """\
 Usage:
@@ -307,16 +360,32 @@ def _execute(argv: list[str]) -> None:
 
     model = DFINE(model_path, weights=weights)
 
-    if command == "predict":
+    if command in {"predict", "track"}:
         source = kwargs.pop("source", None)
         if source is None:
-            print("ERROR: source= is required for predict")
+            print(f"ERROR: source= is required for {command}")
             sys.exit(1)
-        results = model.predict(source, **kwargs)
-        for r in results:
-            print(r)
-            if getattr(r, "save_path", None):
-                print(f"Saved {r.save_path}")
+        if command == "predict":
+            results = model.predict(source, **kwargs)
+            for r in results:
+                print(r)
+                if getattr(r, "save_path", None):
+                    print(f"Saved {r.save_path}")
+        else:
+            tracker_kwargs = {key: kwargs.pop(key) for key in TRACKER_OPTIONS if key in kwargs}
+            if tracker_kwargs:
+                kwargs["tracker_kwargs"] = tracker_kwargs
+            kwargs.setdefault("stream", True)
+            results = model.track(source, **kwargs)
+            frame_count = 0
+            save_paths: list[str] = []
+            for frame_count, result in enumerate(results, start=1):
+                save_path = getattr(result, "save_path", None)
+                if save_path and save_path not in save_paths:
+                    save_paths.append(save_path)
+            print(f"Tracked {frame_count} frame{'s' if frame_count != 1 else ''}")
+            for save_path in save_paths:
+                print(f"Saved {save_path}")
     elif command == "train":
         metrics = model.train(**kwargs)
         print(metrics)
@@ -349,7 +418,7 @@ def main(argv: list[str] | None = None, report_dir: str | Path = "runs/bugreport
         return
 
     if command not in REPORT_COMMANDS:
-        print("ERROR: --report is supported only for train, predict, val, and export")
+        print("ERROR: --report is supported only for train, predict, track, val, and export")
         raise SystemExit(1)
 
     from dfine.utils.reporting import capture_command_report

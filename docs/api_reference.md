@@ -4,7 +4,7 @@
 
 Artifact-producing calls allocate unique directories by default: `exp`, `exp2`,
 `exp3`, and so on. Pass `save_dir` to choose the requested directory directly and
-`exist_ok=True` to deliberately reuse it for prediction, validation, or export.
+`exist_ok=True` to deliberately reuse it for prediction, tracking, validation, or export.
 Training never reuses an existing directory unless `resume=True`; non-resume
 training increments even when `exist_ok=True`. Every run stores `args.yaml` and
 `environment.yaml` alongside its artifacts.
@@ -88,6 +88,7 @@ results = model.predict(
     project="runs/detect",
     name="exp",
     iou=0.85,          # IoU threshold for TTA NMS
+    sink=None,         # optional FrameSink receiving annotated frames
 )
 ```
 
@@ -124,6 +125,7 @@ playback stays close to the original duration.
 | `boxes`    | `Boxes \| None` | Detection boxes |
 | `save_path` | `str \| None`  | Saved annotated image or video path when `save=True` |
 | `speed` | `dict[str, float]` | Timing in milliseconds for `preprocess`, `inference`, and `postprocess` |
+| `frame_metadata` | `FrameMetadata \| None` | Source ID, zero-based frame index, timestamp, FPS, stride, and discontinuity flag |
 
 ```python
 r = results[0]
@@ -152,6 +154,7 @@ crop["confidence"]  # detection confidence
 crop["class"]       # class id
 crop["name"]        # class name
 crop["save_path"]   # saved image path, or None when not saving
+crop.get("track_id") # persistent ID for tracked results
 ```
 
 When `save_dir` is provided, crops are written in a YOLO-like class-folder layout:
@@ -180,6 +183,9 @@ The tabular export helpers use these columns:
 
 `x1`, `y1`, `x2`, `y2`, `confidence`, `class`, `name`
 
+Tracked results append a `track_id` column. JSON and crop dictionaries also
+include `track_id`, and `save_txt()` appends it to each tracked row.
+
 Stream predictions with `stream=True` to avoid buffering all frames in memory:
 
 ```python
@@ -197,7 +203,9 @@ for r in model.predict("video.mp4", stream=True, conf=0.3):
 | `xywhn`  | `[N, 4]`  | cx cy w h normalised |
 | `conf`   | `[N]`     | Confidence scores |
 | `cls`    | `[N]`     | Class indices (int) |
-| `data`   | `[N, 6]`  | Raw tensor: xyxy + conf + cls |
+| `id`     | `[N] \| None` | Persistent IDs for tracking results; `None` for detections |
+| `is_track` | `bool` | Whether the container holds tracking data |
+| `data`   | `[N, 6]` or `[N, 7]` | Detection layout: xyxy + conf + cls. Tracking layout: xyxy + track ID + conf + cls. |
 
 Iterate detections by index:
 
@@ -207,6 +215,111 @@ for i in range(len(results[0].boxes)):
     conf = results[0].boxes.conf[i].item()
     cls  = int(results[0].boxes.cls[i].item())
 ```
+
+---
+
+### `track()`
+
+Run D-FINE detection followed by ByteTrack association. Install the optional
+dependency first:
+
+```bash
+uv sync --extra track
+```
+
+```python
+results = model.track(
+    source,
+    conf=0.1,
+    imgsz=640,
+    classes=None,
+    stream=False,
+    vid_stride=1,
+    augment=False,
+    save=False,
+    project="runs/track",
+    name="exp",
+    save_dir=None,
+    exist_ok=False,
+    verbose=True,
+    iou=0.85,
+    tracker="bytetrack",
+    tracker_kwargs=None,
+    sink=None,
+)
+```
+
+The return type matches `predict()`: `list[Results]`, or a generator when
+`stream=True`. Tracking results use seven-column `Boxes` data and expose IDs
+through `result.boxes.id`:
+
+```python
+for result in model.track("video.mp4", conf=0.5, stream=True):
+    boxes = result.boxes.xyxy
+    track_ids = result.boxes.id
+```
+
+Use streaming for long videos and live sources. With `save=True`, tracking is
+applied before rendering, so the annotated MP4 contains persistent IDs:
+
+```python
+for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
+    output_path = result.save_path
+
+# runs/track/exp/video.mp4
+```
+
+`conf` is the D-FINE detection filter. ByteTrack settings belong in
+`tracker_kwargs`:
+
+```python
+results = model.track(
+    "video.mp4",
+    conf=0.5,
+    tracker_kwargs={
+        "track_activation_threshold": 0.4,
+        "high_conf_det_threshold": 0.6,
+        "minimum_iou_threshold": 0.1,
+        "minimum_consecutive_frames": 2,
+        "lost_track_buffer": 60,
+    },
+)
+```
+
+| ByteTrack option | Default | Description |
+|---|---:|---|
+| `track_activation_threshold` | `0.25` | Minimum score for starting a candidate track. |
+| `high_conf_det_threshold` | `0.6` | High-score cutoff used during association. |
+| `minimum_iou_threshold` | `0.1` | Minimum IoU used to associate detections and tracks. |
+| `minimum_consecutive_frames` | `1` | Consecutive observations required to confirm a track. |
+| `lost_track_buffer` | `30` | Number of processed frames for which a lost track is retained. |
+| `frame_rate` | automatic | Override the effective FPS used by ByteTrack. By default nitid uses source FPS divided by `vid_stride`. |
+
+New candidates may temporarily have ID `-1` until ByteTrack confirms them.
+Non-negative IDs are persistent track identities.
+
+Tracker state belongs to one `model.track()` invocation. It resets when:
+
+- a new `model.track()` call starts;
+- the source ID changes, such as when a source list advances to another video;
+- `FrameMetadata.discontinuity` is true, allowing reconnecting stream sources
+  to prevent identities from leaking across a connection gap.
+
+Passing a custom `FrameSink` through `sink=` writes annotated tracked frames
+and closes the sink when iteration finishes or the generator is closed.
+
+#### Media contracts
+
+The public media types can be imported directly:
+
+```python
+from dfine import Frame, FrameMetadata, FrameSink, FrameSource
+```
+
+A `FrameSource` yields ordered BGR frames with stable metadata. Both
+`predict()` and `track()` accept a `FrameSource` anywhere they accept a file or
+camera source. A `FrameSink` receives annotated frames through `sink=`. Sources
+and sinks have explicit `close()` methods and support context-manager use.
 
 ---
 

@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
 
-nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one import and keep all the patterns you already know: predict, train, val, export, stream, CLI.
+nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one import and keep all the patterns you already know: predict, track, train, val, export, stream, CLI.
 
 ![nitid detection demo](docs/assets/nitid-demo.png)
 
@@ -20,6 +20,7 @@ Example prediction using D-FINE-S on a street image.
 - Familiar Ultralytics-style API
 - Automatic download and wrapping of official D-FINE checkpoints
 - Python API, CLI and web interface
+- ByteTrack object tracking with persistent IDs and annotated video output
 - Fine-tuning and validation
 - ONNX, TorchScript and TensorRT export
 
@@ -37,6 +38,12 @@ For fine-tuning and validation add the `train` extra:
 
 ```bash
 uv sync --extra train
+```
+
+For ByteTrack object tracking add the `track` extra:
+
+```bash
+uv sync --extra track
 ```
 
 TensorRT:
@@ -76,6 +83,17 @@ model.train(
 # returns final metrics plus per-epoch history in metrics["history"]
 ```
 
+### Tracking
+
+```python
+for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
+    if result.boxes.id is not None:
+        track_ids = result.boxes.id
+```
+
+The annotated video is saved under `runs/track/exp/`. Tracking dependencies
+are optional; install them with `uv sync --extra track`.
+
 ### Validation
 
 ```python
@@ -113,6 +131,7 @@ print(report.path)
 
 ```bash
 uv run dfine predict model=dfine_s source=image.jpg
+uv run dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
 uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
 uv run dfine val model=dfine_s data=my_dataset.yml
 uv run dfine export model=dfine_s format=onnx

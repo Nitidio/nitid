@@ -79,6 +79,7 @@ def test_track_runs_processor_in_pipeline_and_returns_persistent_ids(tiny_checkp
     class ConstantIdTracker(ResultTracker):
         def __init__(self):
             self.calls = 0
+            self.reset_calls = 0
 
         def update(self, result):
             self.calls += 1
@@ -96,6 +97,7 @@ def test_track_runs_processor_in_pipeline_and_returns_persistent_ids(tiny_checkp
 
         def reset(self):
             self.calls = 0
+            self.reset_calls += 1
 
     class RecordingSink(FrameSink):
         def __init__(self):
@@ -125,6 +127,7 @@ def test_track_runs_processor_in_pipeline_and_returns_persistent_ids(tiny_checkp
 
     assert len(results) == 3
     assert tracker.calls == 3
+    assert tracker.reset_calls == 1
     assert all(result.frame_metadata is not None for result in results)
     assert [result.frame_metadata.frame_index for result in results] == [0, 1, 2]
     assert all(result.boxes.is_track for result in results)
