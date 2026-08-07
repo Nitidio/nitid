@@ -203,10 +203,12 @@ def build_gstreamer_output_pipeline(
     else:
         selected_encoder = encoder or DEFAULT_GSTREAMER_ENCODER
         encoder_fragment = f"videoconvert ! video/x-raw,format=I420 ! {selected_encoder.strip()}"
-    base = f"appsrc format=time ! queue leaky=downstream max-size-buffers=4 ! {encoder_fragment}"
     if destination_text.lower().startswith("rtsp://"):
         if segment_duration is not None:
             raise ValueError("segment_duration cannot be used with an RTSP destination")
+        base = (
+            f"appsrc format=time ! queue leaky=downstream max-size-buffers=4 ! {encoder_fragment}"
+        )
         return (
             f"{base} ! h264parse ! rtph264pay config-interval=1 pt=96 "
             f"! rtspclientsink location={_gst_property_quote(destination_text)} "
@@ -215,6 +217,7 @@ def build_gstreamer_output_pipeline(
 
     if "://" in destination_text:
         raise ValueError("output destination must be an RTSP URL or local path")
+    base = f"appsrc format=time ! queue ! {encoder_fragment}"
     if segment_duration is not None:
         template = _segment_template(destination)
         duration_ns = round(segment_duration * 1_000_000_000)

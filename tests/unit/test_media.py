@@ -162,9 +162,19 @@ def test_gstreamer_pipeline_builder_handles_rtsp_files_and_explicit_pipelines(tm
     video.touch()
     file_pipeline = build_gstreamer_pipeline(video)
     assert video.resolve().as_uri() in file_pipeline
+    assert "appsink sync=false" in file_pipeline
+    assert "drop=true" not in file_pipeline
 
     explicit = "videotestsrc num-buffers=1 ! appsink sync=false"
     assert build_gstreamer_pipeline("ignored", pipeline=explicit) == explicit
+
+    finite_pipeline = build_gstreamer_pipeline(
+        "ignored",
+        pipeline="videotestsrc num-buffers=1",
+        live=False,
+    )
+    assert "appsink sync=false" in finite_pipeline
+    assert "drop=true" not in finite_pipeline
 
 
 def test_gstreamer_pipeline_builder_validates_configuration(tmp_path):
@@ -314,6 +324,8 @@ def test_gstreamer_output_pipeline_builder_supports_rtsp_segments_and_files(tmp_
 
     segments = build_gstreamer_output_pipeline(tmp_path / "segments", segment_duration=2.5)
     assert "splitmuxsink" in segments
+    assert "appsrc format=time ! queue !" in segments
+    assert "leaky=" not in segments
     assert "segment_%05d.mp4" in segments
     assert "max-size-time=2500000000" in segments
 
@@ -323,6 +335,8 @@ def test_gstreamer_output_pipeline_builder_supports_rtsp_segments_and_files(tmp_
 
     output_file = build_gstreamer_output_pipeline(tmp_path / "annotated.mp4")
     assert "mp4mux faststart=true" in output_file
+    assert "appsrc format=time ! queue !" in output_file
+    assert "leaky=" not in output_file
     assert str((tmp_path / "annotated.mp4").resolve()) in output_file
 
 

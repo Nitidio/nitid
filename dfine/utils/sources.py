@@ -40,6 +40,7 @@ def build_gstreamer_pipeline(
     source: str | Path | int,
     *,
     pipeline: str | None = None,
+    live: bool | None = None,
     rtsp_latency: int = 200,
     rtsp_transport: str = "tcp",
     hardware_profile: str | None = None,
@@ -58,6 +59,15 @@ def build_gstreamer_pipeline(
         raise ValueError("RTSP credentials cannot be combined with gst_pipeline")
     if rtsp_password is not None and rtsp_username is None:
         raise ValueError("rtsp_password requires rtsp_username")
+
+    if live is None:
+        source_text = str(source).strip().lower()
+        live = (
+            pipeline is not None
+            or isinstance(source, int)
+            or "!" in source_text
+            or source_text.startswith(("rtsp://", "rtmp://", "http://", "https://"))
+        )
 
     if pipeline is not None:
         description = pipeline.strip()
@@ -135,9 +145,8 @@ def build_gstreamer_pipeline(
     if not description:
         raise ValueError("gst_pipeline cannot be empty")
     if "appsink" not in description.lower():
-        description += (
-            " ! videoconvert ! video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
-        )
+        appsink = "appsink drop=true max-buffers=1 sync=false" if live else "appsink sync=false"
+        description += f" ! videoconvert ! video/x-raw,format=BGR ! {appsink}"
     return description
 
 
@@ -284,6 +293,7 @@ class GStreamerFrameSource(FrameSource):
         self.pipeline = build_gstreamer_pipeline(
             source,
             pipeline=pipeline,
+            live=self.mode != "video",
             rtsp_latency=rtsp_latency,
             rtsp_transport=rtsp_transport,
             hardware_profile=hardware_profile,

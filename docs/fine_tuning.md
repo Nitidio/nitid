@@ -229,9 +229,8 @@ def stop_after_first_epoch(trainer):
 model.add_callback("on_train_epoch_end", stop_after_first_epoch)
 ```
 
-Callbacks receive only the active
-[`DFINETrainer`](../dfine/trainer.py) instance, for consistency with the
-Ultralytics style. The most useful callback attributes are:
+Callbacks receive only the active `DFINETrainer` instance, for consistency
+with the Ultralytics style. The most useful callback attributes are:
 
 | Attribute | Type | Meaning | Available |
 |-----------|------|---------|-----------|
@@ -537,9 +536,9 @@ normalized `cxcywh` format expected by D-FINE. The sample/epoch seed makes trans
 choices independent of DataLoader worker scheduling. All resolved values above are
 written to `args.yaml` and restored from `last.pth` on resume.
 
-Mosaic and MixUp are implemented as opt-in benchmark candidates, not selected
-defaults. See [augmentation benchmarks](augmentation_benchmarks.md) for the required
-comparison protocol and current evidence status.
+Mosaic and MixUp are implemented as opt-in benchmark candidates rather than
+selected defaults. Validate them against the unaugmented baseline on the target
+dataset before enabling them by default.
 
 ## Resume training
 

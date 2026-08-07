@@ -93,6 +93,8 @@ results = model.predict("video.mp4", backend="gstreamer", stream=True)
 ```
 
 End-of-stream on a recorded file completes normally and is never reconnected.
+Recorded-file pipelines apply backpressure instead of dropping decoded frames,
+so every source frame selected by `vid_stride` reaches inference.
 
 ### Webcam
 
@@ -156,7 +158,9 @@ plugin's own timeout.
 
 `GStreamerVideoSink` receives the rendered frame after detection or tracking.
 It initializes lazily from the first frame and derives output FPS from source
-FPS divided by `vid_stride`. Pass `fps=` to override that value.
+FPS divided by `vid_stride`. Pass `fps=` to override that value. Local MP4 and
+segmented outputs use a lossless queue; RTSP publishing uses a bounded leaky
+queue to favor current frames over growing latency.
 
 ### Segmented recording
 
