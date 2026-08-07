@@ -49,8 +49,8 @@ OpenCV build compiled against the host GStreamer libraries. nitid raises a
 clear runtime error instead of silently falling back to another backend.
 
 A typical Debian/Ubuntu runtime needs GStreamer core plus the base, good, bad,
-ugly, and libav plugin sets. The exact packages and hardware plugins depend on
-the target distribution and accelerator.
+ugly, libav, and RTSP plugin sets. The exact packages and hardware plugins
+depend on the target distribution and accelerator.
 
 ## Input forms
 
@@ -68,8 +68,23 @@ results = model.predict(
 )
 ```
 
-Credentials remain part of the source URL. Avoid printing URLs or committing
-them to scripts when they contain passwords.
+Pass credentials separately so they do not appear in the source URL or run
+metadata:
+
+```python
+results = model.predict(
+    "rtsp://camera/live",
+    backend="gstreamer",
+    rtsp_username="operator",
+    rtsp_password="secret",
+    stream=True,
+)
+```
+
+For CLI use, put the password in an environment variable and pass its name with
+`rtsp_password_env=`, as shown in [CLI usage](cli.md#onvif-cameras). Direct
+`rtsp_password=` CLI arguments are rejected because process arguments can be
+visible to other users.
 
 ### Recorded video
 
@@ -295,7 +310,10 @@ with:
 - a non-root runtime user and locked Python dependencies.
 
 The image constrains NumPy to the 1.x ABI after the locked sync because
-Debian's `python3-opencv` extension is built against that ABI.
+Debian's `python3-opencv` extension is built against that ABI. It is a
+media/software/VA-API baseline and intentionally does not install the optional
+`trackers` package: `trackers` 2.5 requires NumPy 2, so it cannot share this
+system-OpenCV environment safely.
 
 The image build verifies `GStreamer: YES`, `avdec_h264`, and `x264enc`. A broken
 runtime fails during the build instead of failing on the first camera.
@@ -336,5 +354,7 @@ This backend covers decode, RTSP reconnect, bounded buffering, timestamps,
 discontinuity propagation, annotated RTSP publishing, and segmented recording.
 It also provides validated codec profiles, a software/VA-API container
 baseline, and ONVIF discovery/profile resolution. Vendor-specific
-NVIDIA/Jetson images remain later deployment stages. `save=True` continues to use nitid's existing OpenCV output;
-the GStreamer output options are independent and can be used alone.
+NVIDIA/Jetson images remain later deployment stages.
+
+`save=True` continues to use nitid's existing OpenCV output; the GStreamer
+output options are independent and can be used alone.

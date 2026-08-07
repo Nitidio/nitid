@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
     gstreamer1.0-plugins-ugly \
+    gstreamer1.0-rtsp \
     gstreamer1.0-tools \
     gstreamer1.0-vaapi \
     libgl1 \
@@ -41,9 +42,9 @@ COPY . /app
 # Install locked Python dependencies, then remove the non-GStreamer PyPI wheel
 # so the venv inherits Debian's GStreamer-enabled cv2 binding.
 RUN python3 -m venv --system-site-packages "$UV_PROJECT_ENVIRONMENT" \
-    && uv sync --frozen --extra track --no-dev \
+    && uv sync --frozen --no-dev \
     && uv pip uninstall opencv-python \
-    && uv pip install "numpy>=1.24,<2" \
+    && uv pip install "numpy>=1.24,<2" "scipy>=1.10,<1.16" \
     && python -c "import cv2; assert any(line.strip().startswith('GStreamer:') and 'YES' in line.upper() for line in cv2.getBuildInformation().splitlines())" \
     && gst-inspect-1.0 avdec_h264 >/dev/null \
     && gst-inspect-1.0 x264enc >/dev/null
