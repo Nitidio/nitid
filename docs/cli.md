@@ -149,6 +149,13 @@ Track a video with ByteTrack, the default tracker:
 uv run dfine track model=dfine_s source=video.mp4 conf=0.5
 ```
 
+Select BoT-SORT for motion-only tracking with camera-motion compensation. This
+is useful for moving, handheld, vehicle-mounted, or PTZ cameras:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 tracker=botsort conf=0.5
+```
+
 Select OC-SORT when occlusions or non-linear motion make direction-aware
 association useful:
 
@@ -185,6 +192,23 @@ uv run dfine track \
     minimum_consecutive_frames=2
 ```
 
+BoT-SORT enables camera-motion compensation by default. Its method and
+downscale factor can be changed without affecting the other trackers:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=video.mp4 \
+    tracker=botsort \
+    conf=0.5 \
+    enable_cmc=true \
+    cmc_method=sparseOptFlow \
+    cmc_downscale=2
+```
+
+This integration is the motion-only BoT-SORT variant; it does not run an
+appearance or ReID model.
+
 For OC-SORT:
 
 ```bash
@@ -215,10 +239,10 @@ uv run dfine track \
 ```
 
 The first frame after a successful reconnect is marked as a discontinuity,
-which resets the active tracker before it assigns IDs. `reconnect_attempts` limits the
-number of attempts for each connection failure; omit it to keep retrying until
-the process is stopped. See [GStreamer and RTSP](gstreamer.md) for installation
-requirements and explicit pipelines.
+which resets the active tracker before it assigns IDs. `reconnect_attempts`
+limits the number of attempts for each connection failure; omit it to keep
+retrying until the process is stopped. See [GStreamer and RTSP](gstreamer.md)
+for installation requirements and explicit pipelines.
 
 Publish annotated tracking to an RTSP server that supports client publishing:
 

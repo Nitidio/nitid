@@ -231,8 +231,8 @@ for i in range(len(results[0].boxes)):
 
 ### `track()`
 
-Run D-FINE detection followed by ByteTrack or OC-SORT association. ByteTrack is
-the default. Install the optional dependency first:
+Run D-FINE detection followed by ByteTrack, BoT-SORT, or OC-SORT association.
+ByteTrack is the default. Install the optional dependency first:
 
 ```bash
 uv sync --extra track
@@ -291,8 +291,9 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 # runs/track/exp/video.mp4
 ```
 
-`conf` is the D-FINE detection filter. Select `tracker="bytetrack"` or
-`tracker="ocsort"`; tracker-specific settings belong in `tracker_kwargs`:
+`conf` is the D-FINE detection filter. Select `tracker="bytetrack"`,
+`tracker="botsort"`, or `tracker="ocsort"`; tracker-specific settings belong
+in `tracker_kwargs`:
 
 ```python
 results = model.track(
@@ -334,6 +335,35 @@ results = model.track(
 | `minimum_consecutive_frames` | `1` | Consecutive observations required to confirm a track. |
 | `lost_track_buffer` | `30` | Number of processed frames for which a lost track is retained. |
 | `frame_rate` | automatic | Override the effective FPS used by ByteTrack. By default nitid uses source FPS divided by `vid_stride`. |
+
+BoT-SORT uses the original frame for camera-motion compensation. The current
+integration is motion-only and does not use appearance embeddings or a ReID
+model.
+
+```python
+for result in model.track(
+    "video.mp4",
+    tracker="botsort",
+    tracker_kwargs={"enable_cmc": True, "cmc_method": "sparseOptFlow"},
+    stream=True,
+):
+    track_ids = result.boxes.id
+```
+
+| BoT-SORT option | Default | Description |
+|---|---:|---|
+| `track_activation_threshold` | `0.7` | Minimum score for starting a candidate track. |
+| `high_conf_det_threshold` | `0.6` | High-score cutoff used during association. |
+| `minimum_consecutive_frames` | `2` | Consecutive observations required to confirm a track. |
+| `lost_track_buffer` | `30` | Number of processed frames for which a lost track is retained. |
+| `minimum_iou_threshold_first_assoc` | `0.2` | Minimum IoU for first-stage association. |
+| `minimum_iou_threshold_second_assoc` | `0.5` | Minimum IoU for low-confidence recovery. |
+| `minimum_iou_threshold_unconfirmed_assoc` | `0.3` | Minimum IoU for unconfirmed-track association. |
+| `enable_cmc` | `True` | Enable camera-motion compensation. |
+| `cmc_method` | `"sparseOptFlow"` | CMC method: `orb`, `sift`, `sparseOptFlow`, or `ecc`. |
+| `cmc_downscale` | `2` | Downscale factor used during CMC estimation. |
+| `instant_first_frame_activation` | `True` | Immediately confirm tracks created on the first frame. |
+| `frame_rate` | automatic | Override the effective FPS derived from source metadata. |
 
 | OC-SORT option | Default | Description |
 |---|---:|---|
