@@ -231,8 +231,8 @@ for i in range(len(results[0].boxes)):
 
 ### `track()`
 
-Run D-FINE detection followed by ByteTrack association. Install the optional
-dependency first:
+Run D-FINE detection followed by ByteTrack or OC-SORT association. ByteTrack is
+the default. Install the optional dependency first:
 
 ```bash
 uv sync --extra track
@@ -291,8 +291,8 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 # runs/track/exp/video.mp4
 ```
 
-`conf` is the D-FINE detection filter. ByteTrack settings belong in
-`tracker_kwargs`:
+`conf` is the D-FINE detection filter. Select `tracker="bytetrack"` or
+`tracker="ocsort"`; tracker-specific settings belong in `tracker_kwargs`:
 
 ```python
 results = model.track(
@@ -308,6 +308,24 @@ results = model.track(
 )
 ```
 
+OC-SORT uses the same result and lifecycle contracts:
+
+```python
+results = model.track(
+    "video.mp4",
+    conf=0.5,
+    tracker="ocsort",
+    tracker_kwargs={
+        "high_conf_det_threshold": 0.6,
+        "minimum_iou_threshold": 0.3,
+        "minimum_consecutive_frames": 3,
+        "lost_track_buffer": 30,
+        "direction_consistency_weight": 0.2,
+        "delta_t": 3,
+    },
+)
+```
+
 | ByteTrack option | Default | Description |
 |---|---:|---|
 | `track_activation_threshold` | `0.25` | Minimum score for starting a candidate track. |
@@ -317,7 +335,17 @@ results = model.track(
 | `lost_track_buffer` | `30` | Number of processed frames for which a lost track is retained. |
 | `frame_rate` | automatic | Override the effective FPS used by ByteTrack. By default nitid uses source FPS divided by `vid_stride`. |
 
-New candidates may temporarily have ID `-1` until ByteTrack confirms them.
+| OC-SORT option | Default | Description |
+|---|---:|---|
+| `high_conf_det_threshold` | `0.6` | Minimum detection score used for association. |
+| `minimum_iou_threshold` | `0.3` | Minimum IoU used to associate detections and tracks. |
+| `minimum_consecutive_frames` | `3` | Consecutive observations required to confirm a track. |
+| `lost_track_buffer` | `30` | Number of processed frames for which a lost track is retained. |
+| `direction_consistency_weight` | `0.2` | Weight given to motion-direction consistency during association. |
+| `delta_t` | `3` | Frame interval used to estimate an object's direction. |
+| `frame_rate` | automatic | Override the effective FPS. By default nitid uses source FPS divided by `vid_stride`. |
+
+New candidates may temporarily have ID `-1` until the tracker confirms them.
 Non-negative IDs are persistent track identities.
 
 Tracker state belongs to one `model.track()` invocation. It resets when:

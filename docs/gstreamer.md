@@ -145,8 +145,8 @@ Reconnection is available for live stream and webcam modes:
 | `reconnect_attempts` | unlimited | Retry limit per failure; `0` disables retries. |
 
 Frame indexes remain increasing across a recovered connection. The first
-emitted frame after recovery has `FrameMetadata.discontinuity=True`. ByteTrack
-observes that marker and creates a fresh tracker backend, preventing IDs from
+emitted frame after recovery has `FrameMetadata.discontinuity=True`. The active
+tracker observes that marker and creates a fresh backend, preventing IDs from
 leaking across an unknown camera gap.
 
 Closing the source or closing a streaming result generator releases the active

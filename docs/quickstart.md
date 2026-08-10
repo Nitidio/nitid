@@ -18,7 +18,7 @@ Add extras only when you need them:
 uv sync --extra dev   # for developement
 uv sync --extra web     # web application
 uv sync --extra openvino # OpenVINO IR export and runtime
-uv sync --extra track    # ByteTrack object tracking
+uv sync --extra track    # ByteTrack and OC-SORT object tracking
 ```
 
 ## First Run

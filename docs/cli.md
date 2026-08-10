@@ -143,10 +143,17 @@ Install the optional tracking dependencies:
 uv sync --extra track
 ```
 
-Track a video with ByteTrack:
+Track a video with ByteTrack, the default tracker:
 
 ```bash
 uv run dfine track model=dfine_s source=video.mp4 conf=0.5
+```
+
+Select OC-SORT when occlusions or non-linear motion make direction-aware
+association useful:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 tracker=ocsort conf=0.5
 ```
 
 Save an annotated video containing class labels, confidence scores, and
@@ -166,7 +173,7 @@ Filter classes or sample every second frame:
 uv run dfine track model=dfine_s source=video.mp4 classes=[0,2] vid_stride=2 save=true
 ```
 
-ByteTrack settings are passed as flat `key=value` arguments:
+Tracker settings are passed as flat `key=value` arguments. For ByteTrack:
 
 ```bash
 uv run dfine track \
@@ -178,9 +185,22 @@ uv run dfine track \
     minimum_consecutive_frames=2
 ```
 
+For OC-SORT:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=video.mp4 \
+    tracker=ocsort \
+    conf=0.5 \
+    direction_consistency_weight=0.2 \
+    delta_t=3 \
+    lost_track_buffer=60
+```
+
 `conf` filters D-FINE detections before tracking. The tracker-specific
 activation and association thresholds operate afterward. Run
-`uv run dfine track --help` for every supported ByteTrack option.
+`uv run dfine track --help` for every supported option and its defaults.
 
 Use the GStreamer backend for a reconnecting RTSP source:
 
@@ -195,7 +215,7 @@ uv run dfine track \
 ```
 
 The first frame after a successful reconnect is marked as a discontinuity,
-which resets ByteTrack before it assigns IDs. `reconnect_attempts` limits the
+which resets the active tracker before it assigns IDs. `reconnect_attempts` limits the
 number of attempts for each connection failure; omit it to keep retrying until
 the process is stopped. See [GStreamer and RTSP](gstreamer.md) for installation
 requirements and explicit pipelines.

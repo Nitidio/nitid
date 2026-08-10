@@ -20,7 +20,7 @@ Example prediction using D-FINE-S on a street image.
 - Familiar Ultralytics-style API
 - Automatic download and wrapping of official D-FINE checkpoints
 - Python API, CLI and web interface
-- ByteTrack object tracking with persistent IDs and annotated video output
+- ByteTrack and OC-SORT tracking with persistent IDs and annotated video output
 - Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented recording
 - ONVIF camera discovery, profile selection, and secure RTSP resolution
 - Fine-tuning and validation
@@ -42,7 +42,7 @@ For fine-tuning and validation add the `train` extra:
 uv sync --extra train
 ```
 
-For ByteTrack object tracking add the `track` extra:
+For ByteTrack and OC-SORT object tracking add the `track` extra:
 
 ```bash
 uv sync --extra track
