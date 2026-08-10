@@ -20,6 +20,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
                 "backend=NAME",
                 "output=DEST",
                 "track_activation_threshold=FLOAT",
+                "direction_consistency_weight=FLOAT",
                 "dfine track",
             ),
         ),
@@ -175,11 +176,28 @@ def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
     fake_module.DFINE = FakeDFINE
     monkeypatch.setitem(sys.modules, "dfine", fake_module)
 
-    main(["dfine", "track", "source=0", "tracker=byte-track", "stream=false"])
+    main(
+        [
+            "dfine",
+            "track",
+            "source=0",
+            "tracker=ocsort",
+            "direction_consistency_weight=0.4",
+            "delta_t=5",
+            "stream=false",
+        ]
+    )
 
     assert observed == {
         "source": 0,
-        "kwargs": {"tracker": "byte-track", "stream": False},
+        "kwargs": {
+            "tracker": "ocsort",
+            "stream": False,
+            "tracker_kwargs": {
+                "direction_consistency_weight": 0.4,
+                "delta_t": 5,
+            },
+        },
     }
 
 

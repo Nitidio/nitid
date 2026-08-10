@@ -8,7 +8,7 @@ import torch
 
 from dfine.media import FrameMetadata
 from dfine.results import Boxes, Results
-from dfine.tracking import ByteTrack, ResultTracker, create_tracker
+from dfine.tracking import ByteTrack, OCSort, ResultTracker, create_tracker
 
 
 def make_result(source_id="video.mp4", frame_index=0, *, empty=False):
@@ -68,6 +68,29 @@ def test_bytetrack_converts_results_and_uses_effective_frame_rate():
     assert backends[0].kwargs["frame_rate"] == pytest.approx(10.0)
 
 
+def test_ocsort_uses_occlusion_aware_backend_options():
+    backends = []
+
+    def backend_factory(**kwargs):
+        backend = FakeBackend(**kwargs)
+        backends.append(backend)
+        return backend
+
+    tracker = OCSort(
+        direction_consistency_weight=0.4,
+        delta_t=5,
+        backend_factory=backend_factory,
+        detections_factory=FakeDetections,
+    )
+    result = tracker.update(make_result())
+
+    assert result.boxes is not None
+    assert result.boxes.id.tolist() == [17]
+    assert backends[0].kwargs["frame_rate"] == pytest.approx(10.0)
+    assert backends[0].kwargs["direction_consistency_weight"] == pytest.approx(0.4)
+    assert backends[0].kwargs["delta_t"] == 5
+
+
 def test_bytetrack_advances_with_empty_detections():
     backend = FakeBackend()
     tracker = ByteTrack(
@@ -118,6 +141,7 @@ def test_create_tracker_validation():
     custom = CustomTracker()
     assert create_tracker(custom) is custom
     assert isinstance(create_tracker("byte-track"), ByteTrack)
+    assert isinstance(create_tracker("oc-sort"), OCSort)
     with pytest.raises(ValueError, match="unsupported tracker"):
         create_tracker("unknown")
     with pytest.raises(ValueError, match="tracker_kwargs"):
@@ -160,12 +184,19 @@ def test_boxes_reject_invalid_column_count():
         Boxes(torch.empty((1, 5)), (10, 10))
 
 
-def test_real_bytetrack_assigns_persistent_id_when_extra_installed():
+@pytest.mark.parametrize(
+    ("tracker_type", "kwargs"),
+    [
+        (ByteTrack, {"track_activation_threshold": 0.25}),
+        (OCSort, {"high_conf_det_threshold": 0.25}),
+    ],
+)
+def test_real_tracker_assigns_persistent_id_when_extra_installed(tracker_type, kwargs):
     pytest.importorskip("trackers")
     pytest.importorskip("supervision")
-    tracker = ByteTrack(
+    tracker = tracker_type(
         minimum_consecutive_frames=0,
-        track_activation_threshold=0.25,
+        **kwargs,
     )
 
     results = [tracker.update(make_result(frame_index=index)) for index in range(3)]
@@ -173,3 +204,16 @@ def test_real_bytetrack_assigns_persistent_id_when_extra_installed():
 
     assert ids[1] >= 0
     assert ids[1] == ids[2]
+
+
+@pytest.mark.parametrize(
+    ("tracker_type", "kwargs", "message"),
+    [
+        (ByteTrack, {"track_activation_threshold": 1.1}, "track_activation_threshold"),
+        (OCSort, {"direction_consistency_weight": -0.1}, "direction_consistency_weight"),
+        (OCSort, {"delta_t": 0}, "delta_t"),
+    ],
+)
+def test_tracker_rejects_invalid_options(tracker_type, kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        tracker_type(**kwargs)

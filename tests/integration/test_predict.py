@@ -141,23 +141,43 @@ def test_track_runs_processor_in_pipeline_and_returns_persistent_ids(tiny_checkp
     assert "tracker: ConstantIdTracker" in metadata
 
 
-def test_model_track_with_real_bytetrack_returns_persistent_ids(tiny_checkpoint, tmp_path):
+@pytest.mark.parametrize(
+    ("tracker_name", "tracker_kwargs"),
+    [
+        (
+            "bytetrack",
+            {
+                "track_activation_threshold": 0.0,
+                "high_conf_det_threshold": 0.0,
+                "minimum_iou_threshold": 0.0,
+                "minimum_consecutive_frames": 0,
+            },
+        ),
+        (
+            "ocsort",
+            {
+                "high_conf_det_threshold": 0.0,
+                "minimum_iou_threshold": 0.0,
+                "minimum_consecutive_frames": 0,
+            },
+        ),
+    ],
+)
+def test_model_track_with_real_backend_returns_persistent_ids(
+    tiny_checkpoint, tmp_path, tracker_name, tracker_kwargs
+):
     pytest.importorskip("trackers")
     pytest.importorskip("supervision")
     from dfine import DFINE
 
-    video_path = tmp_path / "bytetrack.mp4"
+    video_path = tmp_path / f"{tracker_name}.mp4"
     _write_test_video(video_path, frame_values=[80, 80, 80])
     model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
     results = model.track(
         str(video_path),
         conf=0.0,
-        tracker_kwargs={
-            "track_activation_threshold": 0.0,
-            "high_conf_det_threshold": 0.0,
-            "minimum_iou_threshold": 0.0,
-            "minimum_consecutive_frames": 0,
-        },
+        tracker=tracker_name,
+        tracker_kwargs=tracker_kwargs,
     )
 
     assert len(results) == 3
