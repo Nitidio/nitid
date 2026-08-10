@@ -32,6 +32,8 @@ COMMANDS = {
 REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
 HELP_FLAGS = {"-h", "--help"}
 TRACKER_OPTIONS = {
+    "delta_t",
+    "direction_consistency_weight",
     "frame_rate",
     "lost_track_buffer",
     "track_activation_threshold",
@@ -119,7 +121,7 @@ Required:
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
   weights=NAME        default, obj2coco, or coco (default: default)
-  tracker=NAME        Tracking algorithm; currently bytetrack (default: bytetrack)
+  tracker=NAME        bytetrack (default) or ocsort
   conf=FLOAT          Detection confidence threshold (default: 0.1)
   imgsz=INT           Square inference image size (default: 640)
   classes=LIST        Track only selected class IDs, e.g. classes=[0,2]
@@ -151,20 +153,29 @@ Options:
   save_dir=PATH       Exact output directory override
   exist_ok=BOOL       Reuse the requested directory (default: false)
   verbose=BOOL        Print tracking progress (default: true)
+  --report            Capture output and environment details in a log
+
+Shared tracker options:
+  high_conf_det_threshold=FLOAT     Detection threshold (default: 0.6)
+  lost_track_buffer=INT             Frames to retain a lost track (default: 30)
+  frame_rate=FLOAT                  Override effective source FPS (default: auto)
 
 ByteTrack options:
   track_activation_threshold=FLOAT  New-track confidence threshold (default: 0.25)
-  high_conf_det_threshold=FLOAT     High-score association cutoff (default: 0.6)
   minimum_iou_threshold=FLOAT       Minimum association IoU (default: 0.1)
   minimum_consecutive_frames=INT    Frames required to confirm a track (default: 1)
-  lost_track_buffer=INT             Frames to retain a lost track (default: 30)
-  frame_rate=FLOAT                  Override effective source FPS (default: auto)
-  --report                          Capture output and environment details in a log
+
+OC-SORT options:
+  minimum_iou_threshold=FLOAT       Minimum association IoU (default: 0.3)
+  minimum_consecutive_frames=INT    Frames required to confirm a track (default: 3)
+  direction_consistency_weight=FLOAT  Motion-direction cost weight (default: 0.2)
+  delta_t=INT                       Frames used to estimate direction (default: 3)
 
 Install tracking support first with: uv sync --extra track
 
 Examples:
   dfine track model=dfine_s source=video.mp4
+  dfine track model=dfine_s source=video.mp4 tracker=ocsort
   dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
   dfine track model=dfine_s source=0 classes=[0] stream=true
   dfine track model=dfine_s source=rtsp://camera/stream lost_track_buffer=60

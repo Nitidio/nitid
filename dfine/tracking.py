@@ -24,63 +24,57 @@ class ResultTracker(ABC):
         """Discard all active tracks."""
 
 
-class ByteTrack(ResultTracker):
-    """Adapter from nitid ``Results`` to the optional ByteTrack backend.
+def _validate_non_negative(name: str, value: int | float) -> None:
+    if value < 0:
+        raise ValueError(f"{name} must be >= 0")
+
+
+def _validate_probability(name: str, value: float) -> None:
+    if not 0 <= value <= 1:
+        raise ValueError(f"{name} must be between 0 and 1")
+
+
+class _TrackersAdapter(ResultTracker):
+    """Shared adapter from nitid ``Results`` to a ``trackers`` backend.
 
     The backend is constructed lazily so importing and using ordinary detection
     does not require the ``track`` optional dependency.
     """
 
+    _backend_class_name: str
+
     def __init__(
         self,
         *,
         frame_rate: float | None = None,
-        lost_track_buffer: int = 30,
-        track_activation_threshold: float = 0.25,
-        minimum_consecutive_frames: int = 1,
-        minimum_iou_threshold: float = 0.1,
-        high_conf_det_threshold: float = 0.6,
+        backend_kwargs: dict[str, Any],
         backend_factory: Callable[..., Any] | None = None,
         detections_factory: Callable[..., Any] | None = None,
     ) -> None:
         if frame_rate is not None and frame_rate <= 0:
             raise ValueError("frame_rate must be > 0")
-        if lost_track_buffer < 0:
-            raise ValueError("lost_track_buffer must be >= 0")
-        if minimum_consecutive_frames < 0:
-            raise ValueError("minimum_consecutive_frames must be >= 0")
-        for name, value in {
-            "track_activation_threshold": track_activation_threshold,
-            "minimum_iou_threshold": minimum_iou_threshold,
-            "high_conf_det_threshold": high_conf_det_threshold,
-        }.items():
-            if not 0 <= value <= 1:
-                raise ValueError(f"{name} must be between 0 and 1")
-
         self._configured_frame_rate = frame_rate
         self._backend_factory = backend_factory
         self._detections_factory = detections_factory
-        self._backend_kwargs = {
-            "lost_track_buffer": lost_track_buffer,
-            "track_activation_threshold": track_activation_threshold,
-            "minimum_consecutive_frames": minimum_consecutive_frames,
-            "minimum_iou_threshold": minimum_iou_threshold,
-            "high_conf_det_threshold": high_conf_det_threshold,
-        }
+        self._backend_kwargs = backend_kwargs
         self._backend: Any | None = None
         self._source_id: str | None = None
 
     def _load_backend_factory(self) -> Callable[..., Any]:
+        """Load the optional concrete backend."""
         if self._backend_factory is not None:
             return self._backend_factory
         try:
-            from trackers import ByteTrackTracker
+            import trackers
         except ImportError as exc:  # pragma: no cover - depends on installation
-            raise RuntimeError(
-                "ByteTrack requires the optional tracking dependencies. "
-                "Install them with: pip install 'nitid[track]'"
-            ) from exc
-        return ByteTrackTracker
+            raise self._dependency_error() from exc
+        return getattr(trackers, self._backend_class_name)
+
+    def _dependency_error(self) -> RuntimeError:
+        return RuntimeError(
+            f"{type(self).__name__} requires the optional tracking dependencies. "
+            "Install them with: pip install 'nitid[track]'"
+        )
 
     def _effective_frame_rate(self, result: Results) -> float:
         if self._configured_frame_rate is not None:
@@ -110,10 +104,7 @@ class ByteTrack(ResultTracker):
             try:
                 from supervision import Detections
             except ImportError as exc:  # pragma: no cover - depends on installation
-                raise RuntimeError(
-                    "ByteTrack requires the optional tracking dependencies. "
-                    "Install them with: pip install 'nitid[track]'"
-                ) from exc
+                raise self._dependency_error() from exc
             detections_factory = Detections
         else:
             detections_factory = self._detections_factory
@@ -178,6 +169,88 @@ class ByteTrack(ResultTracker):
         self._source_id = None
 
 
+class ByteTrack(_TrackersAdapter):
+    """Assign persistent IDs with ByteTrack."""
+
+    _backend_class_name = "ByteTrackTracker"
+
+    def __init__(
+        self,
+        *,
+        frame_rate: float | None = None,
+        lost_track_buffer: int = 30,
+        track_activation_threshold: float = 0.25,
+        minimum_consecutive_frames: int = 1,
+        minimum_iou_threshold: float = 0.1,
+        high_conf_det_threshold: float = 0.6,
+        backend_factory: Callable[..., Any] | None = None,
+        detections_factory: Callable[..., Any] | None = None,
+    ) -> None:
+        _validate_non_negative("lost_track_buffer", lost_track_buffer)
+        _validate_non_negative("minimum_consecutive_frames", minimum_consecutive_frames)
+        for name, value in {
+            "track_activation_threshold": track_activation_threshold,
+            "minimum_iou_threshold": minimum_iou_threshold,
+            "high_conf_det_threshold": high_conf_det_threshold,
+        }.items():
+            _validate_probability(name, value)
+        super().__init__(
+            frame_rate=frame_rate,
+            backend_kwargs={
+                "lost_track_buffer": lost_track_buffer,
+                "track_activation_threshold": track_activation_threshold,
+                "minimum_consecutive_frames": minimum_consecutive_frames,
+                "minimum_iou_threshold": minimum_iou_threshold,
+                "high_conf_det_threshold": high_conf_det_threshold,
+            },
+            backend_factory=backend_factory,
+            detections_factory=detections_factory,
+        )
+
+
+class OCSort(_TrackersAdapter):
+    """Assign persistent IDs with occlusion-aware OC-SORT association."""
+
+    _backend_class_name = "OCSORTTracker"
+
+    def __init__(
+        self,
+        *,
+        frame_rate: float | None = None,
+        lost_track_buffer: int = 30,
+        minimum_consecutive_frames: int = 3,
+        minimum_iou_threshold: float = 0.3,
+        direction_consistency_weight: float = 0.2,
+        high_conf_det_threshold: float = 0.6,
+        delta_t: int = 3,
+        backend_factory: Callable[..., Any] | None = None,
+        detections_factory: Callable[..., Any] | None = None,
+    ) -> None:
+        _validate_non_negative("lost_track_buffer", lost_track_buffer)
+        _validate_non_negative("minimum_consecutive_frames", minimum_consecutive_frames)
+        if delta_t <= 0:
+            raise ValueError("delta_t must be > 0")
+        _validate_non_negative("direction_consistency_weight", direction_consistency_weight)
+        for name, value in {
+            "minimum_iou_threshold": minimum_iou_threshold,
+            "high_conf_det_threshold": high_conf_det_threshold,
+        }.items():
+            _validate_probability(name, value)
+        super().__init__(
+            frame_rate=frame_rate,
+            backend_kwargs={
+                "lost_track_buffer": lost_track_buffer,
+                "minimum_consecutive_frames": minimum_consecutive_frames,
+                "minimum_iou_threshold": minimum_iou_threshold,
+                "direction_consistency_weight": direction_consistency_weight,
+                "high_conf_det_threshold": high_conf_det_threshold,
+                "delta_t": delta_t,
+            },
+            backend_factory=backend_factory,
+            detections_factory=detections_factory,
+        )
+
+
 def create_tracker(tracker: str | ResultTracker, **kwargs: Any) -> ResultTracker:
     """Resolve a public tracker selection into a result processor."""
     if isinstance(tracker, ResultTracker):
@@ -186,9 +259,17 @@ def create_tracker(tracker: str | ResultTracker, **kwargs: Any) -> ResultTracker
         return tracker
     if not isinstance(tracker, str):
         raise TypeError("tracker must be a tracker name or ResultTracker instance")
-    if tracker.lower().replace("-", "") != "bytetrack":
-        raise ValueError(f"unsupported tracker '{tracker}'; expected 'bytetrack'")
-    return ByteTrack(**kwargs)
+    tracker_name = tracker.lower().replace("-", "").replace("_", "")
+    tracker_types: dict[str, type[ResultTracker]] = {
+        "bytetrack": ByteTrack,
+        "ocsort": OCSort,
+    }
+    try:
+        tracker_type = tracker_types[tracker_name]
+    except KeyError:
+        supported = ", ".join(sorted(tracker_types))
+        raise ValueError(f"unsupported tracker '{tracker}'; expected one of: {supported}") from None
+    return tracker_type(**kwargs)
 
 
 class DFINETracker:
