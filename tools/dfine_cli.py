@@ -32,14 +32,21 @@ COMMANDS = {
 REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
 HELP_FLAGS = {"-h", "--help"}
 TRACKER_OPTIONS = {
+    "cmc_downscale",
+    "cmc_method",
     "delta_t",
     "direction_consistency_weight",
+    "enable_cmc",
     "frame_rate",
     "lost_track_buffer",
     "track_activation_threshold",
     "minimum_consecutive_frames",
     "minimum_iou_threshold",
+    "minimum_iou_threshold_first_assoc",
+    "minimum_iou_threshold_second_assoc",
+    "minimum_iou_threshold_unconfirmed_assoc",
     "high_conf_det_threshold",
+    "instant_first_frame_activation",
 }
 
 GENERAL_HELP = """\
@@ -121,7 +128,7 @@ Required:
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
   weights=NAME        default, obj2coco, or coco (default: default)
-  tracker=NAME        bytetrack (default) or ocsort
+  tracker=NAME        bytetrack (default), botsort, or ocsort
   conf=FLOAT          Detection confidence threshold (default: 0.1)
   imgsz=INT           Square inference image size (default: 640)
   classes=LIST        Track only selected class IDs, e.g. classes=[0,2]
@@ -165,6 +172,17 @@ ByteTrack options:
   minimum_iou_threshold=FLOAT       Minimum association IoU (default: 0.1)
   minimum_consecutive_frames=INT    Frames required to confirm a track (default: 1)
 
+BoT-SORT options:
+  track_activation_threshold=FLOAT  New-track confidence threshold (default: 0.7)
+  minimum_consecutive_frames=INT    Frames required to confirm a track (default: 2)
+  minimum_iou_threshold_first_assoc=FLOAT  First-stage IoU (default: 0.2)
+  minimum_iou_threshold_second_assoc=FLOAT Second-stage IoU (default: 0.5)
+  minimum_iou_threshold_unconfirmed_assoc=FLOAT  Unconfirmed IoU (default: 0.3)
+  enable_cmc=BOOL                   Compensate for camera motion (default: true)
+  cmc_method=NAME                   orb, sift, sparseOptFlow, or ecc
+  cmc_downscale=INT                 CMC image downscale factor (default: 2)
+  instant_first_frame_activation=BOOL  Confirm first-frame tracks immediately (default: true)
+
 OC-SORT options:
   minimum_iou_threshold=FLOAT       Minimum association IoU (default: 0.3)
   minimum_consecutive_frames=INT    Frames required to confirm a track (default: 3)
@@ -175,6 +193,7 @@ Install tracking support first with: uv sync --extra track
 
 Examples:
   dfine track model=dfine_s source=video.mp4
+  dfine track model=dfine_s source=video.mp4 tracker=botsort
   dfine track model=dfine_s source=video.mp4 tracker=ocsort
   dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
   dfine track model=dfine_s source=0 classes=[0] stream=true

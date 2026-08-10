@@ -42,6 +42,7 @@ class _TrackersAdapter(ResultTracker):
     """
 
     _backend_class_name: str
+    _uses_frame = False
 
     def __init__(
         self,
@@ -130,7 +131,10 @@ class _TrackersAdapter(ResultTracker):
             confidence=confidence,
             class_id=class_id,
         )
-        tracked = backend.update(detections)
+        if self._uses_frame:
+            tracked = backend.update(detections, frame=result.orig_img)
+        else:
+            tracked = backend.update(detections)
 
         count = len(tracked)
         if count:
@@ -208,6 +212,64 @@ class ByteTrack(_TrackersAdapter):
         )
 
 
+class BoTSort(_TrackersAdapter):
+    """Assign persistent IDs with motion-only BoT-SORT association."""
+
+    _backend_class_name = "BoTSORTTracker"
+    _uses_frame = True
+
+    def __init__(
+        self,
+        *,
+        frame_rate: float | None = None,
+        lost_track_buffer: int = 30,
+        track_activation_threshold: float = 0.7,
+        minimum_consecutive_frames: int = 2,
+        minimum_iou_threshold_first_assoc: float = 0.2,
+        minimum_iou_threshold_second_assoc: float = 0.5,
+        minimum_iou_threshold_unconfirmed_assoc: float = 0.3,
+        high_conf_det_threshold: float = 0.6,
+        enable_cmc: bool = True,
+        cmc_method: str = "sparseOptFlow",
+        cmc_downscale: int = 2,
+        instant_first_frame_activation: bool = True,
+        backend_factory: Callable[..., Any] | None = None,
+        detections_factory: Callable[..., Any] | None = None,
+    ) -> None:
+        _validate_non_negative("lost_track_buffer", lost_track_buffer)
+        _validate_non_negative("minimum_consecutive_frames", minimum_consecutive_frames)
+        if cmc_method not in {"orb", "sift", "sparseOptFlow", "ecc"}:
+            raise ValueError("cmc_method must be one of: orb, sift, sparseOptFlow, ecc")
+        if cmc_downscale <= 0:
+            raise ValueError("cmc_downscale must be > 0")
+        for name, value in {
+            "track_activation_threshold": track_activation_threshold,
+            "minimum_iou_threshold_first_assoc": minimum_iou_threshold_first_assoc,
+            "minimum_iou_threshold_second_assoc": minimum_iou_threshold_second_assoc,
+            "minimum_iou_threshold_unconfirmed_assoc": minimum_iou_threshold_unconfirmed_assoc,
+            "high_conf_det_threshold": high_conf_det_threshold,
+        }.items():
+            _validate_probability(name, value)
+        super().__init__(
+            frame_rate=frame_rate,
+            backend_kwargs={
+                "lost_track_buffer": lost_track_buffer,
+                "track_activation_threshold": track_activation_threshold,
+                "minimum_consecutive_frames": minimum_consecutive_frames,
+                "minimum_iou_threshold_first_assoc": minimum_iou_threshold_first_assoc,
+                "minimum_iou_threshold_second_assoc": minimum_iou_threshold_second_assoc,
+                "minimum_iou_threshold_unconfirmed_assoc": minimum_iou_threshold_unconfirmed_assoc,
+                "high_conf_det_threshold": high_conf_det_threshold,
+                "enable_cmc": enable_cmc,
+                "cmc_method": cmc_method,
+                "cmc_downscale": cmc_downscale,
+                "instant_first_frame_activation": instant_first_frame_activation,
+            },
+            backend_factory=backend_factory,
+            detections_factory=detections_factory,
+        )
+
+
 class OCSort(_TrackersAdapter):
     """Assign persistent IDs with occlusion-aware OC-SORT association."""
 
@@ -261,6 +323,7 @@ def create_tracker(tracker: str | ResultTracker, **kwargs: Any) -> ResultTracker
         raise TypeError("tracker must be a tracker name or ResultTracker instance")
     tracker_name = tracker.lower().replace("-", "").replace("_", "")
     tracker_types: dict[str, type[ResultTracker]] = {
+        "botsort": BoTSort,
         "bytetrack": ByteTrack,
         "ocsort": OCSort,
     }
