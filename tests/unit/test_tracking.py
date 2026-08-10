@@ -8,7 +8,7 @@ import torch
 
 from dfine.media import FrameMetadata
 from dfine.results import Boxes, Results
-from dfine.tracking import ByteTrack, OCSort, ResultTracker, create_tracker
+from dfine.tracking import BoTSort, ByteTrack, OCSort, ResultTracker, create_tracker
 
 
 def make_result(source_id="video.mp4", frame_index=0, *, empty=False):
@@ -41,6 +41,7 @@ class FakeBackend:
 
     def update(self, detections, frame=None):
         self.calls += 1
+        self.frame = frame
         detections.tracker_id = np.full(len(detections), 17, dtype=np.int64)
         return detections
 
@@ -66,6 +67,30 @@ def test_bytetrack_converts_results_and_uses_effective_frame_rate():
     assert result.boxes.conf.tolist() == pytest.approx([0.9])
     assert result.boxes.cls.tolist() == [0]
     assert backends[0].kwargs["frame_rate"] == pytest.approx(10.0)
+    assert backends[0].frame is None
+
+
+def test_botsort_passes_frames_for_camera_motion_compensation():
+    backends = []
+
+    def backend_factory(**kwargs):
+        backend = FakeBackend(**kwargs)
+        backends.append(backend)
+        return backend
+
+    tracker = BoTSort(
+        cmc_method="orb",
+        cmc_downscale=4,
+        backend_factory=backend_factory,
+        detections_factory=FakeDetections,
+    )
+    result = tracker.update(make_result())
+
+    assert result.boxes is not None
+    assert result.boxes.id.tolist() == [17]
+    assert backends[0].frame is result.orig_img
+    assert backends[0].kwargs["cmc_method"] == "orb"
+    assert backends[0].kwargs["cmc_downscale"] == 4
 
 
 def test_ocsort_uses_occlusion_aware_backend_options():
@@ -140,6 +165,7 @@ def test_create_tracker_validation():
 
     custom = CustomTracker()
     assert create_tracker(custom) is custom
+    assert isinstance(create_tracker("bot-sort"), BoTSort)
     assert isinstance(create_tracker("byte-track"), ByteTrack)
     assert isinstance(create_tracker("oc-sort"), OCSort)
     with pytest.raises(ValueError, match="unsupported tracker"):
@@ -187,6 +213,7 @@ def test_boxes_reject_invalid_column_count():
 @pytest.mark.parametrize(
     ("tracker_type", "kwargs"),
     [
+        (BoTSort, {"track_activation_threshold": 0.25}),
         (ByteTrack, {"track_activation_threshold": 0.25}),
         (OCSort, {"high_conf_det_threshold": 0.25}),
     ],
@@ -209,6 +236,8 @@ def test_real_tracker_assigns_persistent_id_when_extra_installed(tracker_type, k
 @pytest.mark.parametrize(
     ("tracker_type", "kwargs", "message"),
     [
+        (BoTSort, {"cmc_method": "invalid"}, "cmc_method"),
+        (BoTSort, {"cmc_downscale": 0}, "cmc_downscale"),
         (ByteTrack, {"track_activation_threshold": 1.1}, "track_activation_threshold"),
         (OCSort, {"direction_consistency_weight": -0.1}, "direction_consistency_weight"),
         (OCSort, {"delta_t": 0}, "delta_t"),

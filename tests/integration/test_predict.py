@@ -145,6 +145,17 @@ def test_track_runs_processor_in_pipeline_and_returns_persistent_ids(tiny_checkp
     ("tracker_name", "tracker_kwargs"),
     [
         (
+            "botsort",
+            {
+                "track_activation_threshold": 0.0,
+                "high_conf_det_threshold": 0.0,
+                "minimum_iou_threshold_first_assoc": 0.0,
+                "minimum_iou_threshold_second_assoc": 0.0,
+                "minimum_iou_threshold_unconfirmed_assoc": 0.0,
+                "minimum_consecutive_frames": 0,
+            },
+        ),
+        (
             "bytetrack",
             {
                 "track_activation_threshold": 0.0,

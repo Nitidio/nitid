@@ -20,6 +20,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
                 "backend=NAME",
                 "output=DEST",
                 "track_activation_threshold=FLOAT",
+                "enable_cmc=BOOL",
                 "direction_consistency_weight=FLOAT",
                 "dfine track",
             ),
@@ -181,9 +182,10 @@ def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
             "dfine",
             "track",
             "source=0",
-            "tracker=ocsort",
-            "direction_consistency_weight=0.4",
-            "delta_t=5",
+            "tracker=botsort",
+            "enable_cmc=true",
+            "cmc_method=orb",
+            "cmc_downscale=4",
             "stream=false",
         ]
     )
@@ -191,11 +193,12 @@ def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
     assert observed == {
         "source": 0,
         "kwargs": {
-            "tracker": "ocsort",
+            "tracker": "botsort",
             "stream": False,
             "tracker_kwargs": {
-                "direction_consistency_weight": 0.4,
-                "delta_t": 5,
+                "enable_cmc": True,
+                "cmc_method": "orb",
+                "cmc_downscale": 4,
             },
         },
     }
