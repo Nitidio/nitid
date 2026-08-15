@@ -16,6 +16,8 @@ import numpy as np
 if TYPE_CHECKING:
     import pandas as pd
 
+    from dfine.media import FrameMetadata
+
 
 class Results:
     """
@@ -36,6 +38,7 @@ class Results:
         boxes=None,
         save_path: str | None = None,
         speed: dict[str, float] | None = None,
+        frame_metadata: FrameMetadata | None = None,
     ) -> None:
         self.orig_img = orig_img
         self.path = path
@@ -43,6 +46,7 @@ class Results:
         self.boxes = boxes
         self.save_path = save_path
         self.speed = speed or {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
+        self.frame_metadata = frame_metadata
 
     def plot(
         self,
@@ -82,6 +86,8 @@ class Results:
                 values = [str(cls), *coords]
                 if save_conf:
                     values.append(f"{float(self.boxes.conf[i]):.6f}")
+                if self.boxes.id is not None:
+                    values.append(str(int(self.boxes.id[i])))
                 lines.append(" ".join(values))
 
         path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
@@ -144,6 +150,7 @@ class Results:
                     "class": cls_id,
                     "name": name,
                     "save_path": save_path,
+                    **({"track_id": int(self.boxes.id[i])} if self.boxes.id is not None else {}),
                 }
             )
 
@@ -162,14 +169,15 @@ class Results:
             return out
         for i in range(len(self)):
             xyxy = self.boxes.xyxy[i].tolist()
-            out.append(
-                {
-                    "box": {"x1": xyxy[0], "y1": xyxy[1], "x2": xyxy[2], "y2": xyxy[3]},
-                    "confidence": round(float(self.boxes.conf[i]), 4),
-                    "class": int(self.boxes.cls[i]),
-                    "name": self.names.get(int(self.boxes.cls[i]), "unknown"),
-                }
-            )
+            item = {
+                "box": {"x1": xyxy[0], "y1": xyxy[1], "x2": xyxy[2], "y2": xyxy[3]},
+                "confidence": round(float(self.boxes.conf[i]), 4),
+                "class": int(self.boxes.cls[i]),
+                "name": self.names.get(int(self.boxes.cls[i]), "unknown"),
+            }
+            if self.boxes.id is not None:
+                item["track_id"] = int(self.boxes.id[i])
+            out.append(item)
         return out
 
     def pandas(self) -> pd.DataFrame:
@@ -181,6 +189,8 @@ class Results:
         import pandas as pd
 
         columns = ["x1", "y1", "x2", "y2", "confidence", "class", "name"]
+        if self.boxes is not None and self.boxes.is_track:
+            columns.append("track_id")
         return pd.DataFrame(self._tabular_rows(), columns=columns)
 
     def to_csv(self, filename: str | PathLike[str], index: bool = False) -> None:
@@ -196,17 +206,18 @@ class Results:
         for i in range(len(self)):
             xyxy = self.boxes.xyxy[i].tolist()
             cls_id = int(self.boxes.cls[i])
-            rows.append(
-                {
-                    "x1": xyxy[0],
-                    "y1": xyxy[1],
-                    "x2": xyxy[2],
-                    "y2": xyxy[3],
-                    "confidence": round(float(self.boxes.conf[i]), 4),
-                    "class": cls_id,
-                    "name": self.names.get(cls_id, "unknown"),
-                }
-            )
+            row = {
+                "x1": xyxy[0],
+                "y1": xyxy[1],
+                "x2": xyxy[2],
+                "y2": xyxy[3],
+                "confidence": round(float(self.boxes.conf[i]), 4),
+                "class": cls_id,
+                "name": self.names.get(cls_id, "unknown"),
+            }
+            if self.boxes.id is not None:
+                row["track_id"] = int(self.boxes.id[i])
+            rows.append(row)
         return rows
 
     def __len__(self) -> int:
@@ -221,17 +232,21 @@ class Boxes:
     Bounding box container for one image.
 
     Args:
-        data:  Tensor [N, 6] — columns: x1 y1 x2 y2 conf cls
+        data: Tensor [N, 6] for detections (xyxy, conf, cls) or [N, 7]
+              for tracks (xyxy, track_id, conf, cls).
         orig_shape: (H, W) of the original image (for normalised coords).
     """
 
     def __init__(self, data, orig_shape: tuple[int, int]) -> None:
-        self._data = data  # torch.Tensor [N, 6]
+        if data.ndim != 2 or data.shape[1] not in (6, 7):
+            raise ValueError("boxes data must have shape [N, 6] or [N, 7]")
+        self._data = data
         self.orig_shape = orig_shape  # (H, W)
+        self.is_track = data.shape[1] == 7
 
     @property
     def data(self):
-        """Raw [N, 6] tensor: xyxy + conf + cls."""
+        """Raw [N, 6] detection or [N, 7] tracking tensor."""
         return self._data
 
     @property
@@ -266,12 +281,17 @@ class Boxes:
     @property
     def conf(self):
         """Confidence scores [N]."""
-        return self._data[:, 4]
+        return self._data[:, -2]
 
     @property
     def cls(self):
         """Class indices [N] as int."""
-        return self._data[:, 5].int()
+        return self._data[:, -1].int()
+
+    @property
+    def id(self):
+        """Persistent tracking IDs [N], or ``None`` for detection results."""
+        return self._data[:, 4].int() if self.is_track else None
 
     def __len__(self) -> int:
         return len(self._data)

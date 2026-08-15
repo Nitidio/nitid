@@ -18,6 +18,7 @@ Add extras only when you need them:
 uv sync --extra dev   # for developement
 uv sync --extra web     # web application
 uv sync --extra openvino # OpenVINO IR export and runtime
+uv sync --extra track    # ByteTrack, BoT-SORT, and OC-SORT tracking
 ```
 
 ## First Run
@@ -49,6 +50,10 @@ model = DFINE("dfine_s")
 # Inference
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
+
+# Tracking (requires: uv sync --extra track)
+for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
+    track_ids = result.boxes.id
 
 # Training
 model.train(
@@ -83,6 +88,52 @@ result.crop(save_dir="crops")  # save crops into class-name folders
 See [fine_tuning.md](fine_tuning.md) for dataset format, optimizers, AMP, EMA,
 and validation details. See [export.md](export.md) for TensorRT, FP16, and
 advanced export options.
+
+Tracking processes frames in source order and returns the normal `Results`
+objects with persistent IDs in `result.boxes.id`. With `save=True`, the
+annotated video defaults to `runs/track/exp/video.mp4`. Prefer `stream=True`
+for video and live sources so results are not retained in memory.
+
+For a live RTSP camera, select GStreamer explicitly and enable reconnection:
+
+```python
+for result in model.track(
+    "rtsp://camera/live",
+    backend="gstreamer",
+    reconnect=True,
+    conf=0.5,
+    stream=True,
+):
+    track_ids = result.boxes.id
+```
+
+This requires an OpenCV build compiled with GStreamer. See
+[GStreamer and RTSP](gstreamer.md) for verification and pipeline examples.
+
+Write annotated one-minute segments from the CLI:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 \
+    output=runs/segments segment_duration=60 conf=0.5
+```
+
+Discover an ONVIF camera, select a media profile, and hand it directly to the
+tracking pipeline:
+
+```python
+from dfine import DFINE, ONVIFCamera, discover_onvif_devices
+
+device = discover_onvif_devices(timeout=3)[0]
+camera = ONVIFCamera(device.service_url, username="operator", password="secret")
+source = camera.gstreamer_source("Main Stream", hardware_profile="vaapi")
+
+model = DFINE("dfine_s")
+for result in model.track(source, stream=True, conf=0.5):
+    ...
+```
+
+See [ONVIF cameras](onvif.md) for CLI credential handling, network discovery,
+profile selection, and clock troubleshooting.
 
 ## Coming from D-FINE
 
@@ -189,6 +240,9 @@ crops = results[0].crop()
 for r in model.predict("video.mp4", stream=True):
     annotated = r.plot()
 
+for r in model.track("video.mp4", stream=True, conf=0.5):
+    track_ids = r.boxes.id
+
 model.train(data="my_dataset.yml", epochs=50, batch=16)
 model.train(data="my_dataset.yml", epochs=50, amp=True, ema=True)
 
@@ -267,6 +321,15 @@ The saved image will be:
 runs/detect/street-test/image.jpg
 ```
 
+Track a video and save annotations with persistent IDs:
+
+```bash
+uv sync --extra track
+uv run dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
+```
+
+The tracked video defaults to `runs/track/exp/video.mp4`.
+
 Other common CLI commands:
 
 ```bash
@@ -281,8 +344,9 @@ uv run dfine export model=dfine_l format=onnx
 
 By default, `train` writes wrapped epoch checkpoints to `runs/train/exp/`, while `val` prints metrics to the terminal without creating a run directory.
 
-Show all prediction options:
+Show all prediction or tracking options:
 
 ```bash
 uv run dfine predict --help
+uv run dfine track --help
 ```

@@ -27,6 +27,16 @@ def test_invalid_source():
         LoadSource(object(), imgsz=640, device="cpu")
 
 
+def test_source_backend_options_are_validated():
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="backend must be"):
+        LoadSource(frame, imgsz=8, device="cpu", backend="ffmpeg")
+    with pytest.raises(TypeError, match="GStreamer backend requires"):
+        LoadSource(frame, imgsz=8, device="cpu", backend="gstreamer")
+    with pytest.raises(ValueError, match="require backend='gstreamer'"):
+        LoadSource(frame, imgsz=8, device="cpu", reconnect=True)
+
+
 def test_image_source(tmp_path):
     from PIL import Image as _PILImage
 
