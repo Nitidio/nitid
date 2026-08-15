@@ -31,9 +31,9 @@ Three bets, in the order they earn their keep:
 - **Edge and compliance.** A certified runtime, a published hardware support matrix, and a video
   pipeline built for IP cameras rather than files. **No comparable project contests this ground** — it
   is the clearest reason for nitid to exist independently, and it ranks highest for that reason.
-- **D-FINE fidelity and depth.** nitid runs Peterande's reference implementation as a submodule rather
-  than a port, ships self-contained checkpoints, and preserves proposal ranking across a class-taxonomy
-  change. Depth over breadth.
+- **D-FINE fidelity and depth.** nitid ships the full architecture in its package, loads published
+  checkpoints strictly, provides detection and instance segmentation, and preserves proposal ranking
+  across a class-taxonomy change. Depth over breadth.
 - **Model breadth.** Covering the YOLO family so nitid can be an entry door for users migrating from
   Ultralytics. Deliberately last, and deliberately conditional — see below.
 
@@ -121,7 +121,7 @@ from **2026-09-11** and CE marking from **2027-12-11**. These are fixed calendar
 aspirations, and this slice outranks everything else on the list.
 
 - Extend `SECURITY.md` with response-time commitments and a named internal owner.
-- Generate an SBOM (CycloneDX) covering `uv.lock` and the pinned `extern/dfine` commit.
+- Generate an SBOM (CycloneDX) covering `uv.lock` and the packaged model implementation.
 - Publish the supported-version window.
 
 First slice of [#125](https://github.com/Vaelsys/nitid/issues/125).
@@ -130,12 +130,13 @@ First slice of [#125](https://github.com/Vaelsys/nitid/issues/125).
 
 [#33](https://github.com/Vaelsys/nitid/issues/33) is a hard prerequisite for shipping tracking, for
 [#56](https://github.com/Vaelsys/nitid/issues/56), and for any optional-dependency approach to breadth.
-It is also larger than it looks: the wheel currently would not contain D-FINE at all.
+The model implementation is now included in source and wheel distributions; publishing and release
+automation remain.
 
 | Work | Days |
 |---|---|
-| Decide and implement D-FINE source packaging. Recommendation: vendor `extern/dfine` into the wheel with the accompanying NOTICE. Runtime download to a cache is rejected — it breaks air-gapped installs and complicates the SBOM, both disqualifying for a compliance product. | 4 |
-| Make `_DFINE_ROOT` and `_CONFIG_ROOT` resolve from both a checkout and an installed wheel; update `tests/conftest.py` | 1.5 |
+| Verify the packaged D-FINE source and accompanying notices in release artifacts | 1 |
+| Test model construction from installed source and wheel distributions | 0.5 |
 | Add a `nitid` console script alongside `dfine` — free before the first release, a deprecation cycle after | 0.5 |
 | Release workflow: tag → build → TestPyPI → PyPI trusted publishing. Claim the `nitid` name now; it is currently unregistered | 2 |
 | Versioning and CHANGELOG policy; pip install path in README and docs | 1 |

@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import gc
-import sys
-import types
-from pathlib import Path
 
 import pytest
 import torch
@@ -13,38 +10,6 @@ import torch
 from dfine.nn.build import build_model
 from dfine.nn.configs import get_model_config, make_model_config
 from dfine.nn.native_build import build_native_criterion, build_native_model
-
-
-def _build_reference_model(config):
-    """Build the upstream reference model for schema and output compatibility checks."""
-    reference_root = Path(__file__).parents[2] / "extern/dfine"
-    sys.path.insert(0, str(reference_root))
-
-    source = types.ModuleType("src")
-    source.__path__ = [str(reference_root / "src")]
-    source.__package__ = "src"
-    sys.modules["src"] = source
-
-    from torch.utils.data import DataLoader
-
-    data = types.ModuleType("src.data")
-    data.DataLoader = DataLoader
-    sys.modules["src.data"] = data
-
-    misc = types.ModuleType("src.misc")
-    misc.__path__ = [str(reference_root / "src/misc")]
-    misc.__package__ = "src.misc"
-    sys.modules["src.misc"] = misc
-
-    import src.nn  # noqa: F401
-    import src.optim  # noqa: F401
-    import src.zoo  # noqa: F401
-    from src.core.workspace import create
-    from src.core.yaml_utils import merge_config
-
-    reference_config = dict(config)
-    reference_config["HGNetv2"] = {**reference_config["HGNetv2"], "pretrained": False}
-    return create(reference_config["model"], merge_config(reference_config, inplace=False))
 
 
 @pytest.mark.parametrize("model_size", ["n", "s", "m", "l", "x"])
@@ -87,32 +52,6 @@ def test_native_nano_forward_contracts():
     assert segmentation["pred_boxes"].shape == (1, 300, 4)
     assert segmentation["pred_masks"].shape == (1, 300, 64, 64)
     assert torch.all((0 <= segmentation["pred_masks"]) & (segmentation["pred_masks"] <= 1))
-
-
-def test_native_detection_state_schema_matches_reference_dfine():
-    """Require exact state-schema and output compatibility with upstream D-FINE."""
-    from tools.convert_checkpoint import _load_config
-
-    root = Path(__file__).parents[2]
-    config_path = root / "extern/dfine/configs/dfine/dfine_hgnetv2_s_coco.yml"
-    config = _load_config(config_path)
-    reference = _build_reference_model(config)
-    native = build_model(config)
-
-    reference_state = reference.state_dict()
-    native_state = native.state_dict()
-    assert set(reference_state) == set(native_state)
-    assert all(reference_state[key].shape == native_state[key].shape for key in reference_state)
-
-    native.load_state_dict(reference_state, strict=True)
-    reference.eval()
-    native.eval()
-    image = torch.zeros(1, 3, 640, 640)
-    with torch.inference_mode():
-        reference_output = reference(image)
-        native_output = native(image)
-    assert torch.equal(reference_output["pred_logits"], native_output["pred_logits"])
-    assert torch.equal(reference_output["pred_boxes"], native_output["pred_boxes"])
 
 
 def test_task_selects_mask_losses_without_mutating_shared_config():
