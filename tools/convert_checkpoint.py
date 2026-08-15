@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import argparse
 import copy
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import torch
 import yaml
@@ -52,7 +54,12 @@ def _merge(dst: dict, src: dict) -> dict:
     return dst
 
 
-def convert(weights: str, config: str, names_file: str, output: str) -> None:
+def convert(
+    weights: str,
+    config: str | Path | Mapping[str, Any],
+    names_file: str,
+    output: str,
+) -> None:
     print(f"Loading weights from {weights}")
     ckpt = torch.load(weights, map_location="cpu", weights_only=False)
 
@@ -65,7 +72,7 @@ def convert(weights: str, config: str, names_file: str, output: str) -> None:
         state_dict = ckpt.get("model", ckpt)
         print("Using model weights (ckpt['model'])")
 
-    cfg = _load_config(config)
+    cfg = copy.deepcopy(dict(config)) if isinstance(config, Mapping) else _load_config(config)
 
     with open(names_file) as f:
         names_cfg = yaml.safe_load(f)

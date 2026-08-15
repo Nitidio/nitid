@@ -8,11 +8,7 @@ tiny_yolo_dataset — minimal synthetic YOLO dataset using images/train + labels
 tiny_yolo_splitfirst_dataset — minimal synthetic YOLO dataset using train/images + train/labels.
 """
 
-from pathlib import Path
-
 import pytest
-
-_DFINE_CONFIGS = Path(__file__).parents[1] / "extern" / "dfine" / "configs"
 
 
 @pytest.fixture(scope="session")
@@ -22,13 +18,11 @@ def tiny_checkpoint(tmp_path_factory):
     config with decoder/encoder overrides to keep the file fast to build.
     The backbone (HGNetv2 B0) uses random weights (pretrained=False).
     """
-    from dfine.nn.build import _ensure_dfine_on_path, build_model
+    from dfine.nn.build import build_model
+    from dfine.nn.configs import make_detection_config
     from dfine.utils.checkpoint import save_checkpoint
 
-    _ensure_dfine_on_path()
-    from src.core.yaml_utils import load_config
-
-    cfg = load_config(str(_DFINE_CONFIGS / "dfine" / "dfine_hgnetv2_s_coco.yml"))
+    cfg = make_detection_config("dfine_s")
 
     # Shrink the decoder/encoder so the checkpoint builds quickly
     cfg["DFINETransformer"]["num_layers"] = 1

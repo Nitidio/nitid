@@ -232,3 +232,38 @@ def get_model_config(model_size: str) -> dict[str, Any]:
     except KeyError as error:
         supported = ", ".join(f"dfine_{size}" for size in MODEL_SIZES)
         raise ValueError(f"Unsupported D-FINE model {model_size!r}. Choose: {supported}") from error
+
+
+def make_detection_config(
+    model_size: str,
+    *,
+    num_classes: int = 80,
+    image_size: tuple[int, int] = (640, 640),
+) -> dict[str, Any]:
+    """Create the self-contained runtime config stored in detection checkpoints."""
+    if num_classes < 1:
+        raise ValueError(f"num_classes must be positive, got {num_classes}")
+
+    model_config = get_model_config(model_size)
+    criterion = model_config.pop("DFINECriterion")
+    matcher = model_config.pop("matcher")
+    matcher["type"] = "HungarianMatcher"
+    criterion["matcher"] = matcher
+
+    return {
+        "task": "detection",
+        "model": "DFINE",
+        "criterion": "DFINECriterion",
+        "postprocessor": "DFINEPostProcessor",
+        "num_classes": num_classes,
+        "use_focal_loss": True,
+        "eval_spatial_size": list(image_size),
+        "DFINE": {
+            "backbone": "HGNetv2",
+            "encoder": "HybridEncoder",
+            "decoder": "DFINETransformer",
+        },
+        **model_config,
+        "DFINECriterion": criterion,
+        "DFINEPostProcessor": {"num_top_queries": 300},
+    }

@@ -3,8 +3,9 @@
 ## D-FINE and D-FINE-seg model core
 
 The native model implementation under `dfine/nn/architecture`, the model-size
-configuration in `dfine/nn/configs.py`, and the losses under `dfine/nn/losses`
-contain code derived from:
+configuration in `dfine/nn/configs.py`, the detection postprocessor in
+`dfine/nn/postprocessor.py`, and the losses under `dfine/nn/losses` contain
+code derived from:
 
 - D-FINE, Copyright (c) 2024 The D-FINE Authors.
   Source: https://github.com/Peterande/D-FINE

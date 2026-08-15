@@ -1,15 +1,50 @@
-"""Phase 1 tests for the integrated D-FINE model core."""
+"""Tests for the integrated D-FINE model core and legacy parity."""
 
 from __future__ import annotations
 
 import gc
+import sys
+import types
 from pathlib import Path
 
 import pytest
 import torch
 
+from dfine.nn.build import build_model
 from dfine.nn.configs import get_model_config
 from dfine.nn.native_build import build_native_criterion, build_native_model
+
+
+def _build_reference_model(config):
+    """Build directly from the submodule, which is retained only as a Phase 2 oracle."""
+    reference_root = Path(__file__).parents[2] / "extern/dfine"
+    sys.path.insert(0, str(reference_root))
+
+    source = types.ModuleType("src")
+    source.__path__ = [str(reference_root / "src")]
+    source.__package__ = "src"
+    sys.modules["src"] = source
+
+    from torch.utils.data import DataLoader
+
+    data = types.ModuleType("src.data")
+    data.DataLoader = DataLoader
+    sys.modules["src.data"] = data
+
+    misc = types.ModuleType("src.misc")
+    misc.__path__ = [str(reference_root / "src/misc")]
+    misc.__package__ = "src.misc"
+    sys.modules["src.misc"] = misc
+
+    import src.nn  # noqa: F401
+    import src.optim  # noqa: F401
+    import src.zoo  # noqa: F401
+    from src.core.workspace import create
+    from src.core.yaml_utils import merge_config
+
+    reference_config = dict(config)
+    reference_config["HGNetv2"] = {**reference_config["HGNetv2"], "pretrained": False}
+    return create(reference_config["model"], merge_config(reference_config, inplace=False))
 
 
 @pytest.mark.parametrize("model_size", ["n", "s", "m", "l", "x"])
@@ -56,19 +91,13 @@ def test_native_nano_forward_contracts():
 
 def test_native_detection_state_schema_matches_reference_dfine():
     """Keep the submodule as a migration oracle until Phase 2 is accepted."""
-    from dfine.nn.build import build_model as build_reference_model
     from tools.convert_checkpoint import _load_config
 
     root = Path(__file__).parents[2]
     config_path = root / "extern/dfine/configs/dfine/dfine_hgnetv2_s_coco.yml"
     config = _load_config(config_path)
-    reference = build_reference_model(config)
-    native = build_native_model(
-        "dfine_s",
-        num_classes=80,
-        task="detect",
-        image_size=tuple(config["eval_spatial_size"]),
-    )
+    reference = _build_reference_model(config)
+    native = build_model(config)
 
     reference_state = reference.state_dict()
     native_state = native.state_dict()

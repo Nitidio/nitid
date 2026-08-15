@@ -60,24 +60,22 @@ def test_resolve_output_path_uses_variant_specific_filename():
 
 
 @pytest.mark.parametrize(
-    ("weights", "raw_suffix", "config_suffix", "wrapped_name"),
+    ("weights", "raw_suffix", "wrapped_name"),
     [
         (
             "default",
             "dfine_s_obj2coco.pth",
-            "objects365/dfine_hgnetv2_s_obj2coco.yml",
             "dfine_s_obj2coco_wrapped.pth",
         ),
         (
             "coco",
             "dfine_s_coco.pth",
-            "dfine_hgnetv2_s_coco.yml",
             "dfine_s_coco_wrapped.pth",
         ),
     ],
 )
 def test_download_model_converts_selected_checkpoint(
-    monkeypatch, tmp_path, weights, raw_suffix, config_suffix, wrapped_name
+    monkeypatch, tmp_path, weights, raw_suffix, wrapped_name
 ):
     calls = {}
 
@@ -101,7 +99,9 @@ def test_download_model_converts_selected_checkpoint(
     assert out.read_bytes() == b"wrapped"
     assert calls["url"].endswith(raw_suffix)
     assert calls["weights"].endswith(raw_suffix)
-    assert calls["config"].endswith(config_suffix)
+    assert calls["config"]["task"] == "detection"
+    assert calls["config"]["num_classes"] == 80
+    assert calls["config"]["HGNetv2"]["name"] == "B0"
     assert calls["names_file"].endswith("configs/datasets/coco.yml")
 
 

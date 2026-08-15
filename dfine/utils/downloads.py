@@ -8,11 +8,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
+from dfine.nn.configs import make_detection_config
 from tools.convert_checkpoint import convert as convert_checkpoint
 
 _ROOT = Path(__file__).parents[2]
 _RELEASE_ROOT = "https://github.com/Peterande/storage/releases/download/dfinev1.0"
-_CONFIG_ROOT = _ROOT / "extern" / "dfine" / "configs" / "dfine"
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,6 @@ class ModelAsset:
     model: str
     weights: str
     url: str
-    config: Path
     filename: str
 
     @property
@@ -35,13 +34,11 @@ def _asset(
     model: str,
     weights: str,
     checkpoint: str,
-    config: str,
 ) -> ModelAsset:
     return ModelAsset(
         model=model,
         weights=weights,
         url=f"{_RELEASE_ROOT}/{checkpoint}",
-        config=_CONFIG_ROOT / config,
         filename=f"{model}_{weights}_wrapped.pth",
     )
 
@@ -52,36 +49,32 @@ MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
             "dfine_s",
             "obj2coco",
             "dfine_s_obj2coco.pth",
-            "objects365/dfine_hgnetv2_s_obj2coco.yml",
         ),
-        "coco": _asset("dfine_s", "coco", "dfine_s_coco.pth", "dfine_hgnetv2_s_coco.yml"),
+        "coco": _asset("dfine_s", "coco", "dfine_s_coco.pth"),
     },
     "dfine_m": {
         "obj2coco": _asset(
             "dfine_m",
             "obj2coco",
             "dfine_m_obj2coco.pth",
-            "objects365/dfine_hgnetv2_m_obj2coco.yml",
         ),
-        "coco": _asset("dfine_m", "coco", "dfine_m_coco.pth", "dfine_hgnetv2_m_coco.yml"),
+        "coco": _asset("dfine_m", "coco", "dfine_m_coco.pth"),
     },
     "dfine_l": {
         "obj2coco": _asset(
             "dfine_l",
             "obj2coco",
             "dfine_l_obj2coco_e25.pth",
-            "objects365/dfine_hgnetv2_l_obj2coco.yml",
         ),
-        "coco": _asset("dfine_l", "coco", "dfine_l_coco.pth", "dfine_hgnetv2_l_coco.yml"),
+        "coco": _asset("dfine_l", "coco", "dfine_l_coco.pth"),
     },
     "dfine_x": {
         "obj2coco": _asset(
             "dfine_x",
             "obj2coco",
             "dfine_x_obj2coco.pth",
-            "objects365/dfine_hgnetv2_x_obj2coco.yml",
         ),
-        "coco": _asset("dfine_x", "coco", "dfine_x_coco.pth", "dfine_hgnetv2_x_coco.yml"),
+        "coco": _asset("dfine_x", "coco", "dfine_x_coco.pth"),
     },
 }
 
@@ -173,11 +166,6 @@ def download_model(
         print(f"{out_path} already exists. Use force=true to overwrite.")
         return out_path
 
-    if not asset.config.exists():
-        raise FileNotFoundError(
-            f"Config not found: {asset.config}. Run git submodule update --init."
-        )
-
     names = _ROOT / "configs" / "datasets" / "coco.yml"
     if not names.exists():
         raise FileNotFoundError(f"Class names file not found: {names}")
@@ -192,7 +180,7 @@ def download_model(
         print(f"Converting to nitid checkpoint: {out_path}")
         convert_checkpoint(
             weights=str(raw_path),
-            config=str(asset.config),
+            config=make_detection_config(asset.model),
             names_file=str(names),
             output=str(out_path),
         )

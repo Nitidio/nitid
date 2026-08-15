@@ -1,25 +1,15 @@
-"""
-build_criterion() — wraps D-FINE's DFINECriterion for use in the training loop.
-Requires the same extern/dfine submodule as build_model().
-"""
+"""Native D-FINE criterion construction for wrapped checkpoints."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 import torch.nn as nn
 
-from dfine.nn.build import _ensure_dfine_on_path, _register_dfine_components
+from dfine.nn.native_build import build_native_criterion_from_config
 
 
-def build_criterion(cfg: dict) -> nn.Module:
-    """
-    Returns DFINECriterion configured from the checkpoint config dict.
-    """
-    _ensure_dfine_on_path()
-
-    _register_dfine_components()
-    from src.core.workspace import create
-    from src.core.yaml_utils import merge_config
-
-    cfg = dict(cfg)
-    global_cfg = merge_config(cfg, inplace=False, overwrite=False)
-    return create(cfg["criterion"], global_cfg)
+def build_criterion(cfg: Mapping[str, Any]) -> nn.Module:
+    """Build the detection or instance-segmentation criterion from checkpoint config."""
+    return build_native_criterion_from_config(cfg)
