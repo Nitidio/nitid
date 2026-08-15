@@ -13,6 +13,8 @@ nav:
   - Home: index.md
   - Quick Start: quickstart.md
   - Command Line: cli.md
+  - GStreamer and RTSP: gstreamer.md
+  - ONVIF Cameras: onvif.md
   - Fine-tuning: fine_tuning.md
   - Export: export.md
   - Web App: web_app.md

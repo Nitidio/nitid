@@ -28,6 +28,7 @@ You do not need to activate the virtual environment:
 uv run dfine --help
 uv run dfine download --help
 uv run dfine predict --help
+uv run dfine track --help
 ```
 
 `uv run` finds the project environment and runs the installed `dfine` command
@@ -47,6 +48,7 @@ The shorter commands will then work:
 dfine --help
 dfine download --help
 dfine predict --help
+dfine track --help
 ```
 
 Leave the environment when you are finished:
@@ -73,6 +75,7 @@ command:
 ```bash
 uv run dfine download --help
 uv run dfine predict --help
+uv run dfine track --help
 uv run dfine train --help
 uv run dfine val --help
 uv run dfine export --help
@@ -132,6 +135,189 @@ Run prediction:
 uv run dfine predict model=dfine_s source=image.jpg conf=0.5
 ```
 
+## Track objects in video
+
+Install the optional tracking dependencies:
+
+```bash
+uv sync --extra track
+```
+
+Track a video with ByteTrack, the default tracker:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 conf=0.5
+```
+
+Select BoT-SORT for motion-only tracking with camera-motion compensation. This
+is useful for moving, handheld, vehicle-mounted, or PTZ cameras:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 tracker=botsort conf=0.5
+```
+
+Select OC-SORT when occlusions or non-linear motion make direction-aware
+association useful:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 tracker=ocsort conf=0.5
+```
+
+Save an annotated video containing class labels, confidence scores, and
+persistent track IDs:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
+```
+
+The default output is `runs/track/exp/video.mp4`. The CLI processes tracking
+results incrementally by default, so long videos are not accumulated in
+memory. Pass `stream=false` only when a caller specifically needs a list.
+
+Filter classes or sample every second frame:
+
+```bash
+uv run dfine track model=dfine_s source=video.mp4 classes=[0,2] vid_stride=2 save=true
+```
+
+Tracker settings are passed as flat `key=value` arguments. For ByteTrack:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=video.mp4 \
+    conf=0.5 \
+    track_activation_threshold=0.4 \
+    lost_track_buffer=60 \
+    minimum_consecutive_frames=2
+```
+
+BoT-SORT enables camera-motion compensation by default. Its method and
+downscale factor can be changed without affecting the other trackers:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=video.mp4 \
+    tracker=botsort \
+    conf=0.5 \
+    enable_cmc=true \
+    cmc_method=sparseOptFlow \
+    cmc_downscale=2
+```
+
+This integration is the motion-only BoT-SORT variant; it does not run an
+appearance or ReID model.
+
+For OC-SORT:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=video.mp4 \
+    tracker=ocsort \
+    conf=0.5 \
+    direction_consistency_weight=0.2 \
+    delta_t=3 \
+    lost_track_buffer=60
+```
+
+`conf` filters D-FINE detections before tracking. The tracker-specific
+activation and association thresholds operate afterward. Run
+`uv run dfine track --help` for every supported option and its defaults.
+
+Use the GStreamer backend for a reconnecting RTSP source:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=rtsp://camera/live \
+    backend=gstreamer \
+    reconnect=true \
+    reconnect_max_delay=30 \
+    conf=0.5
+```
+
+The first frame after a successful reconnect is marked as a discontinuity,
+which resets the active tracker before it assigns IDs. `reconnect_attempts`
+limits the number of attempts for each connection failure; omit it to keep
+retrying until the process is stopped. See [GStreamer and RTSP](gstreamer.md)
+for installation requirements and explicit pipelines.
+
+Publish annotated tracking to an RTSP server that supports client publishing:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=rtsp://camera/input \
+    backend=gstreamer \
+    reconnect=true \
+    output=rtsp://media-server/nitid \
+    output_rtsp_transport=tcp
+```
+
+Record annotated MP4 segments instead:
+
+```bash
+uv run dfine track \
+    model=dfine_s \
+    source=rtsp://camera/input \
+    backend=gstreamer \
+    reconnect=true \
+    output=runs/segments/camera-1 \
+    segment_duration=60
+```
+
+`output=` activates the GStreamer output sink and is separate from `save=true`.
+Use `output_pipeline=` for a fully custom appsrc pipeline and `output_encoder=`
+to select a platform encoder.
+
+Inspect named hardware profiles on the current host:
+
+```bash
+uv run dfine gstreamer-info
+```
+
+The command reports input and output availability independently. Select a
+validated H.264 RTSP decoder with `hardware_profile=vaapi` and a validated
+output encoder with `output_hardware_profile=vaapi`. Missing elements are an
+error; nitid does not silently switch to software.
+
+## ONVIF cameras
+
+Discover cameras on the local IPv4 network:
+
+```bash
+uv run dfine onvif action=discover timeout=3
+```
+
+List profiles and resolve a profile's RTSP URI:
+
+```bash
+export ONVIF_USERNAME=operator
+export ONVIF_PASSWORD='camera password'
+
+uv run dfine onvif action=profiles host=192.0.2.10
+uv run dfine onvif action=uri host=192.0.2.10 profile='Main Stream'
+```
+
+The URI command does not insert credentials. Feed it to tracking with a
+password environment variable:
+
+```bash
+export CAMERA_RTSP_PASSWORD='camera password'
+uv run dfine track \
+    model=dfine_s \
+    source=rtsp://192.0.2.10/Streaming/Channels/101 \
+    backend=gstreamer \
+    rtsp_username=operator \
+    rtsp_password_env=CAMERA_RTSP_PASSWORD \
+    reconnect=true
+```
+
+Direct `password=` and `rtsp_password=` CLI arguments are rejected because
+process arguments may be visible to other users. See [ONVIF cameras](onvif.md).
+
 Fine-tune a model:
 
 ```bash
@@ -174,10 +360,11 @@ uv run dfine info model=dfine_s
 
 ## Create a bug-report log
 
-Add `--report` to a training, prediction, validation, or export command:
+Add `--report` to a training, prediction, tracking, validation, or export command:
 
 ```bash
 uv run dfine predict model=dfine_s source=image.jpg --report
+uv run dfine track model=dfine_s source=video.mp4 --report
 uv run dfine train model=dfine_s data=my_dataset.yml epochs=50 --report
 uv run dfine val model=dfine_s data=my_dataset.yml --report
 uv run dfine export model=dfine_s format=onnx --report

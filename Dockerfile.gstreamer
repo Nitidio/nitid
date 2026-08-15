@@ -1,0 +1,58 @@
+# GStreamer-enabled nitid runtime. Debian's python3-opencv is used deliberately:
+# the standard PyPI OpenCV wheel is not compiled with CAP_GSTREAMER support.
+FROM debian:bookworm-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    gstreamer1.0-libav \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-rtsp \
+    gstreamer1.0-tools \
+    gstreamer1.0-vaapi \
+    libgl1 \
+    libglib2.0-0 \
+    mesa-va-drivers \
+    python3 \
+    python3-opencv \
+    python3-venv \
+    vainfo \
+    v4l-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && install -m 0755 /root/.local/bin/uv /usr/local/bin/uv \
+    && install -m 0755 /root/.local/bin/uvx /usr/local/bin/uvx
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/nitid-venv \
+    PATH=/opt/nitid-venv/bin:$PATH
+
+WORKDIR /app
+COPY . /app
+
+# Install locked Python dependencies, then remove the non-GStreamer PyPI wheel
+# so the venv inherits Debian's GStreamer-enabled cv2 binding.
+RUN python3 -m venv --system-site-packages "$UV_PROJECT_ENVIRONMENT" \
+    && uv sync --frozen --no-dev \
+    && uv pip uninstall opencv-python \
+    && uv pip install "numpy>=1.24,<2" "scipy>=1.10,<1.16" \
+    && python -c "import cv2; assert any(line.strip().startswith('GStreamer:') and 'YES' in line.upper() for line in cv2.getBuildInformation().splitlines())" \
+    && gst-inspect-1.0 avdec_h264 >/dev/null \
+    && gst-inspect-1.0 x264enc >/dev/null
+
+RUN useradd --create-home --uid 10001 nitid \
+    && mkdir -p /app/runs \
+    && chown -R nitid:nitid /app
+
+USER nitid
+
+CMD ["dfine", "gstreamer-info"]

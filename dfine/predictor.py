@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Generator
+from typing import Callable, Generator
 
-import cv2
 import torch
 
+from dfine.media import Frame, FrameMetadata, FrameSink, OpenCVVideoSink
 from dfine.results import Boxes, Results
 from dfine.utils.ops import clip_boxes
 from dfine.utils.sources import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, LoadSource
@@ -55,39 +55,90 @@ class DFINEPredictor:
         save_dir: str | Path | None,
         exist_ok: bool,
         verbose: bool,
+        backend: str = "opencv",
+        gst_pipeline: str | None = None,
+        reconnect: bool = False,
+        reconnect_initial_delay: float = 1.0,
+        reconnect_max_delay: float = 30.0,
+        reconnect_attempts: int | None = None,
+        rtsp_latency: int = 200,
+        rtsp_transport: str = "tcp",
+        hardware_profile: str | None = None,
+        rtsp_username: str | None = None,
+        rtsp_password: str | None = None,
         iou: float = 0.85,
+        result_processor: Callable[[Results], Results] | None = None,
+        run_mode: str = "predict",
+        run_metadata: dict[str, object] | None = None,
+        frame_sink: FrameSink | None = None,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
-        loader = LoadSource(source, imgsz=imgsz, device=self.device, vid_stride=vid_stride)
+        loader = LoadSource(
+            source,
+            imgsz=imgsz,
+            device=self.device,
+            vid_stride=vid_stride,
+            backend=backend,
+            gst_pipeline=gst_pipeline,
+            reconnect=reconnect,
+            reconnect_initial_delay=reconnect_initial_delay,
+            reconnect_max_delay=reconnect_max_delay,
+            reconnect_attempts=reconnect_attempts,
+            rtsp_latency=rtsp_latency,
+            rtsp_transport=rtsp_transport,
+            hardware_profile=hardware_profile,
+            rtsp_username=rtsp_username,
+            rtsp_password=rtsp_password,
+        )
         if save:
             from dfine.utils.runs import resolve_run_dir, write_run_metadata
 
             save_dir = resolve_run_dir(
                 project=project, name=name, save_dir=save_dir, exist_ok=exist_ok
             )
-            write_run_metadata(
-                save_dir,
-                {
-                    "mode": "predict",
-                    "source": source,
-                    "conf": conf,
-                    "imgsz": imgsz,
-                    "classes": classes,
-                    "stream": stream,
-                    "vid_stride": vid_stride,
-                    "augment": augment,
-                    "save": save,
-                    "project": project,
-                    "name": name,
-                    "save_dir": str(save_dir),
-                    "exist_ok": exist_ok,
-                    "verbose": verbose,
-                    "iou": iou,
-                },
-            )
+            metadata: dict[str, object] = {
+                "mode": run_mode,
+                "source": source,
+                "conf": conf,
+                "imgsz": imgsz,
+                "classes": classes,
+                "stream": stream,
+                "vid_stride": vid_stride,
+                "augment": augment,
+                "save": save,
+                "project": project,
+                "name": name,
+                "save_dir": str(save_dir),
+                "exist_ok": exist_ok,
+                "verbose": verbose,
+                "backend": backend,
+                "gst_pipeline": gst_pipeline,
+                "reconnect": reconnect,
+                "reconnect_initial_delay": reconnect_initial_delay,
+                "reconnect_max_delay": reconnect_max_delay,
+                "reconnect_attempts": reconnect_attempts,
+                "rtsp_latency": rtsp_latency,
+                "rtsp_transport": rtsp_transport,
+                "hardware_profile": hardware_profile,
+                "rtsp_username": rtsp_username,
+                "rtsp_authenticated": rtsp_username is not None,
+                "iou": iou,
+            }
+            if run_metadata:
+                metadata.update(run_metadata)
+            write_run_metadata(save_dir, metadata)
         else:
             save_dir = None
-        gen = self._infer(loader, conf, classes, augment=augment, iou=iou, save_dir=save_dir)
+        gen = self._infer(
+            loader,
+            conf,
+            classes,
+            augment=augment,
+            iou=iou,
+            save_dir=save_dir,
+            result_processor=result_processor,
+            frame_sink=frame_sink,
+        )
         return gen if stream else list(gen)
 
     def _infer(
@@ -98,22 +149,28 @@ class DFINEPredictor:
         augment: bool = False,
         iou: float = 0.85,
         save_dir: Path | None = None,
+        result_processor: Callable[[Results], Results] | None = None,
+        frame_sink: FrameSink | None = None,
     ) -> Generator:
         """Yield one Results object per frame/image."""
         seen: dict[str, int] = {}
-        video_writer: cv2.VideoWriter | None = None
+        video_sink: OpenCVVideoSink | None = None
         video_output_path: Path | None = None
-        source_iter = iter(loader)
+        source_iter = loader.iter_samples()
         index = 0
         try:
             while True:
                 preprocess_start = time.perf_counter()
                 try:
-                    tensor, orig_img, path = next(source_iter)
+                    sample = next(source_iter)
                 except StopIteration:
                     break
                 preprocess_ms = (time.perf_counter() - preprocess_start) * 1000
                 index += 1
+
+                tensor = sample.tensor
+                orig_img = sample.frame.image
+                path = sample.frame.metadata.source_id
 
                 h, w = orig_img.shape[:2]
                 orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
@@ -154,36 +211,50 @@ class DFINEPredictor:
 
                 postprocess_start = time.perf_counter()
                 result = self._postprocess(
-                    merged_det, orig_img, path, conf, classes, augment=augment, iou=iou
+                    merged_det,
+                    orig_img,
+                    path,
+                    conf,
+                    classes,
+                    augment=augment,
+                    iou=iou,
+                    frame_metadata=sample.frame.metadata,
                 )
                 result.speed = {
                     "preprocess": preprocess_ms,
                     "inference": inference_ms,
                     "postprocess": (time.perf_counter() - postprocess_start) * 1000,
                 }
+                if result_processor is not None:
+                    result = result_processor(result)
+                if frame_sink is not None:
+                    frame_sink.write(Frame(image=result.plot(), metadata=sample.frame.metadata))
                 if save_dir is not None:
                     if loader.mode == "video":
-                        if video_writer is None:
+                        if video_sink is None:
                             video_output_path = self._resolve_output_path(
                                 save_dir / f"{Path(path).stem}.mp4",
                                 seen,
                             )
-                            video_writer = self._create_video_writer(
+                            video_sink = self._create_video_sink(
                                 video_output_path,
                                 frame_size=(w, h),
-                                source_fps=loader.video_fps,
+                                source_fps=sample.frame.metadata.fps,
                                 vid_stride=loader.vid_stride,
                             )
                         assert video_output_path is not None
-                        self._write_video_frame(video_writer, result)
+                        video_sink.write(Frame(image=result.plot(), metadata=sample.frame.metadata))
                         result.save_path = str(video_output_path)
                     else:
                         save_path = self._save_result(result, save_dir, index, seen)
                         result.save_path = str(save_path)
                 yield result
         finally:
-            if video_writer is not None:
-                video_writer.release()
+            if video_sink is not None:
+                video_sink.close()
+            if frame_sink is not None:
+                frame_sink.close()
+            loader.close()
 
     def _save_result(
         self,
@@ -212,23 +283,16 @@ class DFINEPredictor:
 
         return out_path
 
-    def _create_video_writer(
+    def _create_video_sink(
         self,
         output_path: Path,
         frame_size: tuple[int, int],
         source_fps: float | None,
         vid_stride: int,
-    ) -> cv2.VideoWriter:
+    ) -> OpenCVVideoSink:
         fps = (source_fps or 30.0) / float(vid_stride)
         fps = max(fps, 1.0)
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
-        writer = cv2.VideoWriter(str(output_path), fourcc, fps, frame_size)
-        if not writer.isOpened():
-            raise RuntimeError(f"Failed to open video writer for '{output_path}'")
-        return writer
-
-    def _write_video_frame(self, writer: cv2.VideoWriter, result: Results) -> None:
-        writer.write(result.plot())
+        return OpenCVVideoSink(output_path, frame_size=frame_size, fps=fps)
 
     def _output_filename(self, path: str, index: int) -> str:
         """Choose a stable output filename for file, stream, screen, and array sources."""
@@ -248,7 +312,15 @@ class DFINEPredictor:
         return f"image_{index:06d}.jpg"
 
     def _postprocess(
-        self, det: dict, orig_img, path, conf_thr, classes, augment: bool = False, iou: float = 0.85
+        self,
+        det: dict,
+        orig_img,
+        path: str,
+        conf_thr,
+        classes,
+        augment: bool = False,
+        iou: float = 0.85,
+        frame_metadata: FrameMetadata | None = None,
     ) -> Results:
         """
         det is one element from DFINEPostProcessor output:
@@ -313,4 +385,5 @@ class DFINEPredictor:
             path=path,
             names=self.names,
             boxes=Boxes(data, orig_shape=(h, w)),
+            frame_metadata=frame_metadata,
         )

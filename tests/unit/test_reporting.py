@@ -35,6 +35,21 @@ def test_report_tees_complete_stdout_and_stderr(tmp_path, capsys, monkeypatch):
     assert "stderr message" in report
 
 
+def test_track_command_supports_report_capture(tmp_path, capsys, monkeypatch):
+    def execute(argv):
+        assert argv == ["dfine", "track", "source=video.mp4"]
+        print("tracked stream")
+
+    monkeypatch.setattr(dfine_cli, "_execute", execute)
+    dfine_cli.main(
+        ["dfine", "track", "source=video.mp4", "--report"],
+        report_dir=tmp_path,
+    )
+
+    assert "Bug report saved to" in capsys.readouterr().out
+    assert "tracked stream" in _only_report(tmp_path).read_text()
+
+
 def test_report_captures_crash_traceback(tmp_path, capsys, monkeypatch):
     def execute(argv):
         print("before crash")

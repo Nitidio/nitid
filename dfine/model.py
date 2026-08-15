@@ -5,14 +5,18 @@ DFINE — public entry point. Mirrors the ultralytics.YOLO interface.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Generator, Union
+from typing import TYPE_CHECKING, Any, Callable, Generator, Union
 
 import numpy as np
 import torch.nn as nn
 
+from dfine.media import FrameSink, FrameSource
 from dfine.utils.device import resolve_device
 
-Source = Union[str, Path, int, np.ndarray, list]
+if TYPE_CHECKING:
+    from dfine.tracking import ResultTracker
+
+Source = Union[str, Path, int, np.ndarray, list, FrameSource]
 ModelCallback = Callable[..., object]
 
 
@@ -71,7 +75,19 @@ class DFINE:
         save_dir: str | Path | None = None,
         exist_ok: bool = False,
         verbose: bool = True,
+        backend: str = "opencv",
+        gst_pipeline: str | None = None,
+        reconnect: bool = False,
+        reconnect_initial_delay: float = 1.0,
+        reconnect_max_delay: float = 30.0,
+        reconnect_attempts: int | None = None,
+        rtsp_latency: int = 200,
+        rtsp_transport: str = "tcp",
+        hardware_profile: str | None = None,
+        rtsp_username: str | None = None,
+        rtsp_password: str | None = None,
         iou: float = 0.85,
+        sink: FrameSink | None = None,
     ) -> list | Generator:
         """
         Run detection on source.
@@ -93,7 +109,84 @@ class DFINE:
             save_dir=save_dir,
             exist_ok=exist_ok,
             verbose=verbose,
+            backend=backend,
+            gst_pipeline=gst_pipeline,
+            reconnect=reconnect,
+            reconnect_initial_delay=reconnect_initial_delay,
+            reconnect_max_delay=reconnect_max_delay,
+            reconnect_attempts=reconnect_attempts,
+            rtsp_latency=rtsp_latency,
+            rtsp_transport=rtsp_transport,
+            hardware_profile=hardware_profile,
+            rtsp_username=rtsp_username,
+            rtsp_password=rtsp_password,
             iou=iou,
+            frame_sink=sink,
+        )
+
+    def track(
+        self,
+        source: Source,
+        conf: float = 0.1,
+        imgsz: int = 640,
+        classes: list[int] | None = None,
+        stream: bool = False,
+        vid_stride: int = 1,
+        augment: bool = False,
+        save: bool = False,
+        project: str = "runs/track",
+        name: str = "exp",
+        save_dir: str | Path | None = None,
+        exist_ok: bool = False,
+        verbose: bool = True,
+        backend: str = "opencv",
+        gst_pipeline: str | None = None,
+        reconnect: bool = False,
+        reconnect_initial_delay: float = 1.0,
+        reconnect_max_delay: float = 30.0,
+        reconnect_attempts: int | None = None,
+        rtsp_latency: int = 200,
+        rtsp_transport: str = "tcp",
+        hardware_profile: str | None = None,
+        rtsp_username: str | None = None,
+        rtsp_password: str | None = None,
+        iou: float = 0.85,
+        tracker: str | ResultTracker = "bytetrack",
+        tracker_kwargs: dict[str, Any] | None = None,
+        sink: FrameSink | None = None,
+    ) -> list | Generator:
+        """Run detection and assign persistent object IDs across source frames."""
+        from dfine.tracking import DFINETracker
+
+        return DFINETracker(self.predictor).run(
+            source,
+            tracker=tracker,
+            tracker_kwargs=tracker_kwargs,
+            conf=conf,
+            imgsz=imgsz,
+            classes=classes,
+            stream=stream,
+            vid_stride=vid_stride,
+            augment=augment,
+            save=save,
+            project=project,
+            name=name,
+            save_dir=save_dir,
+            exist_ok=exist_ok,
+            verbose=verbose,
+            backend=backend,
+            gst_pipeline=gst_pipeline,
+            reconnect=reconnect,
+            reconnect_initial_delay=reconnect_initial_delay,
+            reconnect_max_delay=reconnect_max_delay,
+            reconnect_attempts=reconnect_attempts,
+            rtsp_latency=rtsp_latency,
+            rtsp_transport=rtsp_transport,
+            hardware_profile=hardware_profile,
+            rtsp_username=rtsp_username,
+            rtsp_password=rtsp_password,
+            iou=iou,
+            frame_sink=sink,
         )
 
     # ── Training ────────────────────────────────────────────────────────────
