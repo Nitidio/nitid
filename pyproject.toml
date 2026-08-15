@@ -23,7 +23,8 @@ dependencies = [
     "matplotlib>=3.8",
     "onnx>=1.15",
     "onnxscript>=0.1",
-    "onnxsim>=0.4",
+    # 0.6.2 has broken source metadata and no CPython 3.11 wheel.
+    "onnxsim>=0.6.5,<0.7",
     "tqdm>=4.66",
     "tensorboard>=2.14",  # required by extern/dfine src/core/_config.py
     "scipy>=1.10",        # required by extern/dfine HungarianMatcher (training)
