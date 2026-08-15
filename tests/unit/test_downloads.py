@@ -28,6 +28,11 @@ def test_segment_asset_uses_coco_mask_checkpoint():
     assert asset.filename == "dfine_seg_s_coco_wrapped.pth"
 
 
+def test_segment_nano_aliases_resolve():
+    assert downloads.get_model_asset("n", task="segment").model == "dfine_n"
+    assert downloads.get_model_asset("d-fine-n", task="segment").model == "dfine_n"
+
+
 @pytest.mark.parametrize(
     ("name", "expected"),
     [

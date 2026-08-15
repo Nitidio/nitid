@@ -104,10 +104,12 @@ SEGMENT_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
 
 DEFAULT_WEIGHTS = "obj2coco"
 _MODEL_ALIASES = {
+    "n": "dfine_n",
     "s": "dfine_s",
     "m": "dfine_m",
     "l": "dfine_l",
     "x": "dfine_x",
+    "d_fine_n": "dfine_n",
     "d_fine_s": "dfine_s",
     "d_fine_m": "dfine_m",
     "d_fine_l": "dfine_l",

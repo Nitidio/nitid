@@ -85,6 +85,26 @@ def test_export_openvino(tiny_checkpoint, tmp_path):
     assert len(results) == 3
 
 
+def test_export_segment_openvino_includes_masks(tiny_segment_checkpoint, tmp_path):
+    ov = pytest.importorskip("openvino", reason="openvino not installed")
+    import numpy as np
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    out = model.export(
+        format="openvino",
+        imgsz=640,
+        simplify=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    compiled = ov.Core().compile_model(out, "CPU")
+    results = compiled([np.zeros((1, 3, 640, 640), dtype=np.float32)])
+    assert len(results) == 4
+
+
 def test_export_openvino_missing_package(tiny_checkpoint, monkeypatch):
     import sys
 
