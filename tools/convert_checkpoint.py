@@ -7,7 +7,8 @@ Migrates a raw D-FINE .pth (weights only) into the dfine-wrap format
 Usage:
     python tools/convert_checkpoint.py \
         --weights dfine_l.pth \
-        --config  configs/models/dfine_l.yml \
+        --model   dfine_l \
+        --task    detect \
         --names   configs/datasets/coco.yml \
         --output  dfine_l_wrapped.pth
 """
@@ -27,8 +28,7 @@ import yaml
 def _load_config(file_path: str | Path) -> dict:
     """
     Load a D-FINE YAML config, recursively resolving ``__include__`` directives.
-    Mirrors the logic in extern/dfine/src/core/yaml_utils.py so that
-    convert_checkpoint.py works without importing the D-FINE package.
+    Includes inherited YAML files recursively and merges nested mappings.
     """
     file_path = Path(file_path).resolve()
     with open(file_path) as f:
@@ -97,11 +97,20 @@ def convert(
 def main() -> None:
     p = argparse.ArgumentParser(description="Convert raw D-FINE checkpoint to dfine-wrap format")
     p.add_argument("--weights", required=True)
-    p.add_argument("--config", required=True)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--model", choices=["dfine_n", "dfine_s", "dfine_m", "dfine_l", "dfine_x"])
+    source.add_argument("--config", help="Path to a self-contained YAML config")
+    p.add_argument("--task", choices=["detect", "segment"], default="detect")
     p.add_argument("--names", required=True)
     p.add_argument("--output", required=True)
     args = p.parse_args()
-    convert(args.weights, args.config, args.names, args.output)
+    if args.model:
+        from dfine.nn.configs import make_model_config
+
+        config = make_model_config(args.model, task=args.task)
+    else:
+        config = args.config
+    convert(args.weights, config, args.names, args.output)
 
 
 if __name__ == "__main__":

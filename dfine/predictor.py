@@ -12,7 +12,7 @@ from typing import Callable, Generator
 import torch
 
 from dfine.media import Frame, FrameMetadata, FrameSink, OpenCVVideoSink
-from dfine.results import Boxes, Results
+from dfine.results import Boxes, Masks, Results
 from dfine.utils.ops import clip_boxes
 from dfine.utils.sources import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, LoadSource
 
@@ -44,6 +44,7 @@ class DFINEPredictor:
         self,
         source,
         conf: float,
+        mask_threshold: float,
         imgsz: int,
         classes: list[int] | None,
         stream: bool,
@@ -73,6 +74,8 @@ class DFINEPredictor:
         frame_sink: FrameSink | None = None,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
+        if not 0.0 <= mask_threshold <= 1.0:
+            raise ValueError("mask_threshold must be between 0 and 1")
         loader = LoadSource(
             source,
             imgsz=imgsz,
@@ -100,6 +103,7 @@ class DFINEPredictor:
                 "mode": run_mode,
                 "source": source,
                 "conf": conf,
+                "mask_threshold": mask_threshold,
                 "imgsz": imgsz,
                 "classes": classes,
                 "stream": stream,
@@ -133,6 +137,7 @@ class DFINEPredictor:
             loader,
             conf,
             classes,
+            mask_threshold=mask_threshold,
             augment=augment,
             iou=iou,
             save_dir=save_dir,
@@ -146,6 +151,7 @@ class DFINEPredictor:
         loader: LoadSource,
         conf,
         classes,
+        mask_threshold: float = 0.5,
         augment: bool = False,
         iou: float = 0.85,
         save_dir: Path | None = None,
@@ -187,6 +193,9 @@ class DFINEPredictor:
                         raw_flipped = self.model(tensor_flipped)
                         detections_flipped = self._postprocessor(raw_flipped, orig_size)
                         det_flipped = detections_flipped[0]
+                        masks_flipped_back = det_flipped.get("masks")
+                        if masks_flipped_back is not None:
+                            masks_flipped_back = torch.flip(masks_flipped_back, dims=[2])
 
                         # Flip the xyxy pixel-space coordinates back to the original view.
                         boxes_flipped_back = det_flipped["boxes"].clone()
@@ -207,6 +216,10 @@ class DFINEPredictor:
                             ),
                             "num_orig": merged_det["num_orig"],
                         }
+                        if "masks" in detections[0] and masks_flipped_back is not None:
+                            merged_det["masks"] = torch.cat(
+                                [detections[0]["masks"], masks_flipped_back], dim=0
+                            )
                 inference_ms = (time.perf_counter() - inference_start) * 1000
 
                 postprocess_start = time.perf_counter()
@@ -216,6 +229,7 @@ class DFINEPredictor:
                     path,
                     conf,
                     classes,
+                    mask_threshold=mask_threshold,
                     augment=augment,
                     iou=iou,
                     frame_metadata=sample.frame.metadata,
@@ -318,6 +332,7 @@ class DFINEPredictor:
         path: str,
         conf_thr,
         classes,
+        mask_threshold: float = 0.5,
         augment: bool = False,
         iou: float = 0.85,
         frame_metadata: FrameMetadata | None = None,
@@ -329,6 +344,7 @@ class DFINEPredictor:
         labels = det["labels"]
         boxes = det["boxes"]
         scores = det["scores"]
+        masks = det.get("masks")
         num_orig = det.get("num_orig", len(boxes))
 
         # Assign view tracking labels (0 = original view, 1 = flipped TTA view)
@@ -337,6 +353,8 @@ class DFINEPredictor:
 
         mask = scores > conf_thr
         labels, boxes, scores, views = labels[mask], boxes[mask], scores[mask], views[mask]
+        if masks is not None:
+            masks = masks[mask]
 
         if classes is not None:
             cls_tensor = torch.tensor(classes, device=labels.device)
@@ -347,6 +365,8 @@ class DFINEPredictor:
                 scores[class_mask],
                 views[class_mask],
             )
+            if masks is not None:
+                masks = masks[class_mask]
 
         if augment and len(boxes) > 0:
             import torchvision
@@ -371,9 +391,32 @@ class DFINEPredictor:
 
             keep_indices = torch.where(keep)[0]
             labels, boxes, scores = labels[keep_indices], boxes[keep_indices], scores[keep_indices]
+            if masks is not None:
+                masks = masks[keep_indices]
 
         h, w = orig_img.shape[:2]
         boxes = clip_boxes(boxes, (h, w))
+        result_masks = None
+        if masks is not None:
+            masks = (
+                torch.nn.functional.interpolate(
+                    masks[:, None].float(), size=(h, w), mode="bilinear", align_corners=False
+                )[:, 0]
+                if len(masks)
+                else torch.zeros((0, h, w), device=masks.device)
+            )
+            masks = masks >= mask_threshold
+            if len(masks):
+                ys = torch.arange(h, device=masks.device)[None, :, None]
+                xs = torch.arange(w, device=masks.device)[None, None, :]
+                inside = (
+                    (xs >= boxes[:, 0, None, None])
+                    & (xs < boxes[:, 2, None, None])
+                    & (ys >= boxes[:, 1, None, None])
+                    & (ys < boxes[:, 3, None, None])
+                )
+                masks = masks & inside
+            result_masks = Masks(masks.to(torch.uint8), orig_shape=(h, w))
 
         if len(boxes):
             data = torch.cat([boxes, scores.unsqueeze(1), labels.unsqueeze(1).float()], dim=1)
@@ -385,5 +428,6 @@ class DFINEPredictor:
             path=path,
             names=self.names,
             boxes=Boxes(data, orig_shape=(h, w)),
+            masks=result_masks,
             frame_metadata=frame_metadata,
         )

@@ -10,7 +10,8 @@ uv sync --extra train
 
 ## Dataset format
 
-nitid accepts either **COCO JSON** annotations or **YOLO `.txt`** labels.
+nitid accepts either **COCO JSON** annotations or **YOLO `.txt`** labels for
+detection and instance segmentation.
 
 ### COCO JSON
 
@@ -31,6 +32,8 @@ my_dataset/
 ```
 
 Annotation files follow the standard [COCO detection format](https://cocodataset.org/#format-data).
+For `task="segment"`, every object must also contain a COCO polygon or RLE
+`segmentation` field.
 
 ### YOLO `.txt`
 
@@ -62,6 +65,21 @@ nitid detects the layout automatically and converts YOLO labels to cached COCO
 JSON internally for training and validation. The generated cache is stored in
 nitid's user cache directory rather than inside the dataset tree.
 
+Detection rows use the usual box representation:
+
+```text
+class x_center y_center width height
+```
+
+Instance-segmentation rows use normalized polygon points:
+
+```text
+class x1 y1 x2 y2 x3 y3 ...
+```
+
+Bounding-box-only annotations are rejected when training a segmentation model,
+preventing an accidental all-zero mask training run.
+
 ### Data YAML
 
 Point to your dataset with an ultralytics-style YAML:
@@ -80,7 +98,7 @@ names:
 ```
 
 When `model.train(...)` starts, nitid reads this taxonomy and automatically
-rebuilds the detection head when it differs from the checkpoint. Backbone and
+rebuilds the class head when it differs from the checkpoint. Backbone and
 localization weights are retained, the pretrained encoder scorer is converted
 to generic objectness for proposal selection, and only taxonomy-specific class
 heads are initialized from scratch. No manual head replacement is required.
@@ -149,7 +167,15 @@ needed when you want a *different* ordering than sorted order.
 ```python
 from dfine import DFINE
 
-model = DFINE("dfine_l")
+model = DFINE("dfine_l", task="detect")
+
+# Instance segmentation uses the same training API and mask-aware annotations.
+segmenter = DFINE("dfine_s", task="segment")
+segment_metrics = segmenter.train(
+    data="configs/datasets/my_segment_dataset.yml",
+    epochs=50,
+)
+# segment_metrics["mask_mAP50"], segment_metrics["mask_mAP50-95"]
 
 def print_epoch_end(trainer):
     row = trainer.current_row

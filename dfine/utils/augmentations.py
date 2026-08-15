@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+import torch.nn.functional as torch_f
 import torchvision.transforms.functional as F
 from PIL import Image
 
@@ -79,6 +80,15 @@ def stretch_resize(
     return image.resize((size, size), Image.Resampling.BILINEAR), result
 
 
+def resize_masks(masks: torch.Tensor, size: int) -> torch.Tensor:
+    """Resize ``[N,H,W]`` instance masks with nearest-neighbor sampling."""
+    if masks.numel() == 0:
+        return torch.zeros((0, size, size), dtype=torch.uint8)
+    return torch_f.interpolate(masks[:, None].float(), size=(size, size), mode="nearest")[:, 0].to(
+        torch.uint8
+    )
+
+
 def horizontal_flip(image: Image.Image, boxes: torch.Tensor) -> tuple[Image.Image, torch.Tensor]:
     """Flip an image and absolute xyxy boxes horizontally."""
     width, _ = image.size
@@ -88,6 +98,83 @@ def horizontal_flip(image: Image.Image, boxes: torch.Tensor) -> tuple[Image.Imag
         x2 = width - result[:, 0]
         result[:, 0], result[:, 2] = x1, x2
     return F.hflip(image), result
+
+
+def horizontal_flip_masks(masks: torch.Tensor) -> torch.Tensor:
+    """Flip instance masks horizontally."""
+    return torch.flip(masks, dims=[2])
+
+
+def scale_translate_instances(
+    image: Image.Image,
+    boxes: torch.Tensor,
+    masks: torch.Tensor,
+    scale_gain: float,
+    translate_gain: float,
+    rng: random.Random,
+    fill: tuple[int, int, int] = (114, 114, 114),
+) -> tuple[Image.Image, torch.Tensor, torch.Tensor]:
+    """Scale and translate an image, boxes, and aligned instance masks."""
+    width, height = image.size
+    factor = rng.uniform(1.0 - scale_gain, 1.0 + scale_gain)
+    new_w, new_h = max(1, round(width * factor)), max(1, round(height * factor))
+    tx = round(rng.uniform(-translate_gain, translate_gain) * width)
+    ty = round(rng.uniform(-translate_gain, translate_gain) * height)
+    left, top = (width - new_w) // 2 + tx, (height - new_h) // 2 + ty
+    resized = image.resize((new_w, new_h), Image.Resampling.BILINEAR)
+    canvas = Image.new("RGB", (width, height), fill)
+    canvas.paste(resized, (left, top))
+
+    result = boxes.clone()
+    if result.numel():
+        result[:, [0, 2]] = result[:, [0, 2]] * factor + left
+        result[:, [1, 3]] = result[:, [1, 3]] * factor + top
+
+    output_masks = torch.zeros((len(masks), height, width), dtype=torch.uint8)
+    if masks.numel():
+        resized_masks = torch_f.interpolate(
+            masks[:, None].float(), size=(new_h, new_w), mode="nearest"
+        )[:, 0].to(torch.uint8)
+        dst_x1, dst_y1 = max(left, 0), max(top, 0)
+        dst_x2, dst_y2 = min(left + new_w, width), min(top + new_h, height)
+        if dst_x2 > dst_x1 and dst_y2 > dst_y1:
+            src_x1, src_y1 = dst_x1 - left, dst_y1 - top
+            src_x2, src_y2 = src_x1 + dst_x2 - dst_x1, src_y1 + dst_y2 - dst_y1
+            output_masks[:, dst_y1:dst_y2, dst_x1:dst_x2] = resized_masks[
+                :, src_y1:src_y2, src_x1:src_x2
+            ]
+    return canvas, _clip_boxes(result, width, height), output_masks
+
+
+def random_crop_instances(
+    image: Image.Image,
+    boxes: torch.Tensor,
+    masks: torch.Tensor,
+    gain: float,
+    rng: random.Random,
+) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Crop an image and aligned box/mask instances."""
+    width, height = image.size
+    left = round(rng.uniform(0.0, gain) * width)
+    right = round(rng.uniform(0.0, gain) * width)
+    top = round(rng.uniform(0.0, gain) * height)
+    bottom = round(rng.uniform(0.0, gain) * height)
+    if left + right >= width or top + bottom >= height:
+        keep = torch.ones(len(boxes), dtype=torch.bool)
+        return image, boxes, masks, keep
+    result = boxes.clone()
+    result[:, [0, 2]] -= left
+    result[:, [1, 3]] -= top
+    crop_w, crop_h = width - left - right, height - top - bottom
+    result = _clip_boxes(result, crop_w, crop_h)
+    keep = _valid_boxes(result)
+    cropped_masks = masks[:, top : height - bottom, left : width - right]
+    return (
+        image.crop((left, top, width - right, height - bottom)),
+        result[keep],
+        cropped_masks[keep],
+        keep,
+    )
 
 
 def scale_translate(
@@ -159,6 +246,21 @@ def sanitize(
     boxes = _clip_boxes(boxes, width, height)
     keep = _valid_boxes(boxes) & torch.isfinite(boxes).all(dim=1)
     return boxes[keep], labels[keep]
+
+
+def sanitize_instances(
+    boxes: torch.Tensor,
+    labels: torch.Tensor,
+    masks: torch.Tensor,
+    width: int,
+    height: int,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Clip and filter boxes, labels, and instance masks together."""
+    boxes = _clip_boxes(boxes, width, height)
+    keep = _valid_boxes(boxes) & torch.isfinite(boxes).all(dim=1)
+    if len(masks) != len(boxes):
+        raise ValueError("instance masks must be aligned with boxes")
+    return boxes[keep], labels[keep], masks[keep]
 
 
 def to_tensor(image: Image.Image) -> torch.Tensor:

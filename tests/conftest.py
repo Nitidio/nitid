@@ -42,6 +42,26 @@ def tiny_checkpoint(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
+def tiny_segment_checkpoint(tmp_path_factory):
+    """Small wrapped instance-segmentation checkpoint with random weights."""
+    from dfine.nn.build import build_model
+    from dfine.nn.configs import make_model_config
+    from dfine.utils.checkpoint import save_checkpoint
+
+    cfg = make_model_config("dfine_s", task="segment")
+    cfg["DFINETransformer"]["num_layers"] = 1
+    cfg["DFINETransformer"]["num_queries"] = 10
+    cfg["DFINETransformer"]["num_denoising"] = 0
+    cfg["HybridEncoder"]["depth_mult"] = 0.1
+    model = build_model(cfg).eval()
+    names = {i: f"class_{i}" for i in range(80)}
+    checkpoint_dir = tmp_path_factory.mktemp("segment_checkpoints")
+    checkpoint_path = checkpoint_dir / "tiny_dfine_segment.pth"
+    save_checkpoint(checkpoint_path, model, cfg, names)
+    return str(checkpoint_path)
+
+
+@pytest.fixture(scope="session")
 def tiny_dataset(tmp_path_factory):
     """
     Returns the path to a data YAML backed by a minimal synthetic COCO dataset:
@@ -80,6 +100,7 @@ def tiny_dataset(tmp_path_factory):
                     "bbox": [10, 10, 20, 20],
                     "area": 400,
                     "iscrowd": 0,
+                    "segmentation": [[10, 10, 30, 10, 30, 30, 10, 30]],
                 }
             )
 

@@ -58,12 +58,14 @@ The single public class. Instantiate with a path to a nitid-wrapped `.pth` check
 ```python
 model = DFINE("dfine_s", device="cuda:0")
 model_coco = DFINE("dfine_s", weights="coco", device="cuda:0")
+segmenter = DFINE("dfine_s", task="segment", device="cuda:0")
 ```
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str \| Path` | `"dfine_l"` | Wrapped checkpoint path or architecture name (`"dfine_s"`, `"dfine_m"`, `"dfine_l"`, `"dfine_x"`) |
-| `weights` | `str` | `"default"` | Official variant for registry models: `"default"`/`"obj2coco"` (Objects365→COCO) or `"coco"`. Do not combine a non-default value with a checkpoint path. |
+| `model`   | `str \| Path` | `"dfine_l"` | Wrapped checkpoint path or architecture name (`dfine_n` through `dfine_x`; detection pretrained defaults are available for S/M/L/X and segmentation for N/S/M/L/X) |
+| `task` | `str` | `"detect"` | `"detect"` or `"segment"`. Must match an explicit checkpoint's embedded task. |
+| `weights` | `str` | `"default"` | Detection: `"default"`/`"obj2coco"` or `"coco"`. Segmentation: `"default"`/`"coco"`. Do not combine a non-default value with a checkpoint path. |
 | `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
 | `verbose` | `bool`| `True`  | Print load summary |
 
@@ -79,13 +81,14 @@ Run inference on any source.
 results = model.predict(
     source,           # path, dir, URL, ndarray, int (webcam), or list
     conf=0.5,         # confidence threshold
+    mask_threshold=0.5, # segment: mask probability threshold
     imgsz=640,        # inference size (square)
     classes=None,     # filter to these class indices, e.g. [0, 2]
     stream=False,     # return generator instead of list
     vid_stride=1,     # process every Nth frame for video/webcam/stream sources
     augment=False,    # run test-time augmentation (horizontal flip)
     save=False,       # save annotated outputs to project/name
-    project="runs/detect",
+    project=None,     # defaults to runs/detect or runs/segment
     name="exp",
     backend="opencv", # or "gstreamer" for video/live sources
     gst_pipeline=None, # optional explicit GStreamer pipeline
@@ -134,6 +137,7 @@ playback stays close to the original duration.
 | `path`     | `str`           | Source path or descriptor |
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
+| `masks`    | `Masks \| None` | Full-resolution instance masks for `task="segment"` |
 | `save_path` | `str \| None`  | Saved annotated image or video path when `save=True` |
 | `speed` | `dict[str, float]` | Timing in milliseconds for `preprocess`, `inference`, and `postprocess` |
 | `frame_metadata` | `FrameMetadata \| None` | Source ID, zero-based frame index, timestamp, FPS, stride, and discontinuity flag |
@@ -152,6 +156,9 @@ r.save_json("predictions.json")  # write detections to disk
 r.save_txt("predictions.txt")  # write YOLO-format labels to disk
 r.crop()            # → list[dict] with cropped object images and metadata
 r.crop(save_dir="crops")  # save crops into class-name folders
+r.masks.data       # uint8 [N, H, W], aligned with r.boxes
+r.masks.xy         # absolute polygon coordinates
+r.masks.xyn        # normalized polygon coordinates
 len(r)              # number of detections
 ```
 
@@ -184,7 +191,9 @@ crops/
 class_id x_center y_center width height
 ```
 
-The box values are normalized from `0` to `1`, which matches the standard YOLO label format. Use `save_conf=True` to append the confidence score:
+For detection, box values are normalized from `0` to `1`. For instance
+segmentation, each line contains the class followed by normalized polygon
+coordinates. Use `save_conf=True` to append the confidence score:
 
 ```python
 r.save_txt("predictions.txt", save_conf=True)
@@ -226,6 +235,14 @@ for i in range(len(results[0].boxes)):
     conf = results[0].boxes.conf[i].item()
     cls  = int(results[0].boxes.cls[i].item())
 ```
+
+#### `Masks`
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `data` | tensor `[N,H,W]` | Binary full-resolution instance masks |
+| `xy` | `list[np.ndarray]` | Largest external contour per instance in pixels |
+| `xyn` | `list[np.ndarray]` | Contours normalized to `[0,1]` |
 
 ---
 
@@ -513,6 +530,8 @@ metrics = model.train(
 #   "loss": ...,
 #   "fitness": ...,
 #   "mAP50": ...,
+#   "mask_mAP50-95": ...,  # segment task
+#   "mask_mAP50": ...,     # segment task
 #   "mAP50-95": ...,
 #   "history": [{...}, ...],
 # }
@@ -626,7 +645,7 @@ model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt in
 ```python
 model.names   # {0: "person", 1: "bicycle", ...}  — class index → name
 model.device  # "cpu" or "cuda:0"                 — device the model lives on
-model.task    # "detect"                           — always "detect"
+model.task    # "detect" or "segment"
 ```
 
 `names` is the class mapping embedded in the checkpoint.

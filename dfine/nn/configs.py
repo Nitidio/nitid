@@ -234,24 +234,30 @@ def get_model_config(model_size: str) -> dict[str, Any]:
         raise ValueError(f"Unsupported D-FINE model {model_size!r}. Choose: {supported}") from error
 
 
-def make_detection_config(
+def make_model_config(
     model_size: str,
     *,
+    task: str = "detect",
     num_classes: int = 80,
     image_size: tuple[int, int] = (640, 640),
 ) -> dict[str, Any]:
-    """Create the self-contained runtime config stored in detection checkpoints."""
+    """Create the self-contained runtime config stored in a wrapped checkpoint."""
+    from .native_build import normalize_task
+
     if num_classes < 1:
         raise ValueError(f"num_classes must be positive, got {num_classes}")
+    resolved_task = normalize_task(task)
 
     model_config = get_model_config(model_size)
     criterion = model_config.pop("DFINECriterion")
     matcher = model_config.pop("matcher")
+    if resolved_task == "segment":
+        criterion["losses"].append("masks")
     matcher["type"] = "HungarianMatcher"
     criterion["matcher"] = matcher
 
     return {
-        "task": "detection",
+        "task": resolved_task,
         "model": "DFINE",
         "criterion": "DFINECriterion",
         "postprocessor": "DFINEPostProcessor",
@@ -267,3 +273,18 @@ def make_detection_config(
         "DFINECriterion": criterion,
         "DFINEPostProcessor": {"num_top_queries": 300},
     }
+
+
+def make_detection_config(
+    model_size: str,
+    *,
+    num_classes: int = 80,
+    image_size: tuple[int, int] = (640, 640),
+) -> dict[str, Any]:
+    """Create a detection checkpoint config."""
+    return make_model_config(
+        model_size,
+        task="detect",
+        num_classes=num_classes,
+        image_size=image_size,
+    )

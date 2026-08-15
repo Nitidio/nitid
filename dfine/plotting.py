@@ -31,6 +31,14 @@ def plot_results(result, conf: bool, labels: bool, line_width, font_size) -> np.
     lw = line_width or max(round(sum(img.shape[:2]) / 2 * 0.003), 2)
     fs = font_size or max(lw - 1, 1)
 
+    if result.masks is not None:
+        overlay = img.copy()
+        for index, mask in enumerate(result.masks.data.detach().cpu().numpy()):
+            cls_id = int(result.boxes.cls[index])
+            color = PALETTE[cls_id % len(PALETTE)]
+            overlay[mask.astype(bool)] = color
+        img = cv2.addWeighted(overlay, 0.45, img, 0.55, 0)
+
     for i in range(len(result.boxes)):
         x1, y1, x2, y2 = result.boxes.xyxy[i].int().tolist()
         cls_id = int(result.boxes.cls[i])

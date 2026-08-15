@@ -133,10 +133,14 @@ class DFINEValidator:
         metadata. The returned scalars are suitable for CSV logging.
         """
         from dfine.nn.build import build_postprocessor
+        from dfine.nn.native_build import normalize_task
         from dfine.utils.data import build_detection_dataloader, resolve_detection_split
 
         COCO = importlib.import_module("pycocotools.coco").COCO
         COCOeval = importlib.import_module("pycocotools.cocoeval").COCOeval
+        mask_utils = importlib.import_module("pycocotools.mask")
+        task_value = str(self.cfg.get("task", "detect")).lower()
+        task = normalize_task("detect" if task_value == "detection" else task_value)
 
         save_dir = Path(save_dir) if save_dir is not None else None
         if save_dir is not None:
@@ -152,6 +156,7 @@ class DFINEValidator:
             spec=spec,
             classes=classes,
             single_cls=single_cls,
+            task=task,
         )
 
         postprocessor = build_postprocessor(self.cfg)
@@ -195,6 +200,9 @@ class DFINEValidator:
                     pred_boxes = det["boxes"].detach().cpu()
                     pred_scores = det["scores"].detach().cpu()
                     pred_labels = det["labels"].detach().cpu()
+                    pred_masks = det.get("masks")
+                    if pred_masks is not None:
+                        pred_masks = pred_masks.detach().cpu()
                     pred_records.append(
                         {"boxes": pred_boxes, "scores": pred_scores, "labels": pred_labels}
                     )
@@ -207,20 +215,33 @@ class DFINEValidator:
                         imgsz=imgsz,
                     )
                     mask = pred_scores > conf
-                    for box, score, label in zip(
-                        coco_boxes[mask].tolist(),
-                        pred_scores[mask].tolist(),
-                        pred_labels[mask].tolist(),
-                    ):
+                    selected = torch.where(mask)[0]
+                    for pred_index in selected.tolist():
+                        box = coco_boxes[pred_index].tolist()
+                        score = float(pred_scores[pred_index])
+                        label = int(pred_labels[pred_index])
                         x1, y1, x2, y2 = box
-                        coco_results.append(
-                            {
-                                "image_id": img_id,
-                                "category_id": label_to_cat_id.get(int(label), int(label) + 1),
-                                "bbox": [x1, y1, x2 - x1, y2 - y1],
-                                "score": float(score),
-                            }
-                        )
+                        result: dict[str, object] = {
+                            "image_id": img_id,
+                            "category_id": label_to_cat_id.get(label, label + 1),
+                            "bbox": [x1, y1, x2 - x1, y2 - y1],
+                            "score": score,
+                        }
+                        if pred_masks is not None:
+                            resized_mask = torch.nn.functional.interpolate(
+                                pred_masks[pred_index][None, None].float(),
+                                size=(int(image_info["height"]), int(image_info["width"])),
+                                mode="bilinear",
+                                align_corners=False,
+                            )[0, 0]
+                            encoded = mask_utils.encode(
+                                np.asfortranarray((resized_mask >= 0.5).numpy().astype(np.uint8))
+                            )
+                            counts = encoded.get("counts")
+                            if isinstance(counts, bytes):
+                                encoded["counts"] = counts.decode("ascii")
+                            result["segmentation"] = encoded
+                        coco_results.append(result)
 
         with contextlib.redirect_stdout(io.StringIO()):
             coco_gt = COCO(str(ann_file))
@@ -233,6 +254,7 @@ class DFINEValidator:
             "AR300": 0.0,
         }
         per_class_rows: list[PerClassRow] = []
+        mask_metrics = {"mask_mAP50-95": 0.0, "mask_mAP50": 0.0}
 
         if coco_results:
             with contextlib.redirect_stdout(io.StringIO()):
@@ -262,6 +284,18 @@ class DFINEValidator:
                 "AR300": mean_valid(recall_values[:, :, 0, -1]),
             }
             per_class_rows = self._per_class_ap(coco_eval, gt_records, cat_id_to_label)
+
+            if task == "segment" and any("segmentation" in item for item in coco_results):
+                coco_mask_eval = COCOeval(coco_gt, coco_dt, "segm")
+                coco_mask_eval.params.maxDets = [1, 10, 100, 300]
+                with contextlib.redirect_stdout(io.StringIO()):
+                    coco_mask_eval.evaluate()
+                    coco_mask_eval.accumulate()
+                mask_precision = coco_mask_eval.eval["precision"]
+                mask_metrics = {
+                    "mask_mAP50-95": mean_valid(mask_precision[:, :, :, 0, -1]),
+                    "mask_mAP50": mean_valid(mask_precision[0, :, :, 0, -1]),
+                }
         elif verbose:
             LOGGER.info("No detections above conf threshold — metrics are zero")
 
@@ -273,7 +307,12 @@ class DFINEValidator:
         precision = float(precisions[best_idx]) if len(precisions) else 0.0
         recall = float(recalls[best_idx]) if len(recalls) else 0.0
         f1 = float(f1_scores[best_idx]) if len(f1_scores) else 0.0
-        fitness = self._fitness(precision, recall, coco_metrics["mAP50"], coco_metrics["mAP50-95"])
+        fitness = self._fitness(
+            precision,
+            recall,
+            mask_metrics["mask_mAP50"] if task == "segment" else coco_metrics["mAP50"],
+            mask_metrics["mask_mAP50-95"] if task == "segment" else coco_metrics["mAP50-95"],
+        )
 
         confusion_matrix, class_ids = self._confusion_matrix(gt_records, pred_records, best_conf)
 
@@ -290,6 +329,7 @@ class DFINEValidator:
 
         metrics = {
             **coco_metrics,
+            **(mask_metrics if task == "segment" else {}),
             "images": len(gt_records),
             "instances": int(sum(gt["labels"].numel() for gt in gt_records)),
             "precision": precision,
@@ -307,7 +347,9 @@ class DFINEValidator:
 
     def compact_metrics(self, metrics: dict[str, object]) -> dict[str, float]:
         """Return the scalar validation fields that belong in the epoch row."""
-        keys = ("precision", "recall", "mAP50", "mAP50-95", "fitness")
+        keys = ["precision", "recall", "mAP50", "mAP50-95", "fitness"]
+        if "mask_mAP50" in metrics:
+            keys.extend(["mask_mAP50", "mask_mAP50-95"])
         return {key: _as_float(metrics.get(key, 0.0)) for key in keys}
 
     def _per_class_ap(
@@ -659,6 +701,13 @@ class DFINEValidator:
             _as_float(metrics["mAP50"]),
             _as_float(metrics["mAP50-95"]),
         )
+        if "mask_mAP50" in metrics:
+            LOGGER.info(
+                "%22s %10.3f %10.3f",
+                "Mask",
+                _as_float(metrics["mask_mAP50"]),
+                _as_float(metrics["mask_mAP50-95"]),
+            )
         if not per_class_rows:
             return
 

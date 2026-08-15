@@ -157,7 +157,14 @@ class DFINETrainer:
         self.ema_model: ModelEMA | None = None
         self.train_args: dict[str, object] = {}
         self.start_epoch = 0
-        self._display_loss_keys = ("loss_bbox", "loss_giou", "loss_vfl", "loss_fgl")
+        self._display_loss_keys = (
+            "loss_bbox",
+            "loss_giou",
+            "loss_vfl",
+            "loss_fgl",
+            "loss_mask_bce",
+            "loss_mask_dice",
+        )
         self._base_callbacks = self._empty_callback_registry()
         self.callbacks = self._empty_callback_registry()
         self._register_callbacks(callbacks, self._base_callbacks)
@@ -623,6 +630,12 @@ class DFINETrainer:
                     images = torch.nn.functional.interpolate(
                         images, size=(size, size), mode="bilinear", align_corners=False
                     )
+                    for target in targets:
+                        masks = target.get("masks")
+                        if isinstance(masks, torch.Tensor) and masks.numel():
+                            target["masks"] = torch.nn.functional.interpolate(
+                                masks[:, None].float(), size=(size, size), mode="nearest"
+                            )[:, 0].to(masks.dtype)
                 targets = [
                     {
                         k: v.to(self.device) if isinstance(v, torch.Tensor) else v
@@ -945,9 +958,12 @@ class DFINETrainer:
         fraction: float = 1.0,
         augment=None,
     ):
-        from dfine.utils.data import build_coco_dataloader
+        from dfine.nn.native_build import normalize_task
+        from dfine.utils.data import build_detection_dataloader
 
-        return build_coco_dataloader(
+        task_value = str(self.cfg.get("task", "detect")).lower()
+        task = normalize_task("detect" if task_value == "detection" else task_value)
+        return build_detection_dataloader(
             data,
             split="train",
             imgsz=imgsz,
@@ -960,6 +976,7 @@ class DFINETrainer:
             single_cls=single_cls,
             fraction=fraction,
             augment=augment,
+            task=task,
         )
 
     @staticmethod
@@ -1409,7 +1426,7 @@ class DFINETrainer:
     def _finalize_metrics(self, history: list[dict[str, float | int]], best_epoch: int = 0) -> dict:
         if history:
             final_row = history[-1]
-            return {
+            metrics = {
                 "loss": float(final_row["loss"]),
                 "fitness": float(final_row.get("fitness", 0.0)),
                 "mAP50": float(final_row.get("mAP50", 0.0)),
@@ -1417,8 +1434,12 @@ class DFINETrainer:
                 "best_epoch": best_epoch,
                 "history": history,
             }
+            if "mask_mAP50" in final_row:
+                metrics["mask_mAP50"] = float(final_row["mask_mAP50"])
+                metrics["mask_mAP50-95"] = float(final_row["mask_mAP50-95"])
+            return metrics
 
-        return {
+        metrics = {
             "loss": 0.0,
             "fitness": 0.0,
             "mAP50": 0.0,
@@ -1426,6 +1447,10 @@ class DFINETrainer:
             "best_epoch": best_epoch,
             "history": [],
         }
+        if str(self.cfg.get("task", "detect")).lower() == "segment":
+            metrics["mask_mAP50"] = 0.0
+            metrics["mask_mAP50-95"] = 0.0
+        return metrics
 
     def _validate_epoch(
         self,
@@ -1463,10 +1488,10 @@ class DFINETrainer:
         }
 
     def _compact_val_metrics(self, val_metrics: dict[str, object]) -> dict[str, float]:
-        return {
-            key: _as_float(val_metrics.get(key, 0.0))
-            for key in ("precision", "recall", "mAP50", "mAP50-95", "fitness")
-        }
+        keys = ["precision", "recall", "mAP50", "mAP50-95", "fitness"]
+        if "mask_mAP50" in val_metrics:
+            keys.extend(["mask_mAP50", "mask_mAP50-95"])
+        return {key: _as_float(val_metrics.get(key, 0.0)) for key in keys}
 
     def _write_results_row(self, path: Path, row: dict[str, float | int]) -> None:
         exists = path.exists()
@@ -1493,6 +1518,8 @@ class DFINETrainer:
             "f1",
             "mAP50",
             "mAP50-95",
+            "mask_mAP50",
+            "mask_mAP50-95",
             "fitness",
         ]
         ordered = [key for key in priority if key in row]
@@ -1520,6 +1547,12 @@ class DFINETrainer:
             axes[0, 1].plot(epochs, metrics["mAP50-95"], label="mAP50-95", color="tab:blue")
         if "mAP50" in metrics:
             axes[0, 1].plot(epochs, metrics["mAP50"], label="mAP50", color="tab:orange")
+        if "mask_mAP50-95" in metrics:
+            axes[0, 1].plot(
+                epochs, metrics["mask_mAP50-95"], label="mask mAP50-95", color="tab:pink"
+            )
+        if "mask_mAP50" in metrics:
+            axes[0, 1].plot(epochs, metrics["mask_mAP50"], label="mask mAP50", color="tab:olive")
         axes[0, 1].set_title("Validation")
         axes[0, 1].legend(fontsize=8)
         axes[0, 1].grid(True, alpha=0.3)
@@ -1562,6 +1595,13 @@ class DFINETrainer:
             if validated
             else ["validation=skipped"]
         )
+        if validated and "mask_mAP50" in row:
+            val_fields.extend(
+                [
+                    f"mask_mAP50={float(row['mask_mAP50']):.3f}",
+                    f"mask_mAP50-95={float(row['mask_mAP50-95']):.3f}",
+                ]
+            )
         parts = [
             f"Epoch {epoch}/{epochs}",
             f"loss={float(row.get('loss', 0.0)):.4f}",

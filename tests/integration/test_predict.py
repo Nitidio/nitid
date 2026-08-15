@@ -49,6 +49,32 @@ def test_predict_returns_results_object(tiny_checkpoint):
     assert isinstance(results[0], Results)
 
 
+def test_segment_predict_returns_aligned_full_resolution_masks(tiny_segment_checkpoint):
+    from dfine import DFINE
+    from dfine.results import Masks
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    frame = np.zeros((64, 96, 3), dtype=np.uint8)
+    result = model.predict(frame, conf=0.0)[0]
+
+    assert isinstance(result.masks, Masks)
+    assert len(result.masks) == len(result.boxes)
+    assert result.masks.data.shape == (len(result.boxes), 64, 96)
+    assert result.masks.data.dtype == torch.uint8
+    assert set(result.masks.data.unique().tolist()) <= {0, 1}
+    assert result.plot().shape == frame.shape
+
+
+def test_segment_predict_flip_augmentation_keeps_masks_aligned(tiny_segment_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    result = model.predict(_random_frame(shape=(64, 96, 3)), conf=0.0, augment=True)[0]
+
+    assert result.masks is not None
+    assert len(result.masks) == len(result.boxes)
+
+
 def test_predict_returns_speed_timings(tiny_checkpoint):
     from dfine import DFINE
 

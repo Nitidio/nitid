@@ -37,11 +37,16 @@ class DFINEPostProcessor(nn.Module):
         self,
         outputs: dict[str, torch.Tensor],
         original_sizes: torch.Tensor,
-    ) -> list[dict[str, torch.Tensor]] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> (
+        list[dict[str, torch.Tensor]]
+        | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+    ):
         logits = outputs["pred_logits"]
         normalized_boxes = outputs["pred_boxes"]
         boxes = box_convert(normalized_boxes, in_fmt="cxcywh", out_fmt="xyxy")
         boxes = boxes * original_sizes.repeat(1, 2).unsqueeze(1)
+        query_indices: torch.Tensor
 
         if self.use_focal_loss:
             probabilities = torch.sigmoid(logits)
@@ -55,21 +60,51 @@ class DFINEPostProcessor(nn.Module):
         else:
             probabilities = F.softmax(logits, dim=-1)[:, :, :-1]
             scores, labels = probabilities.max(dim=-1)
+            query_indices = (
+                torch.arange(scores.shape[1], device=scores.device, dtype=torch.long)
+                .unsqueeze(0)
+                .expand(scores.shape[0], -1)
+            )
             if scores.shape[1] > self.num_top_queries:
                 scores, indices = torch.topk(scores, self.num_top_queries, dim=-1)
                 labels = labels.gather(dim=1, index=indices)
+                query_indices = query_indices.gather(dim=1, index=indices)
                 boxes = boxes.gather(
                     dim=1,
                     index=indices.unsqueeze(-1).expand(-1, -1, boxes.shape[-1]),
                 )
 
+        masks = self._process_masks(outputs.get("pred_masks"), query_indices)
+
+        if self.deploy_mode and masks is not None:
+            return labels, boxes, scores, masks
         if self.deploy_mode:
             return labels, boxes, scores
 
-        return [
-            {"labels": image_labels, "boxes": image_boxes, "scores": image_scores}
-            for image_labels, image_boxes, image_scores in zip(labels, boxes, scores)
-        ]
+        results = []
+        for batch_index, (image_labels, image_boxes, image_scores) in enumerate(
+            zip(labels, boxes, scores)
+        ):
+            result = {"labels": image_labels, "boxes": image_boxes, "scores": image_scores}
+            if masks is not None:
+                result["masks"] = masks[batch_index]
+            results.append(result)
+        return results
+
+    @staticmethod
+    def _process_masks(
+        pred_masks: torch.Tensor | None,
+        query_indices: torch.Tensor,
+    ) -> torch.Tensor | None:
+        """Gather the low-resolution masks belonging to selected queries."""
+        if pred_masks is None:
+            return None
+        return pred_masks.gather(
+            1,
+            query_indices[:, :, None, None].expand(
+                -1, -1, pred_masks.shape[-2], pred_masks.shape[-1]
+            ),
+        )
 
     def deploy(self) -> DFINEPostProcessor:
         """Switch to the tuple output contract used by model export."""

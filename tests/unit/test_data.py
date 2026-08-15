@@ -107,6 +107,33 @@ def test_mosaic_and_mixup_keep_all_boxes_and_labels_aligned(tiny_dataset):
     assert torch.all((targets[0]["boxes"] >= 0) & (targets[0]["boxes"] <= 1))
 
 
+def test_segment_loader_keeps_masks_aligned_through_augmentations(tiny_dataset):
+    augmentation = AugmentationConfig(
+        fliplr=1.0,
+        scale=0.2,
+        translate=0.1,
+        crop=0.2,
+        mosaic=1.0,
+        mixup=1.0,
+    )
+    loader = build_detection_dataloader(
+        tiny_dataset,
+        "train",
+        64,
+        1,
+        seed=7,
+        augment=augmentation,
+        task="segment",
+    )
+    _, targets = next(iter(loader))
+    target = targets[0]
+
+    assert target["masks"].shape[0] == target["boxes"].shape[0] == target["labels"].shape[0]
+    assert target["masks"].shape[1:] == (64, 64)
+    assert target["masks"].dtype == torch.uint8
+    assert target["masks"].sum() > 0
+
+
 def test_normalize_names_accepts_list():
     assert normalize_names({"names": ["person", "car"]}) == {0: "person", 1: "car"}
 
@@ -232,6 +259,38 @@ def test_yolo_conversion_rounds_cached_bbox_values(tmp_path):
 
     assert anns[0]["bbox"] == [156.410218, 169.33024, 434.589782, 463.50016]
     assert anns[0]["area"] == 201432.433491
+
+
+def test_yolo_polygon_conversion_preserves_instance_segmentation(tmp_path):
+    label_path = tmp_path / "segment.txt"
+    label_path.write_text("0 0.1 0.2 0.8 0.2 0.8 0.9 0.1 0.9\n")
+
+    annotations = _load_yolo_annotations(label_path, 100, 50, {0: "object"})
+
+    assert annotations[0]["bbox"] == [10.0, 10.0, 70.0, 35.0]
+    assert annotations[0]["area"] == 2450.0
+    assert annotations[0]["segmentation"] == [[10.0, 10.0, 80.0, 10.0, 80.0, 45.0, 10.0, 45.0]]
+
+
+def test_yolo_polygon_conversion_uses_polygon_area(tmp_path):
+    label_path = tmp_path / "triangle.txt"
+    label_path.write_text("0 0.1 0.2 0.8 0.2 0.8 0.9\n")
+
+    annotations = _load_yolo_annotations(label_path, 100, 50, {0: "object"})
+
+    assert annotations[0]["bbox"] == [10.0, 10.0, 70.0, 35.0]
+    assert annotations[0]["area"] == 1225.0
+
+
+def test_segment_loader_rejects_bbox_only_annotations(tiny_yolo_dataset):
+    with pytest.raises(ValueError, match="requires polygon or RLE"):
+        build_detection_dataloader(
+            tiny_yolo_dataset,
+            "train",
+            64,
+            1,
+            task="segment",
+        )
 
 
 def test_load_yolo_annotations_skips_bad_rows_and_logs(tmp_path, caplog):

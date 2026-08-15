@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import torch
 
-from dfine.results import Boxes, Results
+from dfine.results import Boxes, Masks, Results
 
 
 @pytest.fixture
@@ -31,6 +31,43 @@ def crop_result(dummy_boxes):
     return Results(
         orig_img=img, path="street.jpg", names={0: "person", 1: "car"}, boxes=dummy_boxes
     )
+
+
+@pytest.fixture
+def segment_result():
+    image = np.zeros((40, 50, 3), dtype=np.uint8)
+    boxes = Boxes(torch.tensor([[10.0, 8.0, 30.0, 28.0, 0.9, 0.0]]), (40, 50))
+    data = torch.zeros((1, 40, 50), dtype=torch.uint8)
+    data[0, 8:28, 10:30] = 1
+    return Results(
+        orig_img=image,
+        path="mask.jpg",
+        names={0: "object"},
+        boxes=boxes,
+        masks=Masks(data, (40, 50)),
+    )
+
+
+def test_masks_expose_absolute_and_normalized_polygons(segment_result):
+    assert len(segment_result.masks) == 1
+    polygon = segment_result.masks.xy[0]
+    normalized = segment_result.masks.xyn[0]
+    assert polygon.shape[1] == 2
+    assert normalized.min() >= 0.0 and normalized.max() <= 1.0
+
+
+def test_segment_results_serialize_and_plot_masks(segment_result, tmp_path):
+    payload = segment_result.to_json()[0]
+    assert payload["segments"]["x"]
+    assert payload["segments"]["y"]
+
+    label_file = tmp_path / "mask.txt"
+    segment_result.save_txt(label_file, save_conf=True)
+    values = label_file.read_text().split()
+    assert values[0] == "0"
+    assert values[-1] == "0.900000"
+    assert len(values) > 6
+    assert np.any(segment_result.plot() != segment_result.orig_img)
 
 
 def test_boxes_xyxy(dummy_boxes):

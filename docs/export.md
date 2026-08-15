@@ -25,6 +25,9 @@ uv run dfine export model=dfine_l format=onnx
 
 The exported model takes a single input `images [B, 3, H, W]` and returns
 `(labels, boxes, scores)` with the postprocessor in deploy mode baked in.
+Segmentation exports return `(labels, boxes, scores, masks)`; `masks` contains
+the selected low-resolution mask probabilities and is aligned with the first
+three outputs.
 
 ### Options
 
@@ -42,7 +45,7 @@ The exported model takes a single input `images [B, 3, H, W]` and returns
 model.export(format="onnx", dynamic=True, simplify=False)
 ```
 
-Dynamic axes: `batch` (axis 0) and spatial dimensions (axes 2, 3).
+Dynamic export currently marks the batch axis as dynamic.
 
 ## OpenVINO
 

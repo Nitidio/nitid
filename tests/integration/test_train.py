@@ -2,6 +2,7 @@
 
 import logging
 
+import numpy as np
 import pytest
 import torch
 
@@ -41,6 +42,49 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     assert model.names == {0: "person", 1: "car"}
     assert model._cfg["num_classes"] == 2
     assert model._model.decoder.num_classes == 2
+
+
+def test_segment_train_and_validation_run_end_to_end(
+    tiny_segment_checkpoint, tiny_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    model = DFINE(
+        tiny_segment_checkpoint,
+        task="segment",
+        device="cpu",
+        verbose=False,
+    )
+    metrics = model.train(
+        data=tiny_dataset,
+        epochs=1,
+        imgsz=64,
+        batch=2,
+        augment=False,
+        plots=False,
+        project=str(tmp_path),
+        name="segment",
+        verbose=False,
+    )
+
+    row = metrics["history"][0]
+    assert model.task == "segment"
+    assert set(row) >= {
+        "loss_mask_bce",
+        "loss_mask_dice",
+        "mask_mAP50",
+        "mask_mAP50-95",
+    }
+    assert (tmp_path / "segment" / "last.pth").exists()
+
+    reloaded = DFINE(
+        tmp_path / "segment" / "last.pth",
+        task="segment",
+        device="cpu",
+        verbose=False,
+    )
+    result = reloaded.predict(np.zeros((64, 64, 3), dtype=np.uint8), conf=0.99)[0]
+    assert result.masks is not None
 
 
 def test_repeated_train_calls_increment_run_directory(tiny_checkpoint, tiny_dataset, tmp_path):

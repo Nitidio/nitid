@@ -1,5 +1,5 @@
 """
-dfine-wrap: Ultralytics-style wrapper for D-FINE object detection.
+nitid: Ultralytics-style D-FINE detection and instance segmentation.
 
 Usage:
     from dfine import DFINE

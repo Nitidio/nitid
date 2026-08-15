@@ -8,7 +8,7 @@ include = ["dfine*", "tools*", "web*"]
 [project]
 name = "nitid"
 version = "0.1.0"
-description = "Ultralytics-style wrapper for the D-FINE object detector"
+description = "Ultralytics-style D-FINE object detection and instance segmentation"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 dependencies = [
@@ -26,8 +26,8 @@ dependencies = [
     # 0.6.2 has broken source metadata and no CPython 3.11 wheel.
     "onnxsim>=0.6.5,<0.7",
     "tqdm>=4.66",
-    "tensorboard>=2.14",  # required by extern/dfine src/core/_config.py
-    "scipy>=1.10",        # required by extern/dfine HungarianMatcher (training)
+    "tensorboard>=2.14",
+    "scipy>=1.10",        # Hungarian matching during training
 ]
 
 [project.optional-dependencies]

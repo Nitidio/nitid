@@ -8,7 +8,6 @@ for users coming from raw D-FINE or Ultralytics YOLO.
 
 ```bash
 git clone https://github.com/Vaelsys/nitid.git && cd nitid
-git submodule update --init        # pulls extern/dfine
 uv sync --extra train
 ```
 
@@ -37,6 +36,21 @@ results[0].save("out.jpg")
 
 `results[0].boxes.xyxy` is already in absolute pixel coordinates, so no manual
 rescaling is needed.
+
+For instance segmentation, select the task when constructing the model:
+
+```python
+model = DFINE("dfine_s", task="segment")
+result = model.predict("image.jpg", conf=0.5)[0]
+
+boxes = result.boxes.xyxy
+masks = result.masks.data       # uint8 [N, H, W]
+polygons = result.masks.xyn     # normalized polygons
+result.save("segmented.jpg")
+```
+
+Segmentation defaults to the official COCO-pretrained mask weights. Detection
+defaults to Objects365→COCO for S/M/L/X and supports `weights="coco"` as well.
 
 ## Common Workflow
 
@@ -135,7 +149,7 @@ for result in model.track(source, stream=True, conf=0.5):
 See [ONVIF cameras](onvif.md) for CLI credential handling, network discovery,
 profile selection, and clock troubleshooting.
 
-## Coming from D-FINE
+## Converting a raw checkpoint
 
 If you already have a raw D-FINE checkpoint, nitid wraps it in a self-contained
 `.pth` that embeds the model config and class names, so you only ever deal with
@@ -146,12 +160,14 @@ one file.
 ```bash
 uv run python tools/convert_checkpoint.py \
     --weights dfine_l.pth \
-    --config  extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
+    --model   dfine_l \
+    --task    detect \
     --names   configs/datasets/coco.yml \
     --output  dfine_l_wrapped.pth
 ```
 
-- `--config` must be one of the canonical D-FINE configs from `extern/dfine/configs/`.
+- `--model` selects the integrated N/S/M/L/X architecture.
+- `--task` selects detection or instance segmentation.
 - `--names` must point to a YAML file with a `names:` mapping.
 - EMA weights are used automatically when present, matching D-FINE's own inference scripts.
 
@@ -160,7 +176,7 @@ Load the wrapped checkpoint directly afterward:
 ```python
 from dfine import DFINE
 
-model = DFINE("dfine_l_wrapped.pth")
+model = DFINE("dfine_l_wrapped.pth", task="detect")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```

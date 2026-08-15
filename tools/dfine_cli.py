@@ -56,7 +56,7 @@ Usage:
   dfine COMMAND [key=value ...] [--report]
 
 Commands:
-  predict  Run object detection on an image, directory, video, URL, or webcam
+  predict  Run detection or instance segmentation on an image, video, or stream
   track    Detect and track objects with persistent IDs across video frames
   download Download and wrap an official D-FINE checkpoint
   train    Fine-tune a model on a COCO-format dataset
@@ -81,6 +81,7 @@ Required:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   conf=FLOAT          Confidence threshold (default: 0.5)
   imgsz=INT           Square inference image size (default: 640)
@@ -589,12 +590,19 @@ def _execute(argv: list[str]) -> None:
 
     if command == "download":
         model_name = kwargs.pop("model", "dfine_l")
+        task = kwargs.pop("task", "detect")
         weights = kwargs.pop("weights", "default")
         output = kwargs.pop("output", None)
         force = kwargs.pop("force", False)
         from dfine.utils.downloads import download_model
 
-        path = download_model(model=model_name, weights=weights, output=output, force=force)
+        path = download_model(
+            model=model_name,
+            task=task,
+            weights=weights,
+            output=output,
+            force=force,
+        )
         print(f"Downloaded wrapped checkpoint to {path}")
         return
 
@@ -625,11 +633,12 @@ def _execute(argv: list[str]) -> None:
         return
 
     model_path = kwargs.pop("model", "dfine_l")
+    task = kwargs.pop("task", "detect")
     weights = kwargs.pop("weights", "default")
 
     from dfine import DFINE
 
-    model = DFINE(model_path, weights=weights)
+    model = DFINE(model_path, task=task, weights=weights)
 
     if command in {"predict", "track"}:
         source = kwargs.pop("source", None)

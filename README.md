@@ -1,6 +1,6 @@
 # nitid
 
-**Ultralytics-style wrapper for [D-FINE](https://github.com/Peterande/D-FINE) — real-time object detection that feels like YOLO.**
+**Ultralytics-style D-FINE object detection and instance segmentation.**
 
 [![CI](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml/badge.svg)](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Vaelsys.github.io/nitid/)
@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
 
-nitid gives D-FINE a single-class API that mirrors `ultralytics.YOLO`. Swap one import and keep all the patterns you already know: predict, track, train, val, export, stream, CLI.
+nitid gives D-FINE a single-entry-point API that mirrors `ultralytics.YOLO`. Swap one import and keep all the patterns you already know: predict, track, train, val, export, stream, CLI.
 
 ![nitid detection demo](docs/assets/nitid-demo.png)
 
@@ -23,7 +23,8 @@ Example prediction using D-FINE-S on a street image.
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated video output
 - Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented recording
 - ONVIF camera discovery, profile selection, and secure RTSP resolution
-- Fine-tuning and validation
+- Detection and instance segmentation with COCO-pretrained weights
+- Fine-tuning and COCO box/mask validation
 - ONNX, TorchScript and TensorRT export
 
 ## Installation
@@ -32,7 +33,6 @@ Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
 
 ```bash
 git clone https://github.com/Vaelsys/nitid.git && cd nitid
-git submodule update --init        # pulls extern/dfine
 uv sync
 ```
 
@@ -73,6 +73,15 @@ model = DFINE("dfine_s")
 # Equivalent explicit selection: DFINE("dfine_s", weights="obj2coco")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
+```
+
+Instance segmentation uses the same API and downloads the matching COCO mask checkpoint:
+
+```python
+model = DFINE("dfine_s", task="segment")
+result = model.predict("image.jpg", conf=0.5)[0]
+print(result.masks.data.shape)  # [N, H, W]
+result.save("segmented.jpg")
 ```
 
 ### Training
@@ -193,7 +202,9 @@ For the full guide:
 
 ## Official Models
 
-> 💡 Passing `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` downloads the recommended Objects365→COCO weights. Use `weights="coco"` for the COCO-only checkpoint or `weights="obj2coco"` to make the default provenance explicit.
+> 💡 Detection defaults to Objects365→COCO weights for S/M/L/X. `task="segment"` selects COCO-pretrained instance-segmentation weights for N/S/M/L/X.
+
+Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 
 | Model | COCO mAP<sup>50-95</sup> *(vs YOLO11)* | Speed<sup>T4 TRT10 FP16</sup> *(vs YOLO11)* | Params | FLOPs | Config | Official Checkpoint |
 |:------|---------------------------------------:|--------------------------------------------:|-------:|------:|:------:|:-------------------:|
@@ -237,7 +248,8 @@ Only needed if you have your own D-FINE checkpoint. If you're using an official 
 ```bash
 uv run python tools/convert_checkpoint.py \
     --weights dfine_l.pth \
-    --config  extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
+    --model   dfine_l \
+    --task    detect \
     --names   configs/datasets/coco.yml \
     --output  dfine_l_wrapped.pth
 ```
@@ -245,7 +257,8 @@ uv run python tools/convert_checkpoint.py \
 | Argument | Description |
 |---|---|
 | `--weights` | Raw D-FINE checkpoint |
-| `--config` | Canonical D-FINE config from `extern/dfine/configs/` |
+| `--model` | Architecture: `dfine_n`, `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` |
+| `--task` | `detect` or `segment` |
 | `--names` | YAML with a `names:` mapping — use `configs/datasets/coco.yml` for COCO models |
 | `--output` | Path for the wrapped output |
 
@@ -292,7 +305,7 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that build
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, disk size |
 | TensorRT export | Supported | Supported (see Installation) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, … | Detection only |
+| `model.task` | `"detect"`, `"segment"`, … | `"detect"` or `"segment"` |
 
 ## Contributing
 
@@ -300,7 +313,7 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup inst
 
 ## Acknowledgements
 
-nitid wraps [D-FINE](https://github.com/Peterande/D-FINE) by Yansong Peng, Hebei University. D-FINE is licensed under the [Apache 2.0 License](extern/dfine/LICENSE).
+nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE) and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
 
 ```bibtex
 @article{peng2024dfine,

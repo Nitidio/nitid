@@ -42,6 +42,25 @@ def test_export_torchscript(tiny_checkpoint, tmp_path):
     out.unlink()
 
 
+def test_export_segment_onnx_includes_masks(tiny_segment_checkpoint, tmp_path):
+    import onnx
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    output = tmp_path / "segment.onnx"
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        output=output,
+        verbose=False,
+    )
+
+    graph = onnx.load(str(out)).graph
+    assert [value.name for value in graph.output] == ["labels", "boxes", "scores", "masks"]
+
+
 def test_export_openvino(tiny_checkpoint, tmp_path):
     ov = pytest.importorskip("openvino", reason="openvino not installed")
     import numpy as np

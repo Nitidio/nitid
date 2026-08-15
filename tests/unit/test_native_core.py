@@ -1,4 +1,4 @@
-"""Tests for the integrated D-FINE model core and legacy parity."""
+"""Tests for the integrated D-FINE model core and reference compatibility."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ import pytest
 import torch
 
 from dfine.nn.build import build_model
-from dfine.nn.configs import get_model_config
+from dfine.nn.configs import get_model_config, make_model_config
 from dfine.nn.native_build import build_native_criterion, build_native_model
 
 
 def _build_reference_model(config):
-    """Build directly from the submodule, which is retained only as a Phase 2 oracle."""
+    """Build the upstream reference model for schema and output compatibility checks."""
     reference_root = Path(__file__).parents[2] / "extern/dfine"
     sys.path.insert(0, str(reference_root))
 
@@ -90,7 +90,7 @@ def test_native_nano_forward_contracts():
 
 
 def test_native_detection_state_schema_matches_reference_dfine():
-    """Keep the submodule as a migration oracle until Phase 2 is accepted."""
+    """Require exact state-schema and output compatibility with upstream D-FINE."""
     from tools.convert_checkpoint import _load_config
 
     root = Path(__file__).parents[2]
@@ -123,6 +123,19 @@ def test_task_selects_mask_losses_without_mutating_shared_config():
     assert "masks" not in detection.losses
     assert "masks" in segmentation.losses
     assert "masks" not in detection_again.losses
+
+
+def test_segment_checkpoint_config_builds_mask_model_and_criterion():
+    from dfine.nn.criterion import build_criterion
+
+    config = make_model_config("dfine_s", task="segment", num_classes=3)
+    config["DFINETransformer"]["num_layers"] = 1
+    model = build_model(config)
+    criterion = build_criterion(config)
+
+    assert config["task"] == "segment"
+    assert any(key.startswith("decoder.mask_") for key in model.state_dict())
+    assert "masks" in criterion.losses
 
 
 def test_model_configs_are_isolated():

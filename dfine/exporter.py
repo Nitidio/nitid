@@ -88,6 +88,7 @@ class DFINEExporter:
             run_dir,
             {
                 "mode": "export",
+                "task": str(self.cfg.get("task", "detect")),
                 "format": format,
                 "imgsz": imgsz,
                 "batch": batch,
@@ -202,12 +203,14 @@ class DFINEExporter:
         wrapped_model.eval()
 
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
+        is_segment = str(self.cfg.get("task", "detect")).lower() == "segment"
         dynamic_axes = (
             {
                 "images": {0: "batch"},
                 "labels": {0: "batch"},
                 "boxes": {0: "batch"},
                 "scores": {0: "batch"},
+                **({"masks": {0: "batch"}} if is_segment else {}),
             }
             if dynamic
             else None
@@ -220,7 +223,9 @@ class DFINEExporter:
             dynamo=False,
             opset_version=opset,
             input_names=["images"],
-            output_names=["labels", "boxes", "scores"],
+            output_names=["labels", "boxes", "scores", "masks"]
+            if is_segment
+            else ["labels", "boxes", "scores"],
             dynamic_axes=dynamic_axes,
         )
 

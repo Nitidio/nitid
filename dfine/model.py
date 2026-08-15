@@ -22,16 +22,17 @@ ModelCallback = Callable[..., object]
 
 class DFINE:
     """
-    D-FINE object detection wrapper.
+    D-FINE object detection and instance segmentation wrapper.
 
     Args:
         model:   D-FINE architecture name or path to a wrapped .pth checkpoint.
+        task:    ``"detect"`` or ``"segment"``.
         weights: Official weight variant: ``default``, ``obj2coco``, or ``coco``.
         device:  "cuda", "cpu", "cuda:N", or None for auto-select.
         verbose: Print model info on load.
 
     Example:
-        model = DFINE("dfine_l", weights="obj2coco")
+        model = DFINE("dfine_l", task="detect", weights="obj2coco")
         results = model("image.jpg", conf=0.5)
         model.train(data="coco.yaml", epochs=50)
         model.export(format="tensorrt")
@@ -41,6 +42,7 @@ class DFINE:
         self,
         model: str | Path = "dfine_l",
         *,
+        task: str = "detect",
         weights: str = "default",
         device: str | int | None = None,
         verbose: bool = True,
@@ -52,8 +54,11 @@ class DFINE:
         self._names: dict[int, str]
         self._path: str
         self._weights: str | None = None
+        from dfine.nn.native_build import normalize_task
+
+        self._task = normalize_task(task)
         self._callbacks: dict[str, list[ModelCallback]] = {}
-        self._load(str(model), weights=weights)
+        self._load(str(model), task=self._task, weights=weights)
 
     # ── Inference ──────────────────────────────────────────────────────────
 
@@ -64,13 +69,14 @@ class DFINE:
         self,
         source: Source,
         conf: float = 0.5,
+        mask_threshold: float = 0.5,
         imgsz: int = 640,
         classes: list[int] | None = None,
         stream: bool = False,
         vid_stride: int = 1,
         augment: bool = False,
         save: bool = False,
-        project: str = "runs/detect",
+        project: str | None = None,
         name: str = "exp",
         save_dir: str | Path | None = None,
         exist_ok: bool = False,
@@ -90,7 +96,7 @@ class DFINE:
         sink: FrameSink | None = None,
     ) -> list | Generator:
         """
-        Run detection on source.
+        Run detection or instance segmentation on a source.
 
         Returns list[Results] when stream=False,
         Generator[Results] when stream=True.
@@ -98,13 +104,14 @@ class DFINE:
         return self.predictor.run(
             source,
             conf=conf,
+            mask_threshold=mask_threshold,
             imgsz=imgsz,
             classes=classes,
             stream=stream,
             vid_stride=vid_stride,
             augment=augment,
             save=save,
-            project=project,
+            project=project or f"runs/{self.task}",
             name=name,
             save_dir=save_dir,
             exist_ok=exist_ok,
@@ -158,11 +165,15 @@ class DFINE:
         """Run detection and assign persistent object IDs across source frames."""
         from dfine.tracking import DFINETracker
 
+        if self.task != "detect":
+            raise ValueError("track() currently supports task='detect' only")
+
         return DFINETracker(self.predictor).run(
             source,
             tracker=tracker,
             tracker_kwargs=tracker_kwargs,
             conf=conf,
+            mask_threshold=0.5,
             imgsz=imgsz,
             classes=classes,
             stream=stream,
@@ -554,7 +565,7 @@ class DFINE:
 
     @property
     def task(self) -> str:
-        return "detect"
+        return self._task
 
     @property
     def weights(self) -> str | None:
@@ -569,15 +580,17 @@ class DFINE:
 
     # ── Internal ────────────────────────────────────────────────────────────
 
-    def _load(self, path: str, weights: str = "default") -> None:
+    def _load(self, path: str, *, task: str, weights: str = "default") -> None:
         """Load checkpoint, deserialise config, build model."""
         from pathlib import Path
 
+        from dfine.nn.native_build import normalize_task
         from dfine.utils.checkpoint import load_checkpoint
         from dfine.utils.device import resolve_device
         from dfine.utils.downloads import download_model, get_model_asset
 
         self._device_str = resolve_device(self._device_str)
+        resolved_task = normalize_task(task)
         if not isinstance(weights, str):
             raise TypeError("weights must be a string")
         default_weights_requested = weights.lower().replace("-", "_") == "default"
@@ -599,20 +612,20 @@ class DFINE:
                 name_to_check = name_to_check[:-8]
 
             try:
-                asset = get_model_asset(name_to_check, weights=weights)
+                asset = get_model_asset(name_to_check, weights=weights, task=resolved_task)
                 if path_obj.suffix == ".pth":
                     resolved_path = download_model(
-                        asset.model, weights=asset.weights, output=path_obj
+                        asset.model, task=resolved_task, weights=asset.weights, output=path_obj
                     )
                 else:
                     parent = path_obj.parent
                     if str(parent) in (".", ""):
                         resolved_path = download_model(
-                            asset.model, weights=asset.weights, output=None
+                            asset.model, task=resolved_task, weights=asset.weights, output=None
                         )
                     else:
                         resolved_path = download_model(
-                            asset.model, weights=asset.weights, output=parent
+                            asset.model, task=resolved_task, weights=asset.weights, output=parent
                         )
                 path = str(resolved_path)
                 self._weights = asset.weights
@@ -624,6 +637,15 @@ class DFINE:
 
         self._path = str(path)
         self._model, self._cfg, self._names = load_checkpoint(path, device=self._device_str)
+        checkpoint_task_value = str(self._cfg.get("task", "detect")).lower().strip()
+        checkpoint_task = normalize_task(
+            "detect" if checkpoint_task_value == "detection" else checkpoint_task_value
+        )
+        if checkpoint_task != resolved_task:
+            raise ValueError(
+                f"Checkpoint task is {checkpoint_task!r}, but task={resolved_task!r} was requested"
+            )
+        self._task = resolved_task
         self._model.eval()
         if self.verbose:
             n_params = sum(p.numel() for p in self._model.parameters())

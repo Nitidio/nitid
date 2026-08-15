@@ -8,11 +8,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
-from dfine.nn.configs import make_detection_config
+from dfine.nn.configs import make_model_config
+from dfine.nn.native_build import normalize_task
 from tools.convert_checkpoint import convert as convert_checkpoint
 
 _ROOT = Path(__file__).parents[2]
 _RELEASE_ROOT = "https://github.com/Peterande/storage/releases/download/dfinev1.0"
+_SEGMENT_RELEASE_ROOT = "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/main"
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,7 @@ class ModelAsset:
     """One pretrained-weight variant for a D-FINE architecture."""
 
     model: str
+    task: str
     weights: str
     url: str
     filename: str
@@ -34,12 +37,20 @@ def _asset(
     model: str,
     weights: str,
     checkpoint: str,
+    *,
+    task: str = "detect",
+    release_root: str = _RELEASE_ROOT,
 ) -> ModelAsset:
     return ModelAsset(
         model=model,
+        task=task,
         weights=weights,
-        url=f"{_RELEASE_ROOT}/{checkpoint}",
-        filename=f"{model}_{weights}_wrapped.pth",
+        url=f"{release_root}/{checkpoint}",
+        filename=(
+            f"dfine_seg_{model.removeprefix('dfine_')}_{weights}_wrapped.pth"
+            if task == "segment"
+            else f"{model}_{weights}_wrapped.pth"
+        ),
     )
 
 
@@ -78,6 +89,19 @@ MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
     },
 }
 
+SEGMENT_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
+    model: {
+        "coco": _asset(
+            model,
+            "coco",
+            f"dfine_seg_{model.removeprefix('dfine_')}_coco.pt",
+            task="segment",
+            release_root=_SEGMENT_RELEASE_ROOT,
+        )
+    }
+    for model in ("dfine_n", "dfine_s", "dfine_m", "dfine_l", "dfine_x")
+}
+
 DEFAULT_WEIGHTS = "obj2coco"
 _MODEL_ALIASES = {
     "s": "dfine_s",
@@ -109,29 +133,43 @@ def _normalize_weights(weights: str) -> str:
     return _WEIGHT_ALIASES.get(key, key)
 
 
-def list_models() -> list[str]:
+def _registry(task: str) -> dict[str, dict[str, ModelAsset]]:
+    return MODEL_REGISTRY if normalize_task(task) == "detect" else SEGMENT_MODEL_REGISTRY
+
+
+def list_models(task: str = "detect") -> list[str]:
     """Return supported D-FINE architecture names."""
-    return sorted(MODEL_REGISTRY)
+    return sorted(_registry(task))
 
 
-def list_weights(model: str) -> list[str]:
+def list_weights(model: str, *, task: str = "detect") -> list[str]:
     """Return canonical pretrained-weight variants for an architecture."""
     model_key = _normalize_model(model)
-    if model_key not in MODEL_REGISTRY:
-        choices = ", ".join(list_models())
+    registry = _registry(task)
+    if model_key not in registry:
+        choices = ", ".join(list_models(task))
         raise ValueError(f"Unknown model {model!r}. Choose one of: {choices}")
-    return sorted(MODEL_REGISTRY[model_key])
+    return sorted(registry[model_key])
 
 
-def get_model_asset(model: str, weights: str = "default") -> ModelAsset:
+def get_model_asset(
+    model: str,
+    weights: str = "default",
+    *,
+    task: str = "detect",
+) -> ModelAsset:
     """Resolve a model architecture and pretrained-weight variant."""
     model_key = _normalize_model(model)
-    if model_key not in MODEL_REGISTRY:
-        choices = ", ".join(list_models())
+    resolved_task = normalize_task(task)
+    registry = _registry(resolved_task)
+    if model_key not in registry:
+        choices = ", ".join(list_models(resolved_task))
         raise ValueError(f"Unknown model {model!r}. Choose one of: {choices}")
 
     weights_key = _normalize_weights(weights)
-    variants = MODEL_REGISTRY[model_key]
+    if resolved_task == "segment" and weights_key == DEFAULT_WEIGHTS:
+        weights_key = "coco"
+    variants = registry[model_key]
     if weights_key not in variants:
         choices = ", ".join(sorted(variants))
         raise ValueError(
@@ -154,12 +192,13 @@ def resolve_output_path(asset: ModelAsset, output: str | Path | None = None) -> 
 def download_model(
     model: str,
     *,
+    task: str = "detect",
     weights: str = "default",
     output: str | Path | None = None,
     force: bool = False,
 ) -> Path:
     """Download and wrap an official checkpoint for ``model`` and ``weights``."""
-    asset = get_model_asset(model, weights)
+    asset = get_model_asset(model, weights, task=task)
     out_path = resolve_output_path(asset, output)
 
     if out_path.exists() and not force:
@@ -180,7 +219,7 @@ def download_model(
         print(f"Converting to nitid checkpoint: {out_path}")
         convert_checkpoint(
             weights=str(raw_path),
-            config=make_detection_config(asset.model),
+            config=make_model_config(asset.model, task=asset.task),
             names_file=str(names),
             output=str(out_path),
         )

@@ -44,9 +44,14 @@ from dfine.utils.augmentations import (
     AugmentationConfig,
     color_jitter_hsv,
     horizontal_flip,
+    horizontal_flip_masks,
     random_crop,
+    random_crop_instances,
+    resize_masks,
     sanitize,
+    sanitize_instances,
     scale_translate,
+    scale_translate_instances,
     stretch_resize,
     to_tensor,
 )
@@ -97,7 +102,7 @@ def resolve_detection_split(data: str | Path, split: str) -> DetectionSplitSpec:
     if label_dir is not None:
         cache_dir = _dataset_cache_dir(root)
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_name = f"{split}_{_slugify_relpath(Path(cfg[split]))}.coco.json"
+        cache_name = f"{split}_{_slugify_relpath(Path(cfg[split]))}.v2.coco.json"
         ann_file = cache_dir / cache_name
         if not _yolo_cache_is_fresh(ann_file, img_dir, label_dir):
             convert_yolo_split_to_coco_json(img_dir, label_dir, ann_file, normalize_names(cfg))
@@ -137,6 +142,7 @@ class CocoFinetuneDataset(Dataset):
         cache: bool | str = False,
         augment: AugmentationConfig | None = None,
         seed: int = 0,
+        task: Literal["detect", "segment"] = "detect",
     ) -> None:
         from pycocotools.coco import COCO
 
@@ -149,6 +155,7 @@ class CocoFinetuneDataset(Dataset):
         self.mosaic_enabled = True
         self.seed = seed
         self.epoch = 0
+        self.task = task
 
         if cat_id_to_label is None:
             sorted_cat_ids = sorted(self.coco.cats)
@@ -158,6 +165,13 @@ class CocoFinetuneDataset(Dataset):
         self.single_cls = single_cls
         self.cache = cache
         self._image_cache: dict[int, Image.Image] = {}
+        if self.task == "segment" and not any(
+            ann.get("segmentation") for ann in self.coco.anns.values()
+        ):
+            raise ValueError(
+                "task='segment' requires polygon or RLE instance annotations; "
+                "the selected split contains bounding boxes only"
+            )
         if cache is True or str(cache).lower() == "ram":
             for index in range(len(self.ids)):
                 self._image_cache[index] = self._load_image(index)
@@ -168,7 +182,7 @@ class CocoFinetuneDataset(Dataset):
         return len(self.ids)
 
     def __getitem__(self, idx: int):
-        image, boxes, labels, img_id = self._load_item(idx)
+        image, boxes, labels, masks, img_id = self._load_item(idx)
         rng = random.Random(self.seed + self.epoch * max(len(self), 1) + idx)
         cfg = self.augment
         mosaic_active = bool(
@@ -179,46 +193,68 @@ class CocoFinetuneDataset(Dataset):
             and rng.random() < cfg.mosaic
         )
         if mosaic_active:
-            image, boxes, labels = self._mosaic(idx, rng)
+            image, boxes, labels, masks = self._mosaic(idx, rng)
         else:
             image, boxes = stretch_resize(image, boxes, self.imgsz)
+            masks = resize_masks(masks, self.imgsz)
 
         if cfg and cfg.enabled:
             if cfg.fliplr and rng.random() < cfg.fliplr:
                 image, boxes = horizontal_flip(image, boxes)
+                masks = horizontal_flip_masks(masks)
             if cfg.scale or cfg.translate:
-                image, boxes = scale_translate(image, boxes, cfg.scale, cfg.translate, rng)
+                if self.task == "segment":
+                    image, boxes, masks = scale_translate_instances(
+                        image, boxes, masks, cfg.scale, cfg.translate, rng
+                    )
+                else:
+                    image, boxes = scale_translate(image, boxes, cfg.scale, cfg.translate, rng)
             if cfg.crop and rng.random() < cfg.crop:
-                image, boxes, keep = random_crop(image, boxes, cfg.crop, rng)
+                if self.task == "segment":
+                    image, boxes, masks, keep = random_crop_instances(
+                        image, boxes, masks, cfg.crop, rng
+                    )
+                else:
+                    image, boxes, keep = random_crop(image, boxes, cfg.crop, rng)
                 labels = labels[keep]
                 image, boxes = stretch_resize(image, boxes, self.imgsz)
+                masks = resize_masks(masks, self.imgsz)
             image = color_jitter_hsv(image, cfg, rng)
             if cfg.mixup and rng.random() < cfg.mixup:
                 other_idx = rng.randrange(len(self))
-                other_image, other_boxes, other_labels, _ = self._load_item(other_idx)
+                other_image, other_boxes, other_labels, other_masks, _ = self._load_item(other_idx)
                 other_image, other_boxes = stretch_resize(other_image, other_boxes, self.imgsz)
+                other_masks = resize_masks(other_masks, self.imgsz)
                 ratio = rng.betavariate(32.0, 32.0)
                 image = Image.blend(image, other_image, 1.0 - ratio)
                 boxes = torch.cat((boxes, other_boxes))
                 labels = torch.cat((labels, other_labels))
+                masks = torch.cat((masks, other_masks))
 
-        boxes, labels = sanitize(boxes, labels, self.imgsz, self.imgsz)
+        if self.task == "segment":
+            boxes, labels, masks = sanitize_instances(boxes, labels, masks, self.imgsz, self.imgsz)
+        else:
+            boxes, labels = sanitize(boxes, labels, self.imgsz, self.imgsz)
         boxes = self._normalize_boxes(boxes)
         target = {
             "labels": labels,
             "boxes": boxes,
             "image_id": torch.tensor([img_id], dtype=torch.long),
         }
+        if self.task == "segment":
+            target["masks"] = masks
         return to_tensor(image), target
 
-    def _load_item(self, idx: int) -> tuple[Image.Image, torch.Tensor, torch.Tensor, int]:
+    def _load_item(
+        self, idx: int
+    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor, int]:
         img_id = self.ids[idx]
         image = self._image_cache.get(idx)
         if image is None:
             image = self._load_image(idx)
         width, height = image.size
         anns = self.coco.loadAnns(self.coco.getAnnIds(imgIds=img_id, iscrowd=False))
-        box_values, label_values = [], []
+        box_values, label_values, mask_values = [], [], []
         for ann in anns:
             x, y, w, h = ann["bbox"]
             if w <= 0 or h <= 0:
@@ -226,29 +262,42 @@ class CocoFinetuneDataset(Dataset):
             label = self.cat_id_to_label.get(ann["category_id"], 0)
             if self.classes is not None and label not in self.classes:
                 continue
+            if self.task == "segment" and not ann.get("segmentation"):
+                continue
             box_values.append([x, y, x + w, y + h])
             label_values.append(0 if self.single_cls else label)
+            if self.task == "segment":
+                mask_values.append(torch.from_numpy(self.coco.annToMask(ann)).to(torch.uint8))
         boxes = torch.tensor(box_values, dtype=torch.float32).reshape(-1, 4)
         labels = torch.tensor(label_values, dtype=torch.long)
-        return image.copy(), boxes, labels, img_id
+        masks = (
+            torch.stack(mask_values)
+            if mask_values
+            else torch.zeros((0, height, width), dtype=torch.uint8)
+        )
+        return image.copy(), boxes, labels, masks, img_id
 
     def _mosaic(
         self, idx: int, rng: random.Random
-    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor]:
+    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor]:
         half = self.imgsz // 2
         canvas = Image.new("RGB", (self.imgsz, self.imgsz), (114, 114, 114))
         indices = [idx, *(rng.randrange(len(self)) for _ in range(3))]
-        all_boxes, all_labels = [], []
+        all_boxes, all_labels, all_masks = [], [], []
         offsets = ((0, 0), (half, 0), (0, half), (half, half))
         for item_idx, (left, top) in zip(indices, offsets):
-            image, boxes, labels, _ = self._load_item(item_idx)
+            image, boxes, labels, masks, _ = self._load_item(item_idx)
             image, boxes = stretch_resize(image, boxes, half)
+            masks = resize_masks(masks, half)
             canvas.paste(image, (left, top))
             boxes[:, [0, 2]] += left
             boxes[:, [1, 3]] += top
             all_boxes.append(boxes)
             all_labels.append(labels)
-        return canvas, torch.cat(all_boxes), torch.cat(all_labels)
+            placed_masks = torch.zeros((len(masks), self.imgsz, self.imgsz), dtype=torch.uint8)
+            placed_masks[:, top : top + half, left : left + half] = masks
+            all_masks.append(placed_masks)
+        return canvas, torch.cat(all_boxes), torch.cat(all_labels), torch.cat(all_masks)
 
     def _normalize_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         result = boxes.clone()
@@ -291,6 +340,7 @@ def build_detection_dataloader(
     single_cls: bool = False,
     fraction: float = 1.0,
     augment: AugmentationConfig | None = None,
+    task: Literal["detect", "segment"] = "detect",
 ) -> DataLoader:
     """Build a DataLoader from COCO JSON or YOLO txt labels."""
     cfg = load_data_yaml(data)
@@ -309,6 +359,7 @@ def build_detection_dataloader(
         cache=cache,
         augment=augment if split == "train" else None,
         seed=seed,
+        task=task,
     )
 
     if not 0.0 < fraction <= 1.0:
@@ -459,8 +510,8 @@ def _load_yolo_annotations(
     width: int,
     height: int,
     names: dict[int, str],
-) -> list[dict[str, int | float | list[float]]]:
-    annotations: list[dict[str, int | float | list[float]]] = []
+) -> list[dict[str, object]]:
+    annotations: list[dict[str, object]] = []
     raw = label_path.read_text().splitlines()
 
     for line_no, line in enumerate(raw, start=1):
@@ -469,13 +520,15 @@ def _load_yolo_annotations(
             continue
 
         parts = stripped.split()
-        if len(parts) != 5:
+        is_box = len(parts) == 5
+        is_polygon = len(parts) >= 7 and (len(parts) - 1) % 2 == 0
+        if not is_box and not is_polygon:
             LOGGER.warning("Skipping malformed YOLO label row %s:%d", label_path, line_no)
             continue
 
         try:
             class_id = int(float(parts[0]))
-            cx, cy, bw, bh = (float(v) for v in parts[1:])
+            values = [float(value) for value in parts[1:]]
         except ValueError:
             LOGGER.warning("Skipping non-numeric YOLO label row %s:%d", label_path, line_no)
             continue
@@ -485,17 +538,32 @@ def _load_yolo_annotations(
                 "Skipping out-of-range YOLO class id %s in %s:%d", class_id, label_path, line_no
             )
             continue
-        if not all(math.isfinite(v) for v in (cx, cy, bw, bh)):
-            LOGGER.warning("Skipping non-finite YOLO box in %s:%d", label_path, line_no)
-            continue
-        if bw <= 0 or bh <= 0:
-            LOGGER.warning("Skipping non-positive YOLO box in %s:%d", label_path, line_no)
+        if not all(math.isfinite(value) for value in values):
+            LOGGER.warning("Skipping non-finite YOLO annotation in %s:%d", label_path, line_no)
             continue
 
-        x1 = (cx - bw / 2) * width
-        y1 = (cy - bh / 2) * height
-        x2 = (cx + bw / 2) * width
-        y2 = (cy + bh / 2) * height
+        segmentation: list[list[float]] | None = None
+        if is_box:
+            cx, cy, bw, bh = values
+            if bw <= 0 or bh <= 0:
+                LOGGER.warning("Skipping non-positive YOLO box in %s:%d", label_path, line_no)
+                continue
+            x1 = (cx - bw / 2) * width
+            y1 = (cy - bh / 2) * height
+            x2 = (cx + bw / 2) * width
+            y2 = (cy + bh / 2) * height
+        else:
+            points = [
+                [
+                    min(max(values[index] * width, 0.0), float(width)),
+                    min(max(values[index + 1] * height, 0.0), float(height)),
+                ]
+                for index in range(0, len(values), 2)
+            ]
+            x_values = [point[0] for point in points]
+            y_values = [point[1] for point in points]
+            x1, y1, x2, y2 = min(x_values), min(y_values), max(x_values), max(y_values)
+            segmentation = [[coordinate for point in points for coordinate in point]]
 
         x1 = min(max(x1, 0.0), float(width))
         y1 = min(max(y1, 0.0), float(height))
@@ -512,13 +580,29 @@ def _load_yolo_annotations(
         box_w = round(box_w, 6)
         box_h = round(box_h, 6)
 
-        annotations.append(
-            {
-                "category_id": class_id + 1,
-                "bbox": [x1, y1, box_w, box_h],
-                "area": round(box_w * box_h, 6),
-            }
-        )
+        area = box_w * box_h
+        if segmentation is not None:
+            polygon = segmentation[0]
+            point_count = len(polygon) // 2
+            area = (
+                abs(
+                    sum(
+                        polygon[2 * index] * polygon[2 * ((index + 1) % point_count) + 1]
+                        - polygon[2 * ((index + 1) % point_count)] * polygon[2 * index + 1]
+                        for index in range(point_count)
+                    )
+                )
+                / 2
+            )
+
+        annotation: dict[str, object] = {
+            "category_id": class_id + 1,
+            "bbox": [x1, y1, box_w, box_h],
+            "area": round(area, 6),
+        }
+        if segmentation is not None:
+            annotation["segmentation"] = segmentation
+        annotations.append(annotation)
 
     return annotations
 

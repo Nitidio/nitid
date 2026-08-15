@@ -95,8 +95,8 @@ def test_cli_passes_weights_to_model_constructor(monkeypatch):
     observed = {}
 
     class FakeDFINE:
-        def __init__(self, model, *, weights="default"):
-            observed.update(model=model, weights=weights)
+        def __init__(self, model, *, task="detect", weights="default"):
+            observed.update(model=model, task=task, weights=weights)
 
         def predict(self, source, **kwargs):
             observed["source"] = source
@@ -108,7 +108,12 @@ def test_cli_passes_weights_to_model_constructor(monkeypatch):
 
     main(["dfine", "predict", "model=dfine_s", "weights=coco", "source=image.jpg"])
 
-    assert observed == {"model": "dfine_s", "weights": "coco", "source": "image.jpg"}
+    assert observed == {
+        "model": "dfine_s",
+        "task": "detect",
+        "weights": "coco",
+        "source": "image.jpg",
+    }
 
 
 def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
@@ -119,8 +124,8 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
             self.save_path = save_path
 
     class FakeDFINE:
-        def __init__(self, model, *, weights="default"):
-            observed.update(model=model, weights=weights)
+        def __init__(self, model, *, task="detect", weights="default"):
+            observed.update(model=model, task=task, weights=weights)
 
         def track(self, source, **kwargs):
             observed.update(source=source, kwargs=kwargs)
@@ -145,6 +150,7 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
 
     assert observed == {
         "model": "dfine_s",
+        "task": "detect",
         "weights": "default",
         "source": "video.mp4",
         "kwargs": {
@@ -162,11 +168,30 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
     assert output.count("Saved runs/track/exp/video.mp4") == 1
 
 
+def test_cli_passes_segment_task_to_model(monkeypatch):
+    observed = {}
+
+    class FakeDFINE:
+        def __init__(self, model, *, task="detect", weights="default"):
+            observed.update(model=model, task=task, weights=weights)
+
+        def predict(self, source, **kwargs):
+            return []
+
+    fake_module = types.ModuleType("dfine")
+    fake_module.DFINE = FakeDFINE
+    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+
+    main(["dfine", "predict", "model=dfine_s", "task=segment", "source=image.jpg"])
+
+    assert observed["task"] == "segment"
+
+
 def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
     observed = {}
 
     class FakeDFINE:
-        def __init__(self, model, *, weights="default"):
+        def __init__(self, model, *, task="detect", weights="default"):
             pass
 
         def track(self, source, **kwargs):
@@ -208,7 +233,7 @@ def test_track_cli_forwards_gstreamer_reconnect_options(monkeypatch):
     observed = {}
 
     class FakeDFINE:
-        def __init__(self, model, *, weights="default"):
+        def __init__(self, model, *, task="detect", weights="default"):
             pass
 
         def track(self, source, **kwargs):
@@ -259,7 +284,7 @@ def test_track_cli_builds_gstreamer_segment_sink(monkeypatch, capsys):
             observed.update(destination=destination, sink_kwargs=kwargs)
 
     class FakeDFINE:
-        def __init__(self, model, *, weights="default"):
+        def __init__(self, model, *, task="detect", weights="default"):
             pass
 
         def track(self, source, **kwargs):
@@ -428,7 +453,7 @@ def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
     observed = {}
 
     class FakeDFINE:
-        def __init__(self, model, *, weights="default"):
+        def __init__(self, model, *, task="detect", weights="default"):
             pass
 
         def track(self, source, **kwargs):
@@ -470,7 +495,7 @@ def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
 
 def test_track_cli_requires_source(monkeypatch, capsys):
     class FakeDFINE:
-        def __init__(self, model, *, weights="default"):
+        def __init__(self, model, *, task="detect", weights="default"):
             pass
 
     fake_module = types.ModuleType("dfine")
