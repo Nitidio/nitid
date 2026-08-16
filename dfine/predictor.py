@@ -13,7 +13,7 @@ import torch
 
 from dfine.media import Frame, FrameMetadata, FrameSink, OpenCVVideoSink
 from dfine.results import Boxes, Masks, Results
-from dfine.utils.ops import clip_boxes
+from dfine.utils.ops import clip_boxes, crop_masks_to_boxes
 from dfine.utils.sources import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, LoadSource
 
 
@@ -406,16 +406,7 @@ class DFINEPredictor:
                 else torch.zeros((0, h, w), device=masks.device)
             )
             masks = masks >= mask_threshold
-            if len(masks):
-                ys = torch.arange(h, device=masks.device)[None, :, None]
-                xs = torch.arange(w, device=masks.device)[None, None, :]
-                inside = (
-                    (xs >= boxes[:, 0, None, None])
-                    & (xs < boxes[:, 2, None, None])
-                    & (ys >= boxes[:, 1, None, None])
-                    & (ys < boxes[:, 3, None, None])
-                )
-                masks = masks & inside
+            masks = crop_masks_to_boxes(masks, boxes)
             result_masks = Masks(masks.to(torch.uint8), orig_shape=(h, w))
 
         if len(boxes):

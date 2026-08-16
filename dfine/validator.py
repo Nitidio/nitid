@@ -18,6 +18,7 @@ from torchvision.ops import box_iou
 from tqdm.auto import tqdm
 
 from dfine.utils.logging import LOGGER
+from dfine.utils.ops import crop_masks_to_boxes
 
 
 class CocoApi(Protocol):
@@ -216,7 +217,20 @@ class DFINEValidator:
                     )
                     mask = pred_scores > conf
                     selected = torch.where(mask)[0]
-                    for pred_index in selected.tolist():
+                    selected_masks = None
+                    if pred_masks is not None and selected.numel():
+                        selected_masks = torch.nn.functional.interpolate(
+                            pred_masks[selected, None].float(),
+                            size=(int(image_info["height"]), int(image_info["width"])),
+                            mode="bilinear",
+                            align_corners=False,
+                        )[:, 0]
+                        selected_masks = crop_masks_to_boxes(
+                            selected_masks >= 0.5,
+                            coco_boxes[selected],
+                        )
+
+                    for result_index, pred_index in enumerate(selected.tolist()):
                         box = coco_boxes[pred_index].tolist()
                         score = float(pred_scores[pred_index])
                         label = int(pred_labels[pred_index])
@@ -227,15 +241,11 @@ class DFINEValidator:
                             "bbox": [x1, y1, x2 - x1, y2 - y1],
                             "score": score,
                         }
-                        if pred_masks is not None:
-                            resized_mask = torch.nn.functional.interpolate(
-                                pred_masks[pred_index][None, None].float(),
-                                size=(int(image_info["height"]), int(image_info["width"])),
-                                mode="bilinear",
-                                align_corners=False,
-                            )[0, 0]
+                        if selected_masks is not None:
                             encoded = mask_utils.encode(
-                                np.asfortranarray((resized_mask >= 0.5).numpy().astype(np.uint8))
+                                np.asfortranarray(
+                                    selected_masks[result_index].numpy().astype(np.uint8)
+                                )
                             )
                             counts = encoded.get("counts")
                             if isinstance(counts, bytes):
