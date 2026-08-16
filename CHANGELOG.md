@@ -10,9 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Apache 2.0 LICENSE
 - Auto-download and runtime wrapping of D-FINE checkpoints
+- D-FINE instance segmentation through `DFINE(..., task="segment")`, including pretrained weights,
+  prediction masks, fine-tuning, COCO mask validation, and export
+- COCO polygon/RLE and YOLO polygon dataset support for instance-segmentation training
 - GitHub Actions CI (lint + unit tests)
 - Pre-commit hooks (ruff, mypy)
 - CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md
 - Issue and PR templates
 - README model comparison table and YOLO benchmark
 - Jupyter/Colab tutorial notebook
+
+### Changed
+- Integrated the D-FINE architecture, losses, and postprocessing into the installable package so
+  detection and instance segmentation use the same self-contained model core

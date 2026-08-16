@@ -301,7 +301,7 @@ re-raised.
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
 | TensorRT export | Supported | Supported (see [export.md](export.md)) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, ... | Always `"detect"` |
+| `model.task` | `"detect"`, `"segment"`, ... | `"detect"` or `"segment"` |
 
 ## CLI
 

@@ -208,7 +208,9 @@ Usage:
   dfine download [model=MODEL] [key=value ...]
 
 Options:
-  model=NAME          dfine_s, dfine_m, dfine_l, or dfine_x (default: dfine_l)
+  model=NAME          dfine_n (segment only), dfine_s, dfine_m, dfine_l, or dfine_x
+                      (default: dfine_l)
+  task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   output=PATH         Output directory or .pth file (default: current directory)
   force=BOOL          Overwrite an existing wrapped checkpoint (default: false)
@@ -218,6 +220,7 @@ wrapped .pth format. The filename includes the resolved weight variant.
 
 Examples:
   dfine download model=dfine_s
+  dfine download model=dfine_s task=segment
   dfine download model=dfine_s weights=coco
   dfine download model=dfine_m output=models
   dfine download model=dfine_l output=models/custom.pth force=true
@@ -227,10 +230,12 @@ Usage:
   dfine train model=MODEL data=DATA [key=value ...]
 
 Required:
-  data=PATH           Dataset YAML file using COCO-format annotations
+  data=PATH           Dataset YAML using COCO JSON or YOLO labels; segmentation
+                      requires polygon or RLE masks
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   epochs=INT          Number of training epochs (default: 50)
   imgsz=INT           Square training image size (default: 640)
@@ -285,16 +290,19 @@ Options:
 
 Example:
   dfine train model=dfine_l data=coco.yaml epochs=50 batch=16 mlflow=true
+  dfine train model=dfine_s task=segment data=instances.yaml epochs=50
 """,
     "val": """\
 Usage:
   dfine val model=MODEL data=DATA [key=value ...]
 
 Required:
-  data=PATH           Dataset YAML file using COCO-format annotations
+  data=PATH           Dataset YAML using COCO JSON or YOLO labels; segmentation
+                      requires polygon or RLE masks
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   imgsz=INT           Square validation image size (default: 640)
   batch=INT           Batch size (default: 16)
@@ -310,6 +318,7 @@ Options:
 
 Example:
   dfine val model=dfine_l data=coco.yaml split=val batch=16
+  dfine val model=dfine_s task=segment data=instances.yaml
 """,
     "export": """\
 Usage:
@@ -317,6 +326,7 @@ Usage:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
   imgsz=INT           Square export image size (default: 640)
@@ -336,6 +346,7 @@ Options:
 
 Examples:
   dfine export model=dfine_l format=onnx
+  dfine export model=dfine_s task=segment format=onnx
   dfine export model=dfine_l weights=coco format=openvino
   dfine export model=dfine_l format=tensorrt half=true
 """,
@@ -345,6 +356,7 @@ Usage:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   detailed=BOOL       Include per-layer parameter counts (default: false)
 
@@ -694,9 +706,9 @@ def main(argv: list[str] | None = None, report_dir: str | Path = "runs/bugreport
     command = argv[1].lower() if len(argv) > 1 else ""
     if not report_requested:
         if command == "bugreport":
+            parse_args(argv)
             from dfine.utils.reporting import write_standalone_report
 
-            parse_args(argv)
             path = write_standalone_report(report_dir)
             print(f"Bug report saved to {path}")
             return
