@@ -24,6 +24,21 @@ class _PerfectBoxGlobalMaskModel(nn.Module):
         return {"pred_logits": logits, "pred_boxes": boxes, "pred_masks": masks}
 
 
+class _SemanticGeometryModel(nn.Module):
+    """Record the geometry used while semantic validation runs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.eval_spatial_size = [640, 640]
+        self.forward_geometry = object()
+
+    def forward(self, images: torch.Tensor) -> dict[str, torch.Tensor]:
+        self.forward_geometry = self.eval_spatial_size
+        batch_size, _, height, width = images.shape
+        logits = torch.zeros((batch_size, 3, height, width), device=images.device)
+        return {"sem_seg_logits": logits}
+
+
 def test_restore_original_coordinates_reverses_dfine_square_resize():
     resized = torch.tensor([[10.0, 10.0, 50.0, 50.0]])
     restored = _restore_original_coordinates(
@@ -91,3 +106,27 @@ def test_semantic_confusion_matrix_ignores_void_and_excludes_absent_classes():
     assert metrics["pixel_accuracy"] == 0.75
     assert metrics["pixels"] == 4
     assert [row["class_id"] for row in metrics["per_class"]] == [0, 1]
+
+
+def test_semantic_validation_uses_dynamic_geometry_at_non_native_size(tiny_semantic_dataset):
+    model = _SemanticGeometryModel()
+    validator = DFINEValidator(
+        model,
+        {"task": "semantic"},
+        "cpu",
+        {0: "background", 1: "road", 2: "vehicle"},
+    )
+
+    metrics = validator.run(
+        data=tiny_semantic_dataset,
+        imgsz=32,
+        batch=2,
+        conf=0.001,
+        split="val",
+        verbose=False,
+        plots=False,
+    )
+
+    assert metrics["images"] == 2
+    assert model.forward_geometry is None
+    assert model.eval_spatial_size == [640, 640]

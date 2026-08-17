@@ -476,7 +476,7 @@ class DFINEValidator:
             unit="batch",
             disable=not (verbose if show_progress is None else show_progress),
         )
-        with torch.no_grad():
+        with _dynamic_eval_geometry(self.model, imgsz), torch.no_grad():
             for images, targets in progress:
                 outputs = self.model(images.to(self.device))
                 logits = outputs.get("sem_seg_logits")

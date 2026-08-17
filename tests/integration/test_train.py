@@ -157,6 +157,31 @@ def test_semantic_train_validation_and_checkpoint_reload_run_end_to_end(
     assert [row["epoch"] for row in resumed_metrics["history"]] == [1, 2]
 
 
+def test_semantic_validation_supports_non_native_image_size(
+    tiny_semantic_checkpoint, tiny_semantic_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    model = DFINE(
+        tiny_semantic_checkpoint,
+        task="semantic",
+        device="cpu",
+        verbose=False,
+    )
+    metrics = model.val(
+        data=tiny_semantic_dataset,
+        imgsz=32,
+        batch=2,
+        plots=False,
+        save_dir=tmp_path / "semantic_non_native_val",
+        verbose=False,
+    )
+
+    assert metrics["images"] == 2
+    assert 0.0 <= metrics["mIoU"] <= 1.0
+    assert 0.0 <= metrics["pixel_accuracy"] <= 1.0
+
+
 def test_repeated_train_calls_increment_run_directory(tiny_checkpoint, tiny_dataset, tmp_path):
     from dfine import DFINE
 
