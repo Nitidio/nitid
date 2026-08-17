@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 
 from .backbone import HGNetv2
-from .decoder import DFINETransformer
 from .encoder import HybridEncoder
 
 
@@ -19,7 +18,7 @@ class DFINEModel(nn.Module):
         self,
         backbone: HGNetv2,
         encoder: HybridEncoder,
-        decoder: DFINETransformer,
+        decoder: nn.Module,
     ) -> None:
         super().__init__()
         self.backbone = backbone

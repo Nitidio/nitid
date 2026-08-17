@@ -74,6 +74,30 @@ def test_save_checkpoint_canonicalizes_semantic_task_without_mutating_input(tmp_
     assert config["task"] == "sem_seg"
 
 
+def test_semantic_checkpoint_round_trip_builds_native_architecture(tmp_path):
+    from dfine.nn.configs import make_model_config
+    from dfine.nn.native_build import build_native_model_from_config
+
+    config = make_model_config("dfine_n", task="semantic", num_classes=3, image_size=(64, 64))
+    model = build_native_model_from_config(config)
+    path = tmp_path / "semantic_native.pth"
+    save_checkpoint(
+        path,
+        model,
+        cfg=config,
+        names={0: "road", 1: "vehicle", 2: "person"},
+    )
+
+    loaded, loaded_config, names = load_checkpoint(path)
+
+    assert loaded_config["task"] == "semantic"
+    assert loaded.decoder.__class__.__name__ == "SemSegDecoder"
+    assert names == {0: "road", 1: "vehicle", 2: "person"}
+    assert loaded.state_dict().keys() == model.state_dict().keys()
+    for name, value in loaded.state_dict().items():
+        assert torch.equal(value, model.state_dict()[name])
+
+
 def test_load_checkpoint_missing_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_checkpoint(tmp_path / "nonexistent.pth")

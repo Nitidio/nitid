@@ -31,7 +31,7 @@ from .ops import (
     weighting_function,
 )
 
-__all__ = ["DFINETransformer"]
+__all__ = ["DFINETransformer", "MaskDecoder", "SemSegDecoder"]
 
 
 class MLP(nn.Module):
@@ -404,6 +404,92 @@ class MaskDecoder(nn.Module):
         x = F.interpolate(x, scale_factor=2.0, mode="bilinear", align_corners=False)
         x = self.act(self.bn1(self.up_conv(x)))
         return x  # (B, out_ch, H/4, W/4)
+
+
+def _conv_gn_act(in_channels: int, out_channels: int) -> nn.Sequential:
+    """Build the convolution block used by the dense segmentation neck."""
+    return nn.Sequential(
+        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+        nn.GroupNorm(32, out_channels),
+        nn.ReLU(inplace=True),
+    )
+
+
+class SemSegDecoder(nn.Module):
+    """Fuse encoder features into dense per-pixel semantic logits.
+
+    ``mask_decoder`` deliberately retains the instance-segmentation module name,
+    allowing its feature-fusion weights to initialize semantic models. The neck,
+    classifier, and auxiliary head are semantic-specific and train from scratch.
+    """
+
+    def __init__(
+        self,
+        num_classes: int,
+        feat_channels: List[int],
+        mask_dim: int = 256,
+        mask_low_level_ch: Optional[int] = None,
+        neck_dim: int = 128,
+        dropout: float = 0.1,
+        aux: bool = True,
+    ) -> None:
+        super().__init__()
+        if num_classes < 1:
+            raise ValueError(f"num_classes must be positive, got {num_classes}")
+        if not feat_channels:
+            raise ValueError("feat_channels must contain at least one feature level")
+        if mask_dim % 32 != 0 or neck_dim % 32 != 0:
+            raise ValueError("mask_dim and neck_dim must be divisible by 32 for GroupNorm")
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError(f"dropout must be in [0, 1), got {dropout}")
+
+        self.num_classes = num_classes
+        input_channels = list(feat_channels)
+        if mask_low_level_ch is not None:
+            input_channels.insert(0, mask_low_level_ch)
+
+        self.mask_decoder = MaskDecoder(in_chs=input_channels, out_ch=mask_dim)
+        self.neck = nn.Sequential(
+            _conv_gn_act(mask_dim, neck_dim),
+            _conv_gn_act(neck_dim, neck_dim),
+        )
+        self.dropout = nn.Dropout2d(dropout)
+        self.classifier = nn.Conv2d(neck_dim, num_classes, kernel_size=1)
+        self.aux_head = (
+            nn.Sequential(
+                _conv_gn_act(feat_channels[0], neck_dim),
+                nn.Dropout2d(dropout),
+                nn.Conv2d(neck_dim, num_classes, kernel_size=1),
+            )
+            if aux
+            else None
+        )
+
+    def forward(
+        self,
+        feats: List[torch.Tensor],
+        targets: Optional[List[Dict[str, torch.Tensor]]] = None,
+        low_level_feat: Optional[torch.Tensor] = None,
+    ) -> Dict[str, torch.Tensor]:
+        del targets
+        mask_features = list(feats)
+        if low_level_feat is not None:
+            mask_features.insert(0, low_level_feat)
+
+        fused = self.mask_decoder(mask_features)
+        logits = self.classifier(self.dropout(self.neck(fused)))
+        logits = F.interpolate(logits, scale_factor=4.0, mode="bilinear", align_corners=False)
+        outputs = {"sem_seg_logits": logits}
+
+        if self.training and self.aux_head is not None:
+            auxiliary = self.aux_head(feats[0])
+            outputs["sem_seg_logits_aux"] = F.interpolate(
+                auxiliary,
+                size=logits.shape[-2:],
+                mode="bilinear",
+                align_corners=False,
+            )
+        return outputs
 
 
 class TransformerDecoder(nn.Module):

@@ -11,5 +11,5 @@ from dfine.nn.native_build import build_native_criterion_from_config
 
 
 def build_criterion(cfg: Mapping[str, Any]) -> nn.Module:
-    """Build the detection or instance-segmentation criterion from checkpoint config."""
+    """Build the task-specific criterion from checkpoint config."""
     return build_native_criterion_from_config(cfg)

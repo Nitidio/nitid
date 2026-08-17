@@ -1,4 +1,4 @@
-"""Construct the integrated D-FINE detection and instance-segmentation core.
+"""Construct the integrated D-FINE model core for every supported vision task.
 
 It accepts both native model-size settings and the legacy self-contained YAML
 configuration embedded in existing nitid checkpoints.
@@ -15,21 +15,13 @@ import torch.nn as nn
 
 from dfine.tasks import Task, normalize_task
 
-from .architecture import DFINEModel, DFINETransformer, HGNetv2, HybridEncoder
+from .architecture import DFINEModel, DFINETransformer, HGNetv2, HybridEncoder, SemSegDecoder
 from .configs import get_model_config
-from .losses import DFINECriterion, HungarianMatcher
+from .losses import DFINECriterion, HungarianMatcher, SemSegCriterion
 
 
 def _checkpoint_task(config: Mapping[str, Any]) -> Task:
     return normalize_task(str(config.get("task", "detect")))
-
-
-def _require_native_runtime(task: Task) -> None:
-    if task == "semantic":
-        raise NotImplementedError(
-            "Semantic segmentation is a recognized task, but its native model "
-            "and criterion are not integrated yet"
-        )
 
 
 def _component_config(config: Mapping[str, Any], key: str) -> dict[str, Any]:
@@ -64,15 +56,15 @@ def _compose_native_model(
     in_channels: int,
     device: str | torch.device | None,
 ) -> DFINEModel:
-    _require_native_runtime(task)
     enable_mask_head = task == "segment"
     backbone_config["pretrained"] = False
     encoder_config["eval_spatial_size"] = image_size
-    decoder_config["eval_spatial_size"] = image_size
-    decoder_config["enable_mask_head"] = enable_mask_head
+    if task != "semantic":
+        decoder_config["eval_spatial_size"] = image_size
+        decoder_config["enable_mask_head"] = enable_mask_head
 
     encoder_strides = encoder_config["feat_strides"]
-    if enable_mask_head and 8 not in encoder_strides:
+    if (enable_mask_head or task == "semantic") and 8 not in encoder_strides:
         return_indices = backbone_config["return_idx"]
         if 1 not in return_indices:
             backbone_config["return_idx"] = [1, *return_indices]
@@ -82,7 +74,11 @@ def _compose_native_model(
 
     backbone = HGNetv2(in_channels=in_channels, **backbone_config)
     encoder = HybridEncoder(**encoder_config)
-    decoder = DFINETransformer(num_classes=num_classes, **decoder_config)
+    decoder: nn.Module
+    if task == "semantic":
+        decoder = SemSegDecoder(num_classes=num_classes, **decoder_config)
+    else:
+        decoder = DFINETransformer(num_classes=num_classes, **decoder_config)
     native_model = DFINEModel(backbone=backbone, encoder=encoder, decoder=decoder)
     return native_model.to(device) if device is not None else native_model
 
@@ -103,13 +99,18 @@ def build_native_model(
         raise ValueError(f"in_channels must be 3 or 4, got {in_channels}")
 
     resolved_task = normalize_task(task)
-    _require_native_runtime(resolved_task)
     config = get_model_config(model)
+    decoder_config = config["DFINETransformer"]
+    if resolved_task == "semantic":
+        decoder_config = {
+            "feat_channels": decoder_config["feat_channels"],
+            "mask_dim": decoder_config["mask_dim"],
+        }
 
     return _compose_native_model(
         backbone_config=config["HGNetv2"],
         encoder_config=config["HybridEncoder"],
-        decoder_config=config["DFINETransformer"],
+        decoder_config=decoder_config,
         num_classes=num_classes,
         task=resolved_task,
         image_size=image_size,
@@ -131,12 +132,26 @@ def build_native_model_from_config(
     if not isinstance(in_channels, int) or in_channels not in (3, 4):
         raise ValueError("D-FINE config in_channels must be 3 or 4")
 
+    task = _checkpoint_task(config)
+    decoder_key = "SemSegDecoder" if task == "semantic" else "DFINETransformer"
+    # Older semantic configs stored dense-head inputs under DFINETransformer.
+    # Retain that read path for checkpoint compatibility.
+    if decoder_key not in config and task == "semantic":
+        decoder_key = "DFINETransformer"
+    decoder_config = _component_config(config, decoder_key)
+    if task == "semantic" and decoder_key == "DFINETransformer":
+        decoder_config = {
+            key: decoder_config[key]
+            for key in ("feat_channels", "mask_dim", "mask_low_level_ch")
+            if key in decoder_config
+        }
+
     return _compose_native_model(
         backbone_config=_component_config(config, "HGNetv2"),
         encoder_config=_component_config(config, "HybridEncoder"),
-        decoder_config=_component_config(config, "DFINETransformer"),
+        decoder_config=decoder_config,
         num_classes=num_classes,
-        task=_checkpoint_task(config),
+        task=task,
         image_size=_validated_image_size(config),
         in_channels=in_channels,
         device=device,
@@ -149,13 +164,23 @@ def build_native_criterion(
     num_classes: int,
     task: str,
     label_smoothing: float = 0.0,
+    ignore_index: int = 255,
+    class_weights: list[float] | None = None,
 ) -> nn.Module:
-    """Build the task-aware D-FINE detection/instance-segmentation criterion."""
+    """Build the task-aware D-FINE criterion."""
     if num_classes < 1:
         raise ValueError(f"num_classes must be positive, got {num_classes}")
     resolved_task = normalize_task(task)
-    _require_native_runtime(resolved_task)
     config = get_model_config(model)
+
+    if resolved_task == "semantic":
+        return SemSegCriterion(
+            config["SemSegCriterion"]["weight_dict"],
+            num_classes=num_classes,
+            ignore_index=ignore_index,
+            class_weights=class_weights,
+            label_smoothing=label_smoothing,
+        )
 
     criterion_config = config["DFINECriterion"]
     if resolved_task == "segment" and "masks" not in criterion_config["losses"]:
@@ -177,7 +202,10 @@ def build_native_criterion_from_config(config: Mapping[str, Any]) -> nn.Module:
         raise ValueError("D-FINE config num_classes must be a positive integer")
 
     task = _checkpoint_task(config)
-    _require_native_runtime(task)
+    if task == "semantic":
+        criterion_config = _component_config(config, "SemSegCriterion")
+        return SemSegCriterion(num_classes=num_classes, **criterion_config)
+
     criterion_config = _component_config(config, "DFINECriterion")
     matcher_value = criterion_config.pop("matcher", config.get("matcher"))
     if not isinstance(matcher_value, Mapping):

@@ -259,6 +259,14 @@ def make_model_config(
     semantic_criterion = model_config.pop("SemSegCriterion")
     matcher = model_config.pop("matcher")
     if resolved_task == "semantic":
+        transformer_config = model_config.pop("DFINETransformer")
+        semantic_decoder = {
+            "feat_channels": transformer_config["feat_channels"],
+            "mask_dim": transformer_config["mask_dim"],
+            "neck_dim": 128,
+            "dropout": 0.1,
+            "aux": True,
+        }
         semantic_criterion["ignore_index"] = ignore_index
         return {
             "task": resolved_task,
@@ -273,6 +281,7 @@ def make_model_config(
                 "decoder": "SemSegDecoder",
             },
             **model_config,
+            "SemSegDecoder": semantic_decoder,
             "SemSegCriterion": semantic_criterion,
             "SemanticSegmentation": {
                 "ignore_index": ignore_index,
