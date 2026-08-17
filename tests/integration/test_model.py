@@ -33,11 +33,17 @@ def test_invalid_task_is_rejected_before_loading():
 
 
 @pytest.mark.parametrize("task", ["semantic", "sem_seg"])
-def test_semantic_task_is_recognized_but_runtime_is_not_enabled(task):
+def test_semantic_checkpoint_loads_while_prediction_remains_deferred(
+    task, tiny_semantic_checkpoint
+):
     from dfine import DFINE
 
-    with pytest.raises(NotImplementedError, match="recognized task"):
-        DFINE("dfine_s", task=task, device="cpu", verbose=False)
+    model = DFINE(tiny_semantic_checkpoint, task=task, device="cpu", verbose=False)
+
+    assert model.task == "semantic"
+    assert model._model.decoder.__class__.__name__ == "SemSegDecoder"
+    with pytest.raises(NotImplementedError, match="prediction"):
+        model.predict(np.zeros((64, 64, 3), dtype=np.uint8))
 
 
 def test_model_device_property(tiny_checkpoint):

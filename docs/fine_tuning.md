@@ -13,6 +13,8 @@ uv sync --extra train
 nitid accepts either **COCO JSON** annotations or **YOLO `.txt`** labels for
 detection and instance segmentation.
 
+Semantic segmentation instead uses one dense class-ID PNG mask per image.
+
 ### COCO JSON
 
 Your dataset directory can look like:
@@ -79,6 +81,43 @@ class x1 y1 x2 y2 x3 y3 ...
 
 Bounding-box-only annotations are rejected when training a segmentation model,
 preventing an accidental all-zero mask training run.
+
+### Dense semantic masks
+
+For `task="semantic"`, image and mask paths mirror one another:
+
+```text
+my_semantic_dataset/
+  images/
+    train/example.jpg
+    val/example.jpg
+  labels/
+    train/example.png
+    val/example.png
+```
+
+Each PNG must be a single-channel integer class map with the same dimensions as
+its image. Pixel values are contiguous class IDs from `0` through `nc - 1`.
+The configured `ignore_index` (255 by default) marks pixels excluded from loss
+and validation metrics. Dense masks are always resized with nearest-neighbor
+sampling; padding introduced by geometric augmentation is filled with the
+ignore index.
+
+```yaml
+path: /data/my_semantic_dataset
+train: images/train
+val: images/val
+nc: 3
+names:
+  0: background
+  1: road
+  2: vehicle
+ignore_index: 255
+```
+
+When image and mask directories do not follow the mirrored `images`/`labels`
+layout, set `train_masks:` and `val_masks:` explicitly. Semantic training does
+not accept instance-only `mosaic`, `mixup`, `classes`, or `single_cls` options.
 
 ### Data YAML
 
@@ -176,6 +215,15 @@ segment_metrics = segmenter.train(
     epochs=50,
 )
 # segment_metrics["mask_mAP50"], segment_metrics["mask_mAP50-95"]
+
+# Semantic models initialize shared features from the matching COCO
+# instance-segmentation checkpoint. The dense classifiers train on your taxonomy.
+semantic = DFINE("dfine_s", task="semantic")
+semantic_metrics = semantic.train(
+    data="configs/datasets/my_semantic_dataset.yml",
+    epochs=50,
+)
+# semantic_metrics["mIoU"], semantic_metrics["pixel_accuracy"]
 
 def print_epoch_end(trainer):
     row = trainer.current_row

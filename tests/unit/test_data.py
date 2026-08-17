@@ -1,6 +1,7 @@
 """Unit tests for dataset-format detection and YOLO conversion."""
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -20,8 +21,10 @@ from dfine.utils.data import (
     _dataset_cache_dir,
     _load_yolo_annotations,
     build_detection_dataloader,
+    build_semantic_dataloader,
     normalize_names,
     resolve_detection_split,
+    resolve_semantic_split,
 )
 
 
@@ -132,6 +135,78 @@ def test_segment_loader_keeps_masks_aligned_through_augmentations(tiny_dataset):
     assert target["masks"].shape[1:] == (64, 64)
     assert target["masks"].dtype == torch.uint8
     assert target["masks"].sum() > 0
+
+
+def test_semantic_loader_preserves_dense_class_ids(tiny_semantic_dataset):
+    loader = build_semantic_dataloader(
+        tiny_semantic_dataset,
+        "train",
+        64,
+        2,
+        seed=4,
+        augment=AugmentationConfig(
+            fliplr=1.0,
+            scale=0.2,
+            translate=0.1,
+            crop=0.2,
+            hsv_h=0.0,
+            hsv_s=0.0,
+            hsv_v=0.0,
+        ),
+    )
+
+    images, targets = next(iter(loader))
+
+    assert images.shape == (2, 3, 64, 64)
+    for target in targets:
+        assert target["sem_mask"].shape == (64, 64)
+        assert target["sem_mask"].dtype == torch.int64
+        assert "orig_mask" not in target
+        assert set(target["sem_mask"].unique().tolist()) <= {0, 1, 2, 255}
+
+    _, validation_targets = next(
+        iter(build_semantic_dataloader(tiny_semantic_dataset, "val", 64, 2))
+    )
+    assert all(target["orig_mask"].shape == (48, 64) for target in validation_targets)
+
+
+def test_semantic_split_infers_mirrored_labels_directory(tiny_semantic_dataset):
+    spec = resolve_semantic_split(tiny_semantic_dataset, "val")
+    assert spec.img_dir.name == "val"
+    assert spec.img_dir.parent.name == "images"
+    assert spec.mask_dir.parent.name == "labels"
+
+
+def test_semantic_loader_rejects_instance_only_augmentations(tiny_semantic_dataset):
+    with pytest.raises(ValueError, match="mosaic or mixup"):
+        build_semantic_dataloader(
+            tiny_semantic_dataset,
+            "train",
+            64,
+            1,
+            augment=AugmentationConfig(mosaic=1.0),
+        )
+
+
+def test_semantic_loader_rejects_invalid_class_ids(tiny_semantic_dataset, tmp_path):
+    import shutil
+
+    source = Path(tiny_semantic_dataset).parent
+    copied = tmp_path / "semantic"
+    shutil.copytree(source, copied)
+    copied_yaml = copied / Path(tiny_semantic_dataset).name
+    config = yaml.safe_load(copied_yaml.read_text())
+    config["path"] = str(copied)
+    copied_yaml.write_text(yaml.safe_dump(config))
+    spec = resolve_semantic_split(copied_yaml, "val")
+    mask_path = sorted(spec.mask_dir.glob("*.png"))[0]
+    mask = np.asarray(Image.open(mask_path)).copy()
+    mask[4, 4] = 17
+    Image.fromarray(mask).save(mask_path)
+
+    loader = build_semantic_dataloader(copied_yaml, "val", 64, 1)
+    with pytest.raises(ValueError, match="class ID 17"):
+        next(iter(loader))
 
 
 def test_normalize_names_accepts_list():

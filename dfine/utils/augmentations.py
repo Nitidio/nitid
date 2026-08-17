@@ -1,4 +1,4 @@
-"""Deterministic, bounding-box-aware detection augmentations."""
+"""Deterministic geometry-aware augmentations for D-FINE vision tasks."""
 
 from __future__ import annotations
 
@@ -89,6 +89,14 @@ def resize_masks(masks: torch.Tensor, size: int) -> torch.Tensor:
     )
 
 
+def resize_semantic_mask(mask: torch.Tensor, size: int | tuple[int, int]) -> torch.Tensor:
+    """Resize an integer ``[H,W]`` class map using nearest-neighbor sampling."""
+    output_size = (size, size) if isinstance(size, int) else size
+    return torch_f.interpolate(mask[None, None].float(), size=output_size, mode="nearest")[0, 0].to(
+        mask.dtype
+    )
+
+
 def horizontal_flip(image: Image.Image, boxes: torch.Tensor) -> tuple[Image.Image, torch.Tensor]:
     """Flip an image and absolute xyxy boxes horizontally."""
     width, _ = image.size
@@ -146,6 +154,38 @@ def scale_translate_instances(
     return canvas, _clip_boxes(result, width, height), output_masks
 
 
+def scale_translate_semantic(
+    image: Image.Image,
+    mask: torch.Tensor,
+    scale_gain: float,
+    translate_gain: float,
+    rng: random.Random,
+    ignore_index: int,
+    fill: tuple[int, int, int] = (114, 114, 114),
+) -> tuple[Image.Image, torch.Tensor]:
+    """Scale and translate an image and dense class map on a fixed canvas."""
+    width, height = image.size
+    factor = rng.uniform(1.0 - scale_gain, 1.0 + scale_gain)
+    new_w, new_h = max(1, round(width * factor)), max(1, round(height * factor))
+    tx = round(rng.uniform(-translate_gain, translate_gain) * width)
+    ty = round(rng.uniform(-translate_gain, translate_gain) * height)
+    left, top = (width - new_w) // 2 + tx, (height - new_h) // 2 + ty
+
+    resized_image = image.resize((new_w, new_h), Image.Resampling.BILINEAR)
+    output_image = Image.new("RGB", (width, height), fill)
+    output_image.paste(resized_image, (left, top))
+    resized_mask = resize_semantic_mask(mask, (new_h, new_w))
+    output_mask = torch.full((height, width), ignore_index, dtype=mask.dtype)
+
+    dst_x1, dst_y1 = max(left, 0), max(top, 0)
+    dst_x2, dst_y2 = min(left + new_w, width), min(top + new_h, height)
+    if dst_x2 > dst_x1 and dst_y2 > dst_y1:
+        src_x1, src_y1 = dst_x1 - left, dst_y1 - top
+        src_x2, src_y2 = src_x1 + dst_x2 - dst_x1, src_y1 + dst_y2 - dst_y1
+        output_mask[dst_y1:dst_y2, dst_x1:dst_x2] = resized_mask[src_y1:src_y2, src_x1:src_x2]
+    return output_image, output_mask
+
+
 def random_crop_instances(
     image: Image.Image,
     boxes: torch.Tensor,
@@ -174,6 +214,26 @@ def random_crop_instances(
         result[keep],
         cropped_masks[keep],
         keep,
+    )
+
+
+def random_crop_semantic(
+    image: Image.Image,
+    mask: torch.Tensor,
+    gain: float,
+    rng: random.Random,
+) -> tuple[Image.Image, torch.Tensor]:
+    """Apply the same random edge crop to an image and dense class map."""
+    width, height = image.size
+    left = round(rng.uniform(0.0, gain) * width)
+    right = round(rng.uniform(0.0, gain) * width)
+    top = round(rng.uniform(0.0, gain) * height)
+    bottom = round(rng.uniform(0.0, gain) * height)
+    if left + right >= width or top + bottom >= height:
+        return image, mask
+    return (
+        image.crop((left, top, width - right, height - bottom)),
+        mask[top : height - bottom, left : width - right],
     )
 
 

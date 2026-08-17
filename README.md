@@ -24,7 +24,7 @@ Example prediction using D-FINE-S on a street image.
 - Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented recording
 - ONVIF camera discovery, profile selection, and secure RTSP resolution
 - Detection and instance segmentation with COCO-pretrained weights
-- Fine-tuning and COCO box/mask validation
+- Fine-tuning and validation for detection, instance masks, and dense semantic masks
 - ONNX, TorchScript and TensorRT export
 
 ## Installation
@@ -93,6 +93,18 @@ model.train(
 )
 # returns final metrics plus per-epoch history in metrics["history"]
 ```
+
+Semantic training and mIoU validation use dense class-ID PNG masks:
+
+```python
+semantic = DFINE("dfine_s", task="semantic")
+metrics = semantic.train(data="semantic_dataset.yml", epochs=50)
+print(metrics["mIoU"], metrics["pixel_accuracy"])
+```
+
+Semantic prediction and export will be enabled in a subsequent release phase.
+See the [fine-tuning guide](docs/fine_tuning.md#dense-semantic-masks) for the
+dataset layout and `ignore_index` contract.
 
 ### Tracking
 
@@ -202,7 +214,7 @@ For the full guide:
 
 ## Official Models
 
-> 💡 Detection defaults to Objects365→COCO weights for S/M/L/X. `task="segment"` selects COCO-pretrained instance-segmentation weights for N/S/M/L/X.
+> 💡 Detection defaults to Objects365→COCO weights for S/M/L/X. `task="segment"` selects COCO-pretrained instance-segmentation weights for N/S/M/L/X. `task="semantic"` initializes its shared feature extractor and mask fuser from the matching instance checkpoint while its dense classifier starts fresh.
 
 Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 

@@ -19,6 +19,14 @@ or split-first:
     path: /data/my_dataset
     train: train/images                 # train/labels
     val:   val/images
+
+Semantic masks:
+    path: /data/my_dataset
+    train: images/train
+    val:   images/val
+    train_masks: labels/train          # optional when inferable from images path
+    val_masks: labels/val
+    ignore_index: 255
 """
 
 from __future__ import annotations
@@ -35,6 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
 import torch
 import yaml
 from PIL import Image
@@ -47,11 +56,14 @@ from dfine.utils.augmentations import (
     horizontal_flip_masks,
     random_crop,
     random_crop_instances,
+    random_crop_semantic,
     resize_masks,
+    resize_semantic_mask,
     sanitize,
     sanitize_instances,
     scale_translate,
     scale_translate_instances,
+    scale_translate_semantic,
     stretch_resize,
     to_tensor,
 )
@@ -66,6 +78,14 @@ class DetectionSplitSpec:
     img_dir: Path
     ann_file: Path
     label_dir: Path | None = None
+
+
+@dataclass(frozen=True)
+class SemanticSplitSpec:
+    """Resolved image and dense-mask directories for one semantic split."""
+
+    img_dir: Path
+    mask_dir: Path
 
 
 def load_data_yaml(path: str | Path) -> dict:
@@ -116,6 +136,177 @@ def resolve_detection_split(data: str | Path, split: str) -> DetectionSplitSpec:
         "annotations/instances_*.json) or YOLO labels beside the images "
         "(e.g. images/train + labels/train, or train/images + train/labels)."
     )
+
+
+def resolve_semantic_split(data: str | Path, split: str) -> SemanticSplitSpec:
+    """Resolve a semantic split using explicit mask paths or images/labels mirroring."""
+    cfg = load_data_yaml(data)
+    if split not in cfg:
+        raise KeyError(f"Data YAML does not define split {split!r}")
+    root_value = cfg.get("path")
+    if not isinstance(root_value, (str, Path)):
+        raise ValueError("Data YAML must define a dataset 'path'")
+    root = Path(root_value).expanduser()
+    if not root.is_absolute():
+        root = (Path(data).resolve().parent / root).resolve()
+
+    split_value = cfg[split]
+    if not isinstance(split_value, (str, Path)):
+        raise ValueError(f"Data YAML {split!r} must be a directory path")
+    img_dir = root / split_value
+    mask_value = cfg.get(f"{split}_masks")
+    if mask_value is not None:
+        if not isinstance(mask_value, (str, Path)):
+            raise ValueError(f"Data YAML {split}_masks must be a directory path")
+        mask_dir = root / mask_value
+    else:
+        relative = Path(split_value)
+        parts = list(relative.parts)
+        if "images" in parts:
+            parts[parts.index("images")] = "labels"
+            mask_dir = root / Path(*parts)
+        elif relative.name == "images":
+            mask_dir = root / relative.parent / "labels"
+        else:
+            mask_dir = root / "labels" / relative.name
+
+    if not img_dir.is_dir():
+        raise FileNotFoundError(f"Semantic image directory not found: {img_dir}")
+    if not mask_dir.is_dir():
+        raise FileNotFoundError(f"Semantic mask directory not found: {mask_dir}")
+    return SemanticSplitSpec(img_dir=img_dir, mask_dir=mask_dir)
+
+
+class SemanticSegmentationDataset(Dataset):
+    """Image/dense-PNG pairs for semantic segmentation.
+
+    Every mask is a single-channel integer class map. Its relative path mirrors
+    the image path and its suffix is always ``.png``.
+    """
+
+    def __init__(
+        self,
+        spec: SemanticSplitSpec,
+        imgsz: int,
+        num_classes: int,
+        ignore_index: int = 255,
+        cache: bool | str = False,
+        augment: AugmentationConfig | None = None,
+        seed: int = 0,
+        retain_original_mask: bool = False,
+    ) -> None:
+        if imgsz < 1:
+            raise ValueError(f"imgsz must be positive, got {imgsz}")
+        if num_classes < 1:
+            raise ValueError(f"num_classes must be positive, got {num_classes}")
+        if 0 <= ignore_index < num_classes:
+            raise ValueError(
+                f"ignore_index={ignore_index} overlaps valid class IDs [0, {num_classes - 1}]"
+            )
+
+        self.spec = spec
+        self.imgsz = imgsz
+        self.num_classes = num_classes
+        self.ignore_index = ignore_index
+        self.augment = augment
+        self.seed = seed
+        self.retain_original_mask = retain_original_mask
+        self.epoch = 0
+        self.mosaic_enabled = False
+        self.image_paths = sorted(
+            path for path in spec.img_dir.rglob("*") if path.suffix.lower() in IMAGE_SUFFIXES
+        )
+        if not self.image_paths:
+            raise FileNotFoundError(f"No supported images found in semantic split: {spec.img_dir}")
+        self.mask_paths = [
+            spec.mask_dir / path.relative_to(spec.img_dir).with_suffix(".png")
+            for path in self.image_paths
+        ]
+        missing = [path for path in self.mask_paths if not path.is_file()]
+        if missing:
+            preview = ", ".join(str(path) for path in missing[:3])
+            suffix = " ..." if len(missing) > 3 else ""
+            raise FileNotFoundError(f"Missing {len(missing)} semantic mask(s): {preview}{suffix}")
+
+        self.cache = cache
+        self._cache: dict[int, tuple[Image.Image, torch.Tensor]] = {}
+        if cache is True or str(cache).lower() == "ram":
+            for index in range(len(self.image_paths)):
+                self._cache[index] = self._load_pair(index)
+        elif cache not in (False, None, "false"):
+            raise ValueError("cache must be False, True, or 'ram'")
+
+    def __len__(self) -> int:
+        return len(self.image_paths)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        cached = self._cache.get(index)
+        image, original_mask = self._load_pair(index) if cached is None else cached
+        image = image.copy()
+        original_mask = original_mask.clone()
+        original_height, original_width = original_mask.shape
+        mask = resize_semantic_mask(original_mask, self.imgsz)
+        image = image.resize((self.imgsz, self.imgsz), Image.Resampling.BILINEAR)
+
+        rng = random.Random(self.seed + self.epoch * max(len(self), 1) + index)
+        cfg = self.augment
+        if cfg and cfg.enabled:
+            if cfg.fliplr and rng.random() < cfg.fliplr:
+                image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+                mask = torch.flip(mask, dims=[1])
+            if cfg.scale or cfg.translate:
+                image, mask = scale_translate_semantic(
+                    image,
+                    mask,
+                    cfg.scale,
+                    cfg.translate,
+                    rng,
+                    self.ignore_index,
+                )
+            if cfg.crop and rng.random() < cfg.crop:
+                image, mask = random_crop_semantic(image, mask, cfg.crop, rng)
+                image = image.resize((self.imgsz, self.imgsz), Image.Resampling.BILINEAR)
+                mask = resize_semantic_mask(mask, self.imgsz)
+            image = color_jitter_hsv(image, cfg, rng)
+
+        target = {
+            "sem_mask": mask.long(),
+            "orig_size": torch.tensor([original_height, original_width], dtype=torch.long),
+            "image_id": torch.tensor([index], dtype=torch.long),
+        }
+        if self.retain_original_mask:
+            target["orig_mask"] = original_mask.long()
+        return to_tensor(image), target
+
+    def set_epoch(self, epoch: int, mosaic: bool = True) -> None:
+        del mosaic
+        self.epoch = epoch
+
+    def _load_pair(self, index: int) -> tuple[Image.Image, torch.Tensor]:
+        with Image.open(self.image_paths[index]) as image_file:
+            image = image_file.convert("RGB").copy()
+        with Image.open(self.mask_paths[index]) as mask_file:
+            mask_array = np.asarray(mask_file).copy()
+        if mask_array.ndim != 2 or not np.issubdtype(mask_array.dtype, np.integer):
+            raise ValueError(
+                f"Semantic mask must be a single-channel integer image: {self.mask_paths[index]}"
+            )
+        if mask_array.shape != (image.height, image.width):
+            raise ValueError(
+                "Semantic image and mask dimensions differ for "
+                f"{self.image_paths[index]}: image={(image.height, image.width)}, "
+                f"mask={mask_array.shape}"
+            )
+        invalid = (mask_array != self.ignore_index) & (
+            (mask_array < 0) | (mask_array >= self.num_classes)
+        )
+        if invalid.any():
+            invalid_id = int(mask_array[invalid][0])
+            raise ValueError(
+                f"Semantic mask {self.mask_paths[index]} contains class ID {invalid_id}; "
+                f"expected [0, {self.num_classes - 1}] or ignore_index={self.ignore_index}"
+            )
+        return image, torch.from_numpy(mask_array.astype(np.int64, copy=False))
 
 
 class CocoFinetuneDataset(Dataset):
@@ -370,6 +561,64 @@ def build_detection_dataloader(
         count = max(1, int(len(base_dataset) * fraction))
         generator = torch.Generator().manual_seed(seed)
         indices = torch.randperm(len(base_dataset), generator=generator)[:count].tolist()
+        dataset = Subset(base_dataset, indices)
+        dataset_size = count
+
+    generator = torch.Generator().manual_seed(seed)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=split == "train",
+        num_workers=workers,
+        collate_fn=_collate,
+        drop_last=split == "train" and dataset_size >= batch_size,
+        generator=generator,
+        worker_init_fn=_seed_worker if workers > 0 and deterministic else None,
+    )
+
+
+def build_semantic_dataloader(
+    data: str | Path,
+    split: str,
+    imgsz: int,
+    batch_size: int,
+    spec: SemanticSplitSpec | None = None,
+    workers: int = 0,
+    cache: bool | str = False,
+    seed: int = 0,
+    deterministic: bool = True,
+    fraction: float = 1.0,
+    augment: AugmentationConfig | None = None,
+) -> DataLoader:
+    """Build a semantic loader that preserves integer class maps."""
+    cfg = load_data_yaml(data)
+    names = normalize_names(cfg)
+    ignore_index = cfg.get("ignore_index", 255)
+    if isinstance(ignore_index, bool) or not isinstance(ignore_index, int):
+        raise ValueError("Data YAML ignore_index must be an integer")
+    if ignore_index < 0:
+        raise ValueError("Data YAML ignore_index must be non-negative")
+    if augment and augment.enabled and (augment.mosaic > 0 or augment.mixup > 0):
+        raise ValueError("Semantic training does not support mosaic or mixup augmentations")
+
+    base_dataset = SemanticSegmentationDataset(
+        spec=spec or resolve_semantic_split(data, split),
+        imgsz=imgsz,
+        num_classes=len(names),
+        ignore_index=ignore_index,
+        cache=cache,
+        augment=augment if split == "train" else None,
+        seed=seed,
+        retain_original_mask=split != "train",
+    )
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError("fraction must be in the range (0, 1]")
+    dataset: Dataset = base_dataset
+    dataset_size = len(base_dataset)
+    if fraction < 1.0:
+        count = max(1, int(dataset_size * fraction))
+        subset_generator = torch.Generator().manual_seed(seed)
+        indices = torch.randperm(dataset_size, generator=subset_generator)[:count].tolist()
         dataset = Subset(base_dataset, indices)
         dataset_size = count
 

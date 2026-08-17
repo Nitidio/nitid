@@ -3,7 +3,12 @@
 import torch
 import torch.nn as nn
 
-from dfine.validator import DFINEValidator, _dynamic_eval_geometry, _restore_original_coordinates
+from dfine.validator import (
+    DFINEValidator,
+    SemanticConfusionMatrix,
+    _dynamic_eval_geometry,
+    _restore_original_coordinates,
+)
 
 
 class _PerfectBoxGlobalMaskModel(nn.Module):
@@ -71,3 +76,18 @@ def test_segment_validation_crops_masks_to_predicted_boxes(tiny_dataset):
     assert metrics["mAP50"] > 0.99
     assert metrics["mask_mAP50"] > 0.99
     assert metrics["mask_mAP50-95"] > 0.99
+
+
+def test_semantic_confusion_matrix_ignores_void_and_excludes_absent_classes():
+    confusion = SemanticConfusionMatrix(num_classes=3, ignore_index=255)
+    target = torch.tensor([[0, 0, 1], [1, 255, 255]])
+    prediction = torch.tensor([[0, 0, 2], [1, 1, 2]])
+
+    confusion.update(prediction, target)
+    metrics = confusion.compute({0: "background", 1: "road", 2: "vehicle"})
+
+    # IoU(background)=1, IoU(road)=1/2; class 2 is absent in GT and excluded.
+    assert metrics["mIoU"] == 0.75
+    assert metrics["pixel_accuracy"] == 0.75
+    assert metrics["pixels"] == 4
+    assert [row["class_id"] for row in metrics["per_class"]] == [0, 1]

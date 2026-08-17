@@ -64,7 +64,7 @@ segmenter = DFINE("dfine_s", task="segment", device="cuda:0")
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
 | `model`   | `str \| Path` | `"dfine_l"` | Wrapped checkpoint path or architecture name (`dfine_n` through `dfine_x`; detection pretrained defaults are available for S/M/L/X and segmentation for N/S/M/L/X) |
-| `task` | `str` | `"detect"` | `"detect"` or `"segment"`. Must match an explicit checkpoint's embedded task. |
+| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, or `"semantic"` (`"sem_seg"` alias). Must match an explicit checkpoint's embedded task. Semantic training and validation are available; prediction and export are not yet enabled. |
 | `weights` | `str` | `"default"` | Detection: `"default"`/`"obj2coco"` or `"coco"`. Segmentation: `"default"`/`"coco"`. Do not combine a non-default value with a checkpoint path. |
 | `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
 | `verbose` | `bool`| `True`  | Print load summary |

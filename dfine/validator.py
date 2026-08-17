@@ -54,6 +54,66 @@ PerClassRow = TypedDict(
 )
 
 
+class SemanticConfusionMatrix:
+    """Streaming pixel confusion matrix with ignored-label handling."""
+
+    def __init__(self, num_classes: int, ignore_index: int = 255) -> None:
+        if num_classes < 1:
+            raise ValueError(f"num_classes must be positive, got {num_classes}")
+        self.num_classes = num_classes
+        self.ignore_index = ignore_index
+        self.matrix = torch.zeros((num_classes, num_classes), dtype=torch.int64)
+
+    @torch.no_grad()
+    def update(self, prediction: torch.Tensor, target: torch.Tensor) -> None:
+        if prediction.shape != target.shape:
+            raise ValueError(
+                "Semantic prediction and target shapes must match; "
+                f"got {tuple(prediction.shape)} and {tuple(target.shape)}"
+            )
+        valid = target != self.ignore_index
+        target_values = target[valid].long()
+        prediction_values = prediction[valid].long()
+        if target_values.numel() == 0:
+            return
+        if target_values.min() < 0 or target_values.max() >= self.num_classes:
+            raise ValueError("Semantic target contains a class ID outside the configured taxonomy")
+        if prediction_values.min() < 0 or prediction_values.max() >= self.num_classes:
+            raise ValueError(
+                "Semantic prediction contains a class ID outside the configured taxonomy"
+            )
+        indices = target_values * self.num_classes + prediction_values
+        counts = torch.bincount(indices, minlength=self.num_classes**2)
+        self.matrix += counts.reshape(self.num_classes, self.num_classes).cpu()
+
+    def compute(self, names: dict[int, str]) -> dict[str, object]:
+        matrix = self.matrix.double()
+        true_positive = matrix.diag()
+        ground_truth = matrix.sum(dim=1)
+        union = ground_truth + matrix.sum(dim=0) - true_positive
+        present = ground_truth > 0
+        iou = true_positive / union.clamp(min=1)
+        mean_iou = float(iou[present].mean()) if present.any() else 0.0
+        pixel_accuracy = float(true_positive.sum() / matrix.sum().clamp(min=1))
+        per_class = [
+            {
+                "class_id": class_id,
+                "name": names.get(class_id, str(class_id)),
+                "pixels": int(ground_truth[class_id]),
+                "iou": float(iou[class_id]),
+            }
+            for class_id in range(self.num_classes)
+            if present[class_id]
+        ]
+        return {
+            "mIoU": mean_iou,
+            "pixel_accuracy": pixel_accuracy,
+            "fitness": mean_iou,
+            "pixels": int(matrix.sum()),
+            "per_class": per_class,
+        }
+
+
 def _cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
     cx, cy, w, h = boxes.unbind(-1)
     return torch.stack((cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), dim=-1)
@@ -137,14 +197,24 @@ class DFINEValidator:
         from dfine.tasks import normalize_task
         from dfine.utils.data import build_detection_dataloader, resolve_detection_split
 
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        if task == "semantic":
+            return self._run_semantic(
+                data=data,
+                imgsz=imgsz,
+                batch=batch,
+                split=split,
+                verbose=verbose,
+                save_dir=save_dir,
+                plots=plots,
+                classes=classes,
+                single_cls=single_cls,
+                show_progress=show_progress,
+            )
+
         COCO = importlib.import_module("pycocotools.coco").COCO
         COCOeval = importlib.import_module("pycocotools.cocoeval").COCOeval
         mask_utils = importlib.import_module("pycocotools.mask")
-        task = normalize_task(str(self.cfg.get("task", "detect")))
-        if task == "semantic":
-            raise NotImplementedError(
-                "Semantic validation requires the dense-mask validator, which is not integrated yet"
-            )
 
         save_dir = Path(save_dir) if save_dir is not None else None
         if save_dir is not None:
@@ -358,8 +428,107 @@ class DFINEValidator:
 
         return metrics
 
+    def _run_semantic(
+        self,
+        *,
+        data: str,
+        imgsz: int,
+        batch: int,
+        split: str,
+        verbose: bool,
+        save_dir: str | Path | None,
+        plots: bool,
+        classes: list[int] | None,
+        single_cls: bool,
+        show_progress: bool | None,
+    ) -> dict[str, object]:
+        """Evaluate dense logits at each image's original resolution."""
+        from dfine.utils.data import build_semantic_dataloader, load_data_yaml, normalize_names
+
+        if classes is not None or single_cls:
+            raise ValueError("Semantic validation does not support classes or single_cls")
+        data_config = load_data_yaml(data)
+        data_names = normalize_names(data_config)
+        if data_names != self.names:
+            raise ValueError(
+                "Semantic dataset taxonomy does not match the model checkpoint names: "
+                f"dataset={data_names}, model={self.names}"
+            )
+        ignore_index = data_config.get("ignore_index", 255)
+        if isinstance(ignore_index, bool) or not isinstance(ignore_index, int):
+            raise ValueError("Data YAML ignore_index must be an integer")
+        if ignore_index < 0:
+            raise ValueError("Data YAML ignore_index must be non-negative")
+        dataloader = build_semantic_dataloader(
+            data,
+            split=split,
+            imgsz=imgsz,
+            batch_size=batch,
+        )
+        confusion = SemanticConfusionMatrix(len(self.names), ignore_index=ignore_index)
+        image_count = 0
+        self.model.eval()
+        progress = tqdm(
+            dataloader,
+            total=len(dataloader),
+            desc=f"val:{split}",
+            leave=False,
+            unit="batch",
+            disable=not (verbose if show_progress is None else show_progress),
+        )
+        with torch.no_grad():
+            for images, targets in progress:
+                outputs = self.model(images.to(self.device))
+                logits = outputs.get("sem_seg_logits")
+                if not isinstance(logits, torch.Tensor):
+                    raise RuntimeError("Semantic model did not return 'sem_seg_logits'")
+                for batch_index, target in enumerate(targets):
+                    original_mask = target["orig_mask"].long()
+                    original_size = tuple(int(value) for value in target["orig_size"].tolist())
+                    resized_logits = torch.nn.functional.interpolate(
+                        logits[batch_index : batch_index + 1].float(),
+                        size=original_size,
+                        mode="bilinear",
+                        align_corners=False,
+                    )[0]
+                    prediction = resized_logits.argmax(dim=0).cpu()
+                    confusion.update(prediction, original_mask)
+                    image_count += 1
+
+        metrics = confusion.compute(self.names)
+        metrics["images"] = image_count
+        resolved_save_dir = Path(save_dir) if save_dir is not None else None
+        if resolved_save_dir is not None and plots:
+            resolved_save_dir.mkdir(parents=True, exist_ok=True)
+            labels = [self.names.get(index, str(index)) for index in range(len(self.names))]
+            matrix = confusion.matrix.numpy()
+            self._plot_confusion_matrix(
+                resolved_save_dir / "confusion_matrix.png",
+                matrix,
+                labels,
+            )
+            self._plot_confusion_matrix(
+                resolved_save_dir / "confusion_matrix_normalized.png",
+                self._normalize_confusion_matrix(matrix),
+                labels,
+                normalized=True,
+            )
+        if verbose:
+            LOGGER.info(
+                "Semantic validation: %d images, mIoU %.4f, pixel accuracy %.4f",
+                image_count,
+                _as_float(metrics["mIoU"]),
+                _as_float(metrics["pixel_accuracy"]),
+            )
+        return metrics
+
     def compact_metrics(self, metrics: dict[str, object]) -> dict[str, float]:
         """Return the scalar validation fields that belong in the epoch row."""
+        if "mIoU" in metrics:
+            return {
+                key: _as_float(metrics.get(key, 0.0))
+                for key in ("mIoU", "pixel_accuracy", "fitness")
+            }
         keys = ["precision", "recall", "mAP50", "mAP50-95", "fitness"]
         if "mask_mAP50" in metrics:
             keys.extend(["mask_mAP50", "mask_mAP50-95"])

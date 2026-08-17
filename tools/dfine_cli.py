@@ -59,8 +59,8 @@ Commands:
   predict  Run detection or instance segmentation on an image, video, or stream
   track    Detect and track objects with persistent IDs across video frames
   download Download and wrap an official D-FINE checkpoint
-  train    Fine-tune a model on a COCO-format dataset
-  val      Evaluate a model and report COCO metrics
+  train    Fine-tune detection, instance-, or semantic-segmentation models
+  val      Evaluate detection/instance mAP or semantic mIoU
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
   info     Show model parameters, GFLOPs, and checkpoint size
   gstreamer-info  Show GStreamer and hardware codec profile availability
@@ -208,9 +208,9 @@ Usage:
   dfine download [model=MODEL] [key=value ...]
 
 Options:
-  model=NAME          dfine_n (segment only), dfine_s, dfine_m, dfine_l, or dfine_x
+  model=NAME          dfine_n (segmentation only), dfine_s, dfine_m, dfine_l, or dfine_x
                       (default: dfine_l)
-  task=TASK           detect or segment (default: detect)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   output=PATH         Output directory or .pth file (default: current directory)
   force=BOOL          Overwrite an existing wrapped checkpoint (default: false)
@@ -221,6 +221,7 @@ wrapped .pth format. The filename includes the resolved weight variant.
 Examples:
   dfine download model=dfine_s
   dfine download model=dfine_s task=segment
+  dfine download model=dfine_s task=semantic
   dfine download model=dfine_s weights=coco
   dfine download model=dfine_m output=models
   dfine download model=dfine_l output=models/custom.pth force=true
@@ -230,12 +231,11 @@ Usage:
   dfine train model=MODEL data=DATA [key=value ...]
 
 Required:
-  data=PATH           Dataset YAML using COCO JSON or YOLO labels; segmentation
-                      requires polygon or RLE masks
+  data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
-  task=TASK           detect or segment (default: detect)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   epochs=INT          Number of training epochs (default: 50)
   imgsz=INT           Square training image size (default: 640)
@@ -291,18 +291,18 @@ Options:
 Example:
   dfine train model=dfine_l data=coco.yaml epochs=50 batch=16 mlflow=true
   dfine train model=dfine_s task=segment data=instances.yaml epochs=50
+  dfine train model=dfine_s task=semantic data=semantic.yaml epochs=50
 """,
     "val": """\
 Usage:
   dfine val model=MODEL data=DATA [key=value ...]
 
 Required:
-  data=PATH           Dataset YAML using COCO JSON or YOLO labels; segmentation
-                      requires polygon or RLE masks
+  data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
-  task=TASK           detect or segment (default: detect)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   imgsz=INT           Square validation image size (default: 640)
   batch=INT           Batch size (default: 16)
@@ -319,6 +319,7 @@ Options:
 Example:
   dfine val model=dfine_l data=coco.yaml split=val batch=16
   dfine val model=dfine_s task=segment data=instances.yaml
+  dfine val model=semantic_last.pth task=semantic data=semantic.yaml
 """,
     "export": """\
 Usage:

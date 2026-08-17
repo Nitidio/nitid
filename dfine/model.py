@@ -57,11 +57,6 @@ class DFINE:
         from dfine.tasks import normalize_task
 
         self._task = normalize_task(task)
-        if self._task == "semantic":
-            raise NotImplementedError(
-                "Semantic segmentation is a recognized task, but model execution "
-                "is not integrated yet"
-            )
         self._callbacks: dict[str, list[ModelCallback]] = {}
         self._load(str(model), task=self._task, weights=weights)
 
@@ -106,6 +101,11 @@ class DFINE:
         Returns list[Results] when stream=False,
         Generator[Results] when stream=True.
         """
+        if getattr(self, "_task", "detect") == "semantic":
+            raise NotImplementedError(
+                "Semantic prediction and visualization are not integrated yet; "
+                "use train() or val() with a dense-mask dataset"
+            )
         return self.predictor.run(
             source,
             conf=conf,
@@ -278,6 +278,30 @@ class DFINE:
             raise ValueError(
                 f"Dataset YAML declares nc={declared_nc} but defines {len(dataset_names)} names"
             )
+        if getattr(self, "_task", "detect") == "semantic":
+            if single_cls or classes is not None:
+                raise ValueError(
+                    "Semantic training does not support single_cls or classes filtering; "
+                    "define the desired contiguous taxonomy in the dataset masks and YAML"
+                )
+            ignore_index = data_config.get("ignore_index", 255)
+            if isinstance(ignore_index, bool) or not isinstance(ignore_index, int):
+                raise ValueError("Data YAML ignore_index must be an integer")
+            if ignore_index < 0:
+                raise ValueError("Data YAML ignore_index must be non-negative")
+            if 0 <= ignore_index < len(dataset_names):
+                raise ValueError(f"ignore_index={ignore_index} overlaps valid semantic class IDs")
+            self._cfg["SemSegCriterion"]["ignore_index"] = ignore_index
+            self._cfg["SemanticSegmentation"]["ignore_index"] = ignore_index
+            class_weights = data_config.get("class_weights")
+            if class_weights is not None:
+                if not isinstance(class_weights, list) or len(class_weights) != len(dataset_names):
+                    raise ValueError(
+                        "Data YAML class_weights must contain one numeric value per semantic class"
+                    )
+                self._cfg["SemSegCriterion"]["class_weights"] = [
+                    float(value) for value in class_weights
+                ]
         transfer = adapt_model_to_classes(
             self._model,
             self._cfg,
@@ -473,6 +497,8 @@ class DFINE:
         exist_ok: bool = False,
     ) -> Path:
         """Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path."""
+        if self.task == "semantic":
+            raise NotImplementedError("Semantic export is not integrated yet")
         from dfine.exporter import DFINEExporter
 
         exporter = DFINEExporter(
