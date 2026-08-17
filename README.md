@@ -102,7 +102,16 @@ metrics = semantic.train(data="semantic_dataset.yml", epochs=50)
 print(metrics["mIoU"], metrics["pixel_accuracy"])
 ```
 
-Semantic prediction and export will be enabled in a subsequent release phase.
+Semantic inference returns an original-resolution class map. With `save=True`,
+nitid writes both the overlay and a lossless class-ID PNG under `masks/`:
+
+```python
+result = semantic.predict("image.jpg", save=True, return_probs=True)[0]
+class_map = result.semantic.mask       # int64 [H, W]
+probabilities = result.semantic.probs  # float [C, H, W]
+result.save_semantic("class_ids.png")
+```
+
 See the [fine-tuning guide](docs/fine_tuning.md#dense-semantic-masks) for the
 dataset layout and `ignore_index` contract.
 
@@ -194,6 +203,7 @@ print(report.path)
 
 ```bash
 uv run dfine predict model=dfine_s source=image.jpg
+uv run dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
 uv run dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
 uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
 uv run dfine val model=dfine_s data=my_dataset.yml
@@ -270,7 +280,7 @@ uv run python tools/convert_checkpoint.py \
 |---|---|
 | `--weights` | Raw D-FINE checkpoint |
 | `--model` | Architecture: `dfine_n`, `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` |
-| `--task` | `detect` or `segment` |
+| `--task` | `detect`, `segment`, or `semantic` |
 | `--names` | YAML with a `names:` mapping — use `configs/datasets/coco.yml` for COCO models |
 | `--output` | Path for the wrapped output |
 
@@ -317,7 +327,7 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that build
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, disk size |
 | TensorRT export | Supported | Supported (see Installation) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, … | `"detect"` or `"segment"` |
+| `model.task` | `"detect"`, `"segment"`, … | `"detect"`, `"segment"`, or `"semantic"` |
 
 ## Contributing
 

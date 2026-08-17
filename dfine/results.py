@@ -58,6 +58,12 @@ class Results:
         self.save_path = save_path
         self.speed = speed or {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
         self.frame_metadata = frame_metadata
+        self.semantic_save_path: str | None = None
+
+    @property
+    def semantic(self) -> SemanticMask | None:
+        """Dense semantic output; ergonomic alias for ``semantic_mask``."""
+        return self.semantic_mask
 
     def plot(
         self,
@@ -76,6 +82,12 @@ class Results:
     def save(self, filename: str) -> None:
         """Save plotted image to disk."""
         cv2.imwrite(str(filename), self.plot())
+
+    def save_semantic(self, filename: str | Path, *, colorize: bool = False) -> None:
+        """Save the dense class-ID map, or a colorized preview, as an image."""
+        if self.semantic_mask is None:
+            raise ValueError("This result does not contain a semantic mask")
+        self.semantic_mask.save(filename, colorize=colorize)
 
     def save_json(self, path: str | Path) -> None:
         """Save detections as JSON."""
@@ -181,6 +193,25 @@ class Results:
 
     def to_json(self) -> list[dict]:
         """Serialise detections to a list of dicts."""
+        if self.semantic_mask is not None:
+            values, counts = torch.unique(self.semantic_mask.data, return_counts=True)
+            classes = [
+                {
+                    "class": int(class_id),
+                    "name": self.names.get(int(class_id), "unknown"),
+                    "pixels": int(pixel_count),
+                }
+                for class_id, pixel_count in zip(values.tolist(), counts.tolist())
+            ]
+            return [
+                {
+                    "semantic": {
+                        "height": self.semantic_mask.orig_shape[0],
+                        "width": self.semantic_mask.orig_shape[1],
+                        "classes": classes,
+                    }
+                }
+            ]
         out: list[dict[str, object]] = []
         if self.boxes is None:
             return out
@@ -255,7 +286,12 @@ class Results:
 class SemanticMask:
     """Dense semantic class IDs for one image at original resolution."""
 
-    def __init__(self, data: torch.Tensor, orig_shape: tuple[int, int]) -> None:
+    def __init__(
+        self,
+        data: torch.Tensor,
+        orig_shape: tuple[int, int],
+        probs: torch.Tensor | None = None,
+    ) -> None:
         if not isinstance(data, torch.Tensor):
             raise TypeError(f"semantic mask data must be a torch.Tensor, got {type(data).__name__}")
         if data.ndim != 2:
@@ -274,11 +310,53 @@ class SemanticMask:
             )
         self._data = data
         self.orig_shape = orig_shape
+        if probs is not None:
+            if probs.ndim != 3 or tuple(probs.shape[-2:]) != orig_shape:
+                raise ValueError(
+                    "semantic probabilities must have shape [C, H, W] matching orig_shape"
+                )
+            if not torch.is_floating_point(probs):
+                raise TypeError("semantic probabilities must use a floating-point dtype")
+        self._probs = probs
 
     @property
     def data(self) -> torch.Tensor:
         """Integer class-ID tensor with shape ``[H, W]``."""
         return self._data
+
+    @property
+    def mask(self) -> torch.Tensor:
+        """Alias for the integer class-ID tensor."""
+        return self._data
+
+    @property
+    def probs(self) -> torch.Tensor | None:
+        """Optional per-class probabilities with shape ``[C, H, W]``."""
+        return self._probs
+
+    def colorize(self) -> np.ndarray:
+        """Return a deterministic HWC BGR visualization of the class map."""
+        from dfine.plotting import PALETTE
+
+        class_ids = self._data.detach().cpu().numpy()
+        image = np.zeros((*self.orig_shape, 3), dtype=np.uint8)
+        for class_id in np.unique(class_ids):
+            image[class_ids == class_id] = PALETTE[int(class_id) % len(PALETTE)]
+        return image
+
+    def save(self, filename: str | Path, *, colorize: bool = False) -> None:
+        """Save a lossless class-ID PNG or a colorized preview."""
+        path = Path(filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if colorize:
+            image = self.colorize()
+        else:
+            class_ids = self._data.detach().cpu().numpy()
+            if class_ids.size and (class_ids.min() < 0 or class_ids.max() > 65535):
+                raise ValueError("PNG class-ID maps support values from 0 through 65535")
+            image = class_ids.astype(np.uint8 if class_ids.max(initial=0) <= 255 else np.uint16)
+        if not cv2.imwrite(str(path), image):
+            raise OSError(f"Failed to save semantic mask to '{path}'")
 
     def __repr__(self) -> str:
         return (

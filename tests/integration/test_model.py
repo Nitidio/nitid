@@ -33,17 +33,16 @@ def test_invalid_task_is_rejected_before_loading():
 
 
 @pytest.mark.parametrize("task", ["semantic", "sem_seg"])
-def test_semantic_checkpoint_loads_while_prediction_remains_deferred(
-    task, tiny_semantic_checkpoint
-):
+def test_semantic_checkpoint_loads_and_predicts(task, tiny_semantic_checkpoint):
     from dfine import DFINE
 
     model = DFINE(tiny_semantic_checkpoint, task=task, device="cpu", verbose=False)
 
     assert model.task == "semantic"
     assert model._model.decoder.__class__.__name__ == "SemSegDecoder"
-    with pytest.raises(NotImplementedError, match="prediction"):
-        model.predict(np.zeros((64, 64, 3), dtype=np.uint8))
+    result = model.predict(np.zeros((48, 80, 3), dtype=np.uint8), imgsz=64)[0]
+    assert result.semantic is result.semantic_mask
+    assert result.semantic.mask.shape == (48, 80)
 
 
 def test_model_device_property(tiny_checkpoint):

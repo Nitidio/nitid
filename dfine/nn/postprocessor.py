@@ -119,3 +119,47 @@ class DFINEPostProcessor(nn.Module):
             "num_top_queries": self.num_top_queries,
         }
         return ", ".join(f"{key}={value}" for key, value in values.items())
+
+
+class SemanticPostProcessor(nn.Module):
+    """Resize dense semantic logits to each source image's original resolution."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.deploy_mode = False
+
+    def forward(
+        self,
+        outputs: dict[str, torch.Tensor],
+        original_sizes: torch.Tensor,
+    ) -> list[dict[str, torch.Tensor]] | torch.Tensor:
+        logits = outputs.get("sem_seg_logits")
+        if not isinstance(logits, torch.Tensor):
+            raise RuntimeError("Semantic model did not return 'sem_seg_logits'")
+        if logits.ndim != 4:
+            raise RuntimeError(
+                f"Semantic logits must have shape [B, C, H, W], got {tuple(logits.shape)}"
+            )
+
+        # Deployment runtimes receive logits at model-input resolution. Keeping
+        # argmax outside the graph preserves confidence maps for downstream use.
+        if self.deploy_mode:
+            return logits
+
+        results: list[dict[str, torch.Tensor]] = []
+        for index in range(logits.shape[0]):
+            width, height = (int(value) for value in original_sizes[index].tolist())
+            resized = F.interpolate(
+                logits[index : index + 1].float(),
+                size=(height, width),
+                mode="bilinear",
+                align_corners=False,
+            )[0]
+            results.append({"semantic_logits": resized})
+        return results
+
+    def deploy(self) -> SemanticPostProcessor:
+        """Switch to the tensor-only output contract used during export."""
+        self.eval()
+        self.deploy_mode = True
+        return self

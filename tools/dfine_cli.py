@@ -56,7 +56,7 @@ Usage:
   dfine COMMAND [key=value ...] [--report]
 
 Commands:
-  predict  Run detection or instance segmentation on an image, video, or stream
+  predict  Run detection, instance segmentation, or semantic segmentation
   track    Detect and track objects with persistent IDs across video frames
   download Download and wrap an official D-FINE checkpoint
   train    Fine-tune detection, instance-, or semantic-segmentation models
@@ -81,7 +81,7 @@ Required:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
-  task=TASK           detect or segment (default: detect)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   conf=FLOAT          Confidence threshold (default: 0.5)
   imgsz=INT           Square inference image size (default: 640)
@@ -105,8 +105,9 @@ Options:
   output_hardware_profile=NAME  Encoder: software, vaapi, v4l2, nvidia, jetson
   output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
+  return_probs=BOOL   Retain full-resolution semantic probabilities (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
-  save=BOOL           Save annotated images (default: false)
+  save=BOOL           Save overlays and semantic class-ID maps (default: false)
   project=PATH        Parent output directory when save=true (default: runs/detect)
   name=NAME           Run directory name when save=true (default: exp)
   save_dir=PATH       Exact output directory override
@@ -117,6 +118,7 @@ Options:
 Examples:
   dfine predict model=dfine_l source=image.jpg
   dfine predict model=dfine_l weights=coco source=image.jpg save=true
+  dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
   dfine predict model=dfine_l source=video.mp4 conf=0.3 stream=true
 """,
     "track": """\
@@ -327,7 +329,7 @@ Usage:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
-  task=TASK           detect or segment (default: detect)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
   imgsz=INT           Square export image size (default: 640)
@@ -348,6 +350,7 @@ Options:
 Examples:
   dfine export model=dfine_l format=onnx
   dfine export model=dfine_s task=segment format=onnx
+  dfine export model=semantic_best.pth task=semantic format=onnx
   dfine export model=dfine_l weights=coco format=openvino
   dfine export model=dfine_l format=tensorrt half=true
 """,
@@ -666,6 +669,8 @@ def _execute(argv: list[str]) -> None:
                 print(r)
                 if getattr(r, "save_path", None):
                     print(f"Saved {r.save_path}")
+                if getattr(r, "semantic_save_path", None):
+                    print(f"Saved {r.semantic_save_path}")
             if output_label is not None:
                 print(f"Wrote annotated output to {output_label}")
         else:

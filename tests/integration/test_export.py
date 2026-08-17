@@ -61,6 +61,43 @@ def test_export_segment_onnx_includes_masks(tiny_segment_checkpoint, tmp_path):
     assert [value.name for value in graph.output] == ["labels", "boxes", "scores", "masks"]
 
 
+def test_export_semantic_onnx_returns_dense_logits(tiny_semantic_checkpoint, tmp_path):
+    import numpy as np
+    import onnx
+    import onnxruntime as ort
+    import torch
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    output = tmp_path / "semantic.onnx"
+    inputs = torch.zeros(1, 3, 64, 64)
+    out = model.export(
+        format="onnx",
+        imgsz=64,
+        simplify=False,
+        output=output,
+        verbose=False,
+    )
+
+    graph = onnx.load(str(out)).graph
+    assert [value.name for value in graph.output] == ["semantic_logits"]
+    with torch.inference_mode():
+        expected = model._model(inputs)["sem_seg_logits"].cpu().numpy()
+    session = ort.InferenceSession(str(out), providers=["CPUExecutionProvider"])
+    actual = session.run(None, {"images": inputs.numpy()})[0]
+    assert actual.shape == (1, 3, 64, 64)
+    np.testing.assert_allclose(actual, expected, rtol=1e-3, atol=1e-4)
+
+
+def test_semantic_export_rejects_unvalidated_formats(tiny_semantic_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    with pytest.raises(ValueError, match="format='onnx' only"):
+        model.export(format="torchscript", imgsz=64, verbose=False)
+
+
 def test_export_openvino(tiny_checkpoint, tmp_path):
     ov = pytest.importorskip("openvino", reason="openvino not installed")
     import numpy as np

@@ -174,7 +174,7 @@ def test_semantic_checkpoint_config_declares_dense_output_and_instance_initializ
     }
 
 
-def test_semantic_checkpoint_builds_model_and_criterion_while_postprocessing_is_deferred():
+def test_semantic_checkpoint_builds_model_criterion_and_postprocessor():
     from dfine.nn.criterion import build_criterion
 
     config = make_model_config("dfine_s", task="semantic", num_classes=19)
@@ -183,8 +183,12 @@ def test_semantic_checkpoint_builds_model_and_criterion_while_postprocessing_is_
 
     assert model.decoder.__class__.__name__ == "SemSegDecoder"
     assert isinstance(criterion, SemSegCriterion)
-    with pytest.raises(NotImplementedError, match="postprocessor"):
-        build_postprocessor(config)
+    postprocessor = build_postprocessor(config)
+    outputs = model(torch.zeros(1, 3, 64, 64))
+    processed = postprocessor(outputs, torch.tensor([[48.0, 32.0]]))
+
+    assert isinstance(processed, list)
+    assert processed[0]["semantic_logits"].shape == (19, 32, 48)
 
 
 @pytest.mark.parametrize("model_size", ["dfine_n", "dfine_s"])

@@ -29,6 +29,20 @@ Segmentation exports return `(labels, boxes, scores, masks)`; `masks` contains
 the selected low-resolution mask probabilities and is aligned with the first
 three outputs.
 
+Semantic segmentation exports return one output, `semantic_logits [B, C, H,
+W]`, at model-input resolution. Apply softmax for per-class probabilities and
+argmax over axis 1 for the class-ID map. The integration test executes this
+graph with ONNX Runtime and checks numerical parity with PyTorch.
+
+```python
+semantic = DFINE("semantic_best.pth", task="semantic")
+semantic.export(format="onnx", output="semantic.onnx")
+```
+
+ONNX is currently the supported semantic export target. Detection and instance
+segmentation retain the OpenVINO, TorchScript, and TensorRT targets documented
+below.
+
 ### Options
 
 | Argument   | Default | Description |

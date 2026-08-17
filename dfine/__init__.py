@@ -1,5 +1,5 @@
 """
-nitid: Ultralytics-style D-FINE detection and instance segmentation.
+nitid: Ultralytics-style D-FINE detection and instance/semantic segmentation.
 
 Usage:
     from dfine import DFINE

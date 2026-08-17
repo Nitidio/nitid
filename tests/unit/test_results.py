@@ -76,6 +76,35 @@ def test_semantic_mask_result_exposes_original_resolution_class_ids():
     assert "semantic_shape=(12, 16)" in repr(result)
 
 
+def test_semantic_result_serializes_colorizes_and_saves_lossless_mask(tmp_path):
+    image = np.zeros((12, 16, 3), dtype=np.uint8)
+    class_ids = torch.zeros((12, 16), dtype=torch.int64)
+    class_ids[:, 8:] = 2
+    probabilities = torch.nn.functional.one_hot(class_ids, num_classes=3).permute(2, 0, 1).float()
+    result = Results(
+        orig_img=image,
+        path="semantic.png",
+        names={0: "background", 1: "road", 2: "vehicle"},
+        semantic_mask=SemanticMask(class_ids, (12, 16), probs=probabilities),
+    )
+
+    raw_path = tmp_path / "mask.png"
+    color_path = tmp_path / "color.png"
+    result.save_semantic(raw_path)
+    result.save_semantic(color_path, colorize=True)
+
+    assert result.semantic is result.semantic_mask
+    assert result.semantic.mask is result.semantic.data
+    assert result.semantic.probs is probabilities
+    assert cv2.imread(str(raw_path), cv2.IMREAD_UNCHANGED).shape == (12, 16)
+    assert cv2.imread(str(color_path)).shape == (12, 16, 3)
+    payload = result.to_json()[0]["semantic"]
+    assert payload["classes"] == [
+        {"class": 0, "name": "background", "pixels": 96},
+        {"class": 2, "name": "vehicle", "pixels": 96},
+    ]
+
+
 @pytest.mark.parametrize(
     "data",
     [

@@ -25,6 +25,9 @@ PALETTE = [
 
 def plot_results(result, conf: bool, labels: bool, line_width, font_size) -> np.ndarray:
     img = result.orig_img.copy()
+    if result.semantic_mask is not None:
+        colorized = result.semantic_mask.colorize()
+        return cv2.addWeighted(colorized, 0.45, img, 0.55, 0)
     if result.boxes is None or len(result.boxes) == 0:
         return img
 

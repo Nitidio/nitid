@@ -190,6 +190,36 @@ def test_cli_passes_segment_task_to_model(monkeypatch):
     assert observed["task"] == "segment"
 
 
+def test_cli_passes_semantic_prediction_options(monkeypatch):
+    observed = {}
+
+    class FakeDFINE:
+        def __init__(self, model, *, task="detect", weights="default"):
+            observed.update(model=model, task=task, weights=weights)
+
+        def predict(self, source, **kwargs):
+            observed.update(source=source, kwargs=kwargs)
+            return []
+
+    fake_module = types.ModuleType("dfine")
+    fake_module.DFINE = FakeDFINE
+    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+
+    main(
+        [
+            "dfine",
+            "predict",
+            "model=semantic.pth",
+            "task=semantic",
+            "source=image.jpg",
+            "return_probs=true",
+        ]
+    )
+
+    assert observed["task"] == "semantic"
+    assert observed["kwargs"]["return_probs"] is True
+
+
 def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
     observed = {}
 

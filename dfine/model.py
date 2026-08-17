@@ -94,18 +94,14 @@ class DFINE:
         rtsp_password: str | None = None,
         iou: float = 0.85,
         sink: FrameSink | None = None,
+        return_probs: bool = False,
     ) -> list | Generator:
         """
-        Run detection or instance segmentation on a source.
+        Run detection, instance segmentation, or semantic segmentation on a source.
 
         Returns list[Results] when stream=False,
         Generator[Results] when stream=True.
         """
-        if getattr(self, "_task", "detect") == "semantic":
-            raise NotImplementedError(
-                "Semantic prediction and visualization are not integrated yet; "
-                "use train() or val() with a dense-mask dataset"
-            )
         return self.predictor.run(
             source,
             conf=conf,
@@ -134,6 +130,7 @@ class DFINE:
             rtsp_password=rtsp_password,
             iou=iou,
             frame_sink=sink,
+            return_probs=return_probs,
         )
 
     def track(
@@ -497,8 +494,8 @@ class DFINE:
         exist_ok: bool = False,
     ) -> Path:
         """Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path."""
-        if self.task == "semantic":
-            raise NotImplementedError("Semantic export is not integrated yet")
+        if self.task == "semantic" and format.lower() != "onnx":
+            raise ValueError("Semantic segmentation currently supports format='onnx' only")
         from dfine.exporter import DFINEExporter
 
         exporter = DFINEExporter(

@@ -16,14 +16,17 @@ from dfine.utils.runs import atomic_output_path, resolve_run_dir, write_run_meta
 
 
 class DeployModel(torch.nn.Module):
-    def __init__(self, model, postprocessor) -> None:
+    def __init__(self, model, postprocessor, *, semantic: bool = False) -> None:
         super().__init__()
         self.model = model
         self.postprocessor = postprocessor
+        self.semantic = semantic
         self.eval()
 
     def forward(self, images):
         outputs = self.model(images)
+        if self.semantic:
+            return outputs["sem_seg_logits"]
         B = images.shape[0]
         H = images.shape[2]
         W = images.shape[3]
@@ -199,18 +202,26 @@ class DFINEExporter:
             postprocessor.deploy()
         postprocessor.to(self.device)
 
-        wrapped_model = DeployModel(self.model, postprocessor)
+        task = str(self.cfg.get("task", "detect")).lower()
+        is_semantic = task == "semantic"
+        wrapped_model = DeployModel(self.model, postprocessor, semantic=is_semantic)
         wrapped_model.eval()
 
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
-        is_segment = str(self.cfg.get("task", "detect")).lower() == "segment"
+        is_segment = task == "segment"
         dynamic_axes = (
             {
                 "images": {0: "batch"},
-                "labels": {0: "batch"},
-                "boxes": {0: "batch"},
-                "scores": {0: "batch"},
-                **({"masks": {0: "batch"}} if is_segment else {}),
+                **(
+                    {"semantic_logits": {0: "batch"}}
+                    if is_semantic
+                    else {
+                        "labels": {0: "batch"},
+                        "boxes": {0: "batch"},
+                        "scores": {0: "batch"},
+                        **({"masks": {0: "batch"}} if is_segment else {}),
+                    }
+                ),
             }
             if dynamic
             else None
@@ -223,9 +234,15 @@ class DFINEExporter:
             dynamo=False,
             opset_version=opset,
             input_names=["images"],
-            output_names=["labels", "boxes", "scores", "masks"]
-            if is_segment
-            else ["labels", "boxes", "scores"],
+            output_names=(
+                ["semantic_logits"]
+                if is_semantic
+                else (
+                    ["labels", "boxes", "scores", "masks"]
+                    if is_segment
+                    else ["labels", "boxes", "scores"]
+                )
+            ),
             dynamic_axes=dynamic_axes,
         )
 

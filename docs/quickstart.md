@@ -52,6 +52,21 @@ result.save("segmented.jpg")
 Segmentation defaults to the official COCO-pretrained mask weights. Detection
 defaults to Objects365→COCO for S/M/L/X and supports `weights="coco"` as well.
 
+For dense semantic segmentation, load a trained semantic checkpoint and read
+the original-resolution class map from `result.semantic.mask`:
+
+```python
+semantic = DFINE("semantic_best.pth", task="semantic")
+result = semantic.predict("image.jpg", save=True, return_probs=True)[0]
+
+class_map = result.semantic.mask       # int64 [H, W]
+probabilities = result.semantic.probs  # float [C, H, W]
+result.save_semantic("class_ids.png")
+```
+
+`save=True` writes an annotated overlay and a lossless class-ID PNG in the
+run's `masks/` directory.
+
 ## Common Workflow
 
 Use the same model object for inference, training, validation, and export:

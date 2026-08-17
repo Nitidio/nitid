@@ -8,7 +8,7 @@ include = ["dfine*", "tools*", "web*"]
 [project]
 name = "nitid"
 version = "0.1.0"
-description = "Ultralytics-style D-FINE object detection and instance segmentation"
+description = "Ultralytics-style D-FINE detection and instance/semantic segmentation"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
@@ -95,6 +95,7 @@ Repository = "https://github.com/Vaelsys/nitid"
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "onnxruntime>=1.18",
 ]
 
 # ── uv ────────────────────────────────────────────────────────────────────────
