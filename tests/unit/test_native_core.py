@@ -7,7 +7,7 @@ import gc
 import pytest
 import torch
 
-from dfine.nn.build import build_model
+from dfine.nn.build import build_model, build_postprocessor
 from dfine.nn.configs import get_model_config, make_model_config
 from dfine.nn.native_build import build_native_criterion, build_native_model
 
@@ -77,6 +77,42 @@ def test_segment_checkpoint_config_builds_mask_model_and_criterion():
     assert "masks" in criterion.losses
 
 
+def test_semantic_checkpoint_config_declares_dense_output_and_instance_initialization():
+    config = make_model_config(
+        "dfine_s",
+        task="sem_seg",
+        num_classes=19,
+        ignore_index=255,
+    )
+
+    assert config["task"] == "semantic"
+    assert config["criterion"] == "SemSegCriterion"
+    assert config["postprocessor"] == "SemanticPostProcessor"
+    assert config["DFINE"]["decoder"] == "SemSegDecoder"
+    assert config["SemSegCriterion"]["ignore_index"] == 255
+    assert config["SemanticSegmentation"] == {
+        "ignore_index": 255,
+        "output": "semantic_mask",
+        "pretrained_source_task": "segment",
+    }
+
+
+def test_semantic_native_runtime_is_explicitly_deferred():
+    from dfine.nn.criterion import build_criterion
+
+    config = make_model_config("dfine_s", task="semantic", num_classes=19)
+    with pytest.raises(NotImplementedError, match="recognized task"):
+        build_native_model("dfine_s", num_classes=19, task="semantic")
+    with pytest.raises(NotImplementedError, match="recognized task"):
+        build_native_criterion("dfine_s", num_classes=19, task="sem_seg")
+    with pytest.raises(NotImplementedError, match="recognized task"):
+        build_model(config)
+    with pytest.raises(NotImplementedError, match="recognized task"):
+        build_criterion(config)
+    with pytest.raises(NotImplementedError, match="recognized task"):
+        build_postprocessor(config)
+
+
 def test_model_configs_are_isolated():
     first = get_model_config("dfine_s")
     first["DFINETransformer"]["num_layers"] = 99
@@ -88,7 +124,7 @@ def test_model_configs_are_isolated():
     ("kwargs", "match"),
     [
         ({"model": "dfine_unknown", "task": "detect"}, "Unsupported D-FINE model"),
-        ({"model": "dfine_s", "task": "semantic"}, "Unsupported task"),
+        ({"model": "dfine_s", "task": "panoptic"}, "Unsupported task"),
         ({"model": "dfine_s", "task": "detect", "num_classes": 0}, "num_classes"),
         ({"model": "dfine_s", "task": "detect", "in_channels": 5}, "in_channels"),
     ],

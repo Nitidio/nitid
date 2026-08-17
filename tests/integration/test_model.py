@@ -29,7 +29,15 @@ def test_invalid_task_is_rejected_before_loading():
     from dfine import DFINE
 
     with pytest.raises(ValueError, match="Unsupported task"):
-        DFINE("dfine_s", task="semantic", device="cpu", verbose=False)
+        DFINE("dfine_s", task="panoptic", device="cpu", verbose=False)
+
+
+@pytest.mark.parametrize("task", ["semantic", "sem_seg"])
+def test_semantic_task_is_recognized_but_runtime_is_not_enabled(task):
+    from dfine import DFINE
+
+    with pytest.raises(NotImplementedError, match="recognized task"):
+        DFINE("dfine_s", task=task, device="cpu", verbose=False)
 
 
 def test_model_device_property(tiny_checkpoint):

@@ -10,6 +10,7 @@ import torch.nn as nn
 
 from dfine.nn.native_build import build_native_model_from_config
 from dfine.nn.postprocessor import DFINEPostProcessor
+from dfine.tasks import normalize_task
 
 
 def _positive_int(config: Mapping[str, Any], key: str) -> int:
@@ -21,6 +22,11 @@ def _positive_int(config: Mapping[str, Any], key: str) -> int:
 
 def build_postprocessor(cfg: Mapping[str, Any]) -> nn.Module:
     """Build the native detection postprocessor from checkpoint configuration."""
+    if normalize_task(str(cfg.get("task", "detect"))) == "semantic":
+        raise NotImplementedError(
+            "Semantic segmentation is a recognized task, but its postprocessor "
+            "is not integrated yet"
+        )
     postprocessor_value = cfg.get("DFINEPostProcessor", {})
     if not isinstance(postprocessor_value, Mapping):
         raise ValueError("D-FINE config DFINEPostProcessor must be a mapping")

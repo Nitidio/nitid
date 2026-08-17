@@ -8,31 +8,28 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from typing import Any
 
 import torch
 import torch.nn as nn
+
+from dfine.tasks import Task, normalize_task
 
 from .architecture import DFINEModel, DFINETransformer, HGNetv2, HybridEncoder
 from .configs import get_model_config
 from .losses import DFINECriterion, HungarianMatcher
 
-Task = Literal["detect", "segment"]
-SUPPORTED_TASKS: tuple[Task, ...] = ("detect", "segment")
-
-
-def normalize_task(task: str) -> Task:
-    """Validate and normalize a public D-FINE task name."""
-    normalized = task.lower().strip()
-    if normalized not in SUPPORTED_TASKS:
-        supported = ", ".join(SUPPORTED_TASKS)
-        raise ValueError(f"Unsupported task {task!r}. Choose: {supported}")
-    return cast(Task, normalized)
-
 
 def _checkpoint_task(config: Mapping[str, Any]) -> Task:
-    value = str(config.get("task", "detect")).lower().strip()
-    return "detect" if value == "detection" else normalize_task(value)
+    return normalize_task(str(config.get("task", "detect")))
+
+
+def _require_native_runtime(task: Task) -> None:
+    if task == "semantic":
+        raise NotImplementedError(
+            "Semantic segmentation is a recognized task, but its native model "
+            "and criterion are not integrated yet"
+        )
 
 
 def _component_config(config: Mapping[str, Any], key: str) -> dict[str, Any]:
@@ -67,6 +64,7 @@ def _compose_native_model(
     in_channels: int,
     device: str | torch.device | None,
 ) -> DFINEModel:
+    _require_native_runtime(task)
     enable_mask_head = task == "segment"
     backbone_config["pretrained"] = False
     encoder_config["eval_spatial_size"] = image_size
@@ -105,6 +103,7 @@ def build_native_model(
         raise ValueError(f"in_channels must be 3 or 4, got {in_channels}")
 
     resolved_task = normalize_task(task)
+    _require_native_runtime(resolved_task)
     config = get_model_config(model)
 
     return _compose_native_model(
@@ -155,6 +154,7 @@ def build_native_criterion(
     if num_classes < 1:
         raise ValueError(f"num_classes must be positive, got {num_classes}")
     resolved_task = normalize_task(task)
+    _require_native_runtime(resolved_task)
     config = get_model_config(model)
 
     criterion_config = config["DFINECriterion"]
@@ -176,6 +176,8 @@ def build_native_criterion_from_config(config: Mapping[str, Any]) -> nn.Module:
     if not isinstance(num_classes, int) or num_classes < 1:
         raise ValueError("D-FINE config num_classes must be a positive integer")
 
+    task = _checkpoint_task(config)
+    _require_native_runtime(task)
     criterion_config = _component_config(config, "DFINECriterion")
     matcher_value = criterion_config.pop("matcher", config.get("matcher"))
     if not isinstance(matcher_value, Mapping):
@@ -184,7 +186,6 @@ def build_native_criterion_from_config(config: Mapping[str, Any]) -> nn.Module:
     matcher_config.pop("type", None)
     matcher_config.setdefault("use_focal_loss", bool(config.get("use_focal_loss", True)))
 
-    task = _checkpoint_task(config)
     if task == "segment" and "masks" not in criterion_config["losses"]:
         criterion_config["losses"].append("masks")
     criterion_config.setdefault("label_smoothing", 0.0)

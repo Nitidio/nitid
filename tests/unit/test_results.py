@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import torch
 
-from dfine.results import Boxes, Masks, Results
+from dfine.results import Boxes, Masks, Results, SemanticMask
 
 
 @pytest.fixture
@@ -54,6 +54,57 @@ def test_masks_expose_absolute_and_normalized_polygons(segment_result):
     normalized = segment_result.masks.xyn[0]
     assert polygon.shape[1] == 2
     assert normalized.min() >= 0.0 and normalized.max() <= 1.0
+
+
+def test_semantic_mask_result_exposes_original_resolution_class_ids():
+    image = np.zeros((12, 16, 3), dtype=np.uint8)
+    class_ids = torch.arange(12 * 16, dtype=torch.int64).reshape(12, 16) % 4
+    semantic_mask = SemanticMask(class_ids, orig_shape=(12, 16))
+
+    result = Results(
+        orig_img=image,
+        path="semantic.png",
+        names={0: "road", 1: "car", 2: "person", 3: "sky"},
+        semantic_mask=semantic_mask,
+    )
+
+    assert result.semantic_mask is semantic_mask
+    assert result.boxes is None
+    assert result.masks is None
+    assert result.semantic_mask.data.dtype == torch.int64
+    assert tuple(result.semantic_mask.data.shape) == image.shape[:2]
+    assert "semantic_shape=(12, 16)" in repr(result)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        torch.zeros((1, 12, 16), dtype=torch.int64),
+        torch.zeros((12, 16), dtype=torch.float32),
+        torch.zeros((12, 16), dtype=torch.bool),
+    ],
+)
+def test_semantic_mask_rejects_invalid_shape_or_dtype(data):
+    with pytest.raises((TypeError, ValueError)):
+        SemanticMask(data, orig_shape=(12, 16))
+
+
+def test_semantic_result_rejects_instance_outputs_and_geometry_mismatch(dummy_boxes):
+    image = np.zeros((12, 16, 3), dtype=np.uint8)
+    semantic_mask = SemanticMask(torch.zeros((12, 16), dtype=torch.uint8), (12, 16))
+
+    with pytest.raises(ValueError, match="cannot be combined"):
+        Results(
+            orig_img=image,
+            path="mixed.png",
+            names={},
+            boxes=dummy_boxes,
+            semantic_mask=semantic_mask,
+        )
+
+    wrong_size = SemanticMask(torch.zeros((10, 16), dtype=torch.uint8), (10, 16))
+    with pytest.raises(ValueError, match="original image"):
+        Results(orig_img=image, path="wrong.png", names={}, semantic_mask=wrong_size)
 
 
 def test_segment_results_serialize_and_plot_masks(segment_result, tmp_path):

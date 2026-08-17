@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
 from dfine.nn.configs import make_model_config
-from dfine.nn.native_build import normalize_task
+from dfine.tasks import normalize_task
 from tools.convert_checkpoint import convert as convert_checkpoint
 
 _ROOT = Path(__file__).parents[2]
@@ -136,7 +136,15 @@ def _normalize_weights(weights: str) -> str:
 
 
 def _registry(task: str) -> dict[str, dict[str, ModelAsset]]:
-    return MODEL_REGISTRY if normalize_task(task) == "detect" else SEGMENT_MODEL_REGISTRY
+    resolved_task = normalize_task(task)
+    if resolved_task == "detect":
+        return MODEL_REGISTRY
+    if resolved_task == "segment":
+        return SEGMENT_MODEL_REGISTRY
+    raise NotImplementedError(
+        "Semantic segmentation uses instance-segmentation weights as initialization, "
+        "but semantic checkpoint conversion is not integrated yet"
+    )
 
 
 def list_models(task: str = "detect") -> list[str]:

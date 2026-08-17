@@ -73,6 +73,11 @@ def convert(
         print("Using model weights (ckpt['model'])")
 
     cfg = copy.deepcopy(dict(config)) if isinstance(config, Mapping) else _load_config(config)
+    from dfine.tasks import normalize_task
+    from dfine.utils.checkpoint import CHECKPOINT_FORMAT_VERSION
+
+    task = normalize_task(str(cfg.get("task", "detect")))
+    cfg["task"] = task
 
     with open(names_file) as f:
         names_cfg = yaml.safe_load(f)
@@ -84,11 +89,14 @@ def convert(
         names = {int(k): v for k, v in raw_names.items()}
 
     out_ckpt = {
+        "format_version": CHECKPOINT_FORMAT_VERSION,
+        "task": task,
         "model": state_dict,
         "config": cfg,
         "names": names,
         "epoch": ckpt.get("epoch", 0),
         "metrics": ckpt.get("metrics", {}),
+        "training_state": {},
     }
     torch.save(out_ckpt, output)
     print(f"Saved wrapped checkpoint to {output}  ({len(names)} classes)")

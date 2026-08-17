@@ -958,11 +958,14 @@ class DFINETrainer:
         fraction: float = 1.0,
         augment=None,
     ):
-        from dfine.nn.native_build import normalize_task
+        from dfine.tasks import normalize_task
         from dfine.utils.data import build_detection_dataloader
 
-        task_value = str(self.cfg.get("task", "detect")).lower()
-        task = normalize_task("detect" if task_value == "detection" else task_value)
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        if task == "semantic":
+            raise NotImplementedError(
+                "Semantic training requires the dense-mask data pipeline, which is not integrated yet"
+            )
         return build_detection_dataloader(
             data,
             split="train",

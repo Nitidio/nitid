@@ -22,11 +22,11 @@ ModelCallback = Callable[..., object]
 
 class DFINE:
     """
-    D-FINE object detection and instance segmentation wrapper.
+    D-FINE object detection and segmentation wrapper.
 
     Args:
         model:   D-FINE architecture name or path to a wrapped .pth checkpoint.
-        task:    ``"detect"`` or ``"segment"``.
+        task:    ``"detect"``, ``"segment"``, or ``"semantic"`` (alias ``"sem_seg"``).
         weights: Official weight variant: ``default``, ``obj2coco``, or ``coco``.
         device:  "cuda", "cpu", "cuda:N", or None for auto-select.
         verbose: Print model info on load.
@@ -54,9 +54,14 @@ class DFINE:
         self._names: dict[int, str]
         self._path: str
         self._weights: str | None = None
-        from dfine.nn.native_build import normalize_task
+        from dfine.tasks import normalize_task
 
         self._task = normalize_task(task)
+        if self._task == "semantic":
+            raise NotImplementedError(
+                "Semantic segmentation is a recognized task, but model execution "
+                "is not integrated yet"
+            )
         self._callbacks: dict[str, list[ModelCallback]] = {}
         self._load(str(model), task=self._task, weights=weights)
 
@@ -584,7 +589,7 @@ class DFINE:
         """Load checkpoint, deserialise config, build model."""
         from pathlib import Path
 
-        from dfine.nn.native_build import normalize_task
+        from dfine.tasks import normalize_task
         from dfine.utils.checkpoint import load_checkpoint
         from dfine.utils.device import resolve_device
         from dfine.utils.downloads import download_model, get_model_asset
@@ -637,10 +642,7 @@ class DFINE:
 
         self._path = str(path)
         self._model, self._cfg, self._names = load_checkpoint(path, device=self._device_str)
-        checkpoint_task_value = str(self._cfg.get("task", "detect")).lower().strip()
-        checkpoint_task = normalize_task(
-            "detect" if checkpoint_task_value == "detection" else checkpoint_task_value
-        )
+        checkpoint_task = normalize_task(str(self._cfg.get("task", "detect")))
         if checkpoint_task != resolved_task:
             raise ValueError(
                 f"Checkpoint task is {checkpoint_task!r}, but task={resolved_task!r} was requested"

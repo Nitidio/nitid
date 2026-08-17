@@ -1,4 +1,4 @@
-"""Native model-size configuration for D-FINE detection and instance segmentation.
+"""Native model-size configuration for D-FINE tasks.
 
 Derived from D-FINE and D-FINE-seg; modified for integration into nitid in 2026.
 """
@@ -44,6 +44,9 @@ BASE_CONFIG = {
         "alpha": 0.75,
         "gamma": 2.0,
         "reg_max": 32,
+    },
+    "SemSegCriterion": {
+        "weight_dict": {"loss_ce": 1, "loss_dice": 1, "loss_aux": 0.4},
     },
     "matcher": {
         "weight_dict": {
@@ -240,17 +243,45 @@ def make_model_config(
     task: str = "detect",
     num_classes: int = 80,
     image_size: tuple[int, int] = (640, 640),
+    ignore_index: int = 255,
 ) -> dict[str, Any]:
     """Create the self-contained runtime config stored in a wrapped checkpoint."""
-    from .native_build import normalize_task
+    from dfine.tasks import normalize_task
 
     if num_classes < 1:
         raise ValueError(f"num_classes must be positive, got {num_classes}")
+    if isinstance(ignore_index, bool) or not isinstance(ignore_index, int) or ignore_index < 0:
+        raise ValueError(f"ignore_index must be a non-negative integer, got {ignore_index!r}")
     resolved_task = normalize_task(task)
 
     model_config = get_model_config(model_size)
     criterion = model_config.pop("DFINECriterion")
+    semantic_criterion = model_config.pop("SemSegCriterion")
     matcher = model_config.pop("matcher")
+    if resolved_task == "semantic":
+        semantic_criterion["ignore_index"] = ignore_index
+        return {
+            "task": resolved_task,
+            "model": "DFINE",
+            "criterion": "SemSegCriterion",
+            "postprocessor": "SemanticPostProcessor",
+            "num_classes": num_classes,
+            "eval_spatial_size": list(image_size),
+            "DFINE": {
+                "backbone": "HGNetv2",
+                "encoder": "HybridEncoder",
+                "decoder": "SemSegDecoder",
+            },
+            **model_config,
+            "SemSegCriterion": semantic_criterion,
+            "SemanticSegmentation": {
+                "ignore_index": ignore_index,
+                "output": "semantic_mask",
+                "pretrained_source_task": "segment",
+            },
+            "SemanticPostProcessor": {"output": "semantic_mask"},
+        }
+
     if resolved_task == "segment":
         criterion["losses"].append("masks")
     matcher["type"] = "HungarianMatcher"

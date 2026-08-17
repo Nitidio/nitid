@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
+import torch
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -36,6 +37,7 @@ class Results:
         names: dict[int, str],
         boxes=None,
         masks=None,
+        semantic_mask: SemanticMask | None = None,
         save_path: str | None = None,
         speed: dict[str, float] | None = None,
         frame_metadata: FrameMetadata | None = None,
@@ -45,6 +47,14 @@ class Results:
         self.names = names
         self.boxes = boxes
         self.masks = masks
+        self.semantic_mask = semantic_mask
+        if semantic_mask is not None and (boxes is not None or masks is not None):
+            raise ValueError("semantic_mask cannot be combined with boxes or instance masks")
+        if semantic_mask is not None and semantic_mask.orig_shape != orig_img.shape[:2]:
+            raise ValueError(
+                "semantic_mask shape must match the original image, "
+                f"got {semantic_mask.orig_shape} and {orig_img.shape[:2]}"
+            )
         self.save_path = save_path
         self.speed = speed or {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
         self.frame_metadata = frame_metadata
@@ -237,7 +247,44 @@ class Results:
         return 0 if self.boxes is None else len(self.boxes)
 
     def __repr__(self) -> str:
+        if self.semantic_mask is not None:
+            return f"Results(path={self.path!r}, semantic_shape={self.semantic_mask.orig_shape})"
         return f"Results(path={self.path!r}, detections={len(self)}, masks={len(self.masks or [])})"
+
+
+class SemanticMask:
+    """Dense semantic class IDs for one image at original resolution."""
+
+    def __init__(self, data: torch.Tensor, orig_shape: tuple[int, int]) -> None:
+        if not isinstance(data, torch.Tensor):
+            raise TypeError(f"semantic mask data must be a torch.Tensor, got {type(data).__name__}")
+        if data.ndim != 2:
+            raise ValueError(f"semantic mask data must have shape [H, W], got {tuple(data.shape)}")
+        if data.dtype == torch.bool or torch.is_floating_point(data) or torch.is_complex(data):
+            raise TypeError(f"semantic mask data must contain integer class IDs, got {data.dtype}")
+        if len(orig_shape) != 2 or any(
+            not isinstance(value, int) or value < 1 for value in orig_shape
+        ):
+            raise ValueError(
+                f"orig_shape must contain positive (height, width), got {orig_shape!r}"
+            )
+        if tuple(data.shape) != orig_shape:
+            raise ValueError(
+                f"semantic mask shape must match orig_shape, got {tuple(data.shape)} and {orig_shape}"
+            )
+        self._data = data
+        self.orig_shape = orig_shape
+
+    @property
+    def data(self) -> torch.Tensor:
+        """Integer class-ID tensor with shape ``[H, W]``."""
+        return self._data
+
+    def __repr__(self) -> str:
+        return (
+            f"SemanticMask(shape={self.orig_shape}, dtype={self._data.dtype}, "
+            f"device={self._data.device})"
+        )
 
 
 class Masks:

@@ -134,14 +134,17 @@ class DFINEValidator:
         metadata. The returned scalars are suitable for CSV logging.
         """
         from dfine.nn.build import build_postprocessor
-        from dfine.nn.native_build import normalize_task
+        from dfine.tasks import normalize_task
         from dfine.utils.data import build_detection_dataloader, resolve_detection_split
 
         COCO = importlib.import_module("pycocotools.coco").COCO
         COCOeval = importlib.import_module("pycocotools.cocoeval").COCOeval
         mask_utils = importlib.import_module("pycocotools.mask")
-        task_value = str(self.cfg.get("task", "detect")).lower()
-        task = normalize_task("detect" if task_value == "detection" else task_value)
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        if task == "semantic":
+            raise NotImplementedError(
+                "Semantic validation requires the dense-mask validator, which is not integrated yet"
+            )
 
         save_dir = Path(save_dir) if save_dir is not None else None
         if save_dir is not None:
