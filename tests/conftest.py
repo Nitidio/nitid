@@ -4,15 +4,12 @@ Session-scoped fixtures for integration tests.
 tiny_checkpoint — small wrapped .pth built from random weights (no download).
 tiny_dataset    — minimal synthetic COCO dataset (blank images + JSON anns)
                   with a data YAML ready for train/val calls.
+tiny_semantic_dataset — paired RGB images and dense class-ID PNG masks.
 tiny_yolo_dataset — minimal synthetic YOLO dataset using images/train + labels/train.
 tiny_yolo_splitfirst_dataset — minimal synthetic YOLO dataset using train/images + train/labels.
 """
 
-from pathlib import Path
-
 import pytest
-
-_DFINE_CONFIGS = Path(__file__).parents[1] / "extern" / "dfine" / "configs"
 
 
 @pytest.fixture(scope="session")
@@ -22,13 +19,11 @@ def tiny_checkpoint(tmp_path_factory):
     config with decoder/encoder overrides to keep the file fast to build.
     The backbone (HGNetv2 B0) uses random weights (pretrained=False).
     """
-    from dfine.nn.build import _ensure_dfine_on_path, build_model
+    from dfine.nn.build import build_model
+    from dfine.nn.configs import make_detection_config
     from dfine.utils.checkpoint import save_checkpoint
 
-    _ensure_dfine_on_path()
-    from src.core.yaml_utils import load_config
-
-    cfg = load_config(str(_DFINE_CONFIGS / "dfine" / "dfine_hgnetv2_s_coco.yml"))
+    cfg = make_detection_config("dfine_s")
 
     # Shrink the decoder/encoder so the checkpoint builds quickly
     cfg["DFINETransformer"]["num_layers"] = 1
@@ -45,6 +40,43 @@ def tiny_checkpoint(tmp_path_factory):
     ckpt_path = ckpt_dir / "tiny_dfine.pth"
     save_checkpoint(str(ckpt_path), model, cfg, names)
     return str(ckpt_path)
+
+
+@pytest.fixture(scope="session")
+def tiny_segment_checkpoint(tmp_path_factory):
+    """Small wrapped instance-segmentation checkpoint with random weights."""
+    from dfine.nn.build import build_model
+    from dfine.nn.configs import make_model_config
+    from dfine.utils.checkpoint import save_checkpoint
+
+    cfg = make_model_config("dfine_s", task="segment")
+    cfg["DFINETransformer"]["num_layers"] = 1
+    cfg["DFINETransformer"]["num_queries"] = 10
+    cfg["DFINETransformer"]["num_denoising"] = 0
+    cfg["HybridEncoder"]["depth_mult"] = 0.1
+    model = build_model(cfg).eval()
+    names = {i: f"class_{i}" for i in range(80)}
+    checkpoint_dir = tmp_path_factory.mktemp("segment_checkpoints")
+    checkpoint_path = checkpoint_dir / "tiny_dfine_segment.pth"
+    save_checkpoint(checkpoint_path, model, cfg, names)
+    return str(checkpoint_path)
+
+
+@pytest.fixture(scope="session")
+def tiny_semantic_checkpoint(tmp_path_factory):
+    """Small wrapped semantic checkpoint with random weights."""
+    from dfine.nn.build import build_model
+    from dfine.nn.configs import make_model_config
+    from dfine.utils.checkpoint import save_checkpoint
+
+    config = make_model_config("dfine_n", task="semantic", num_classes=3, image_size=(64, 64))
+    config["HybridEncoder"]["depth_mult"] = 0.1
+    model = build_model(config).eval()
+    names = {0: "background", 1: "road", 2: "vehicle"}
+    checkpoint_dir = tmp_path_factory.mktemp("semantic_checkpoints")
+    checkpoint_path = checkpoint_dir / "tiny_dfine_semantic.pth"
+    save_checkpoint(checkpoint_path, model, config, names)
+    return str(checkpoint_path)
 
 
 @pytest.fixture(scope="session")
@@ -86,6 +118,7 @@ def tiny_dataset(tmp_path_factory):
                     "bbox": [10, 10, 20, 20],
                     "area": 400,
                     "iscrowd": 0,
+                    "segmentation": [[10, 10, 30, 10, 30, 30, 10, 30]],
                 }
             )
 
@@ -105,6 +138,47 @@ def tiny_dataset(tmp_path_factory):
             f,
         )
 
+    return str(data_yaml)
+
+
+@pytest.fixture(scope="session")
+def tiny_semantic_dataset(tmp_path_factory):
+    """Dense PNG masks with three classes and ignored pixels for train/validation."""
+    import numpy as np
+    import yaml
+    from PIL import Image as _PILImage
+
+    root = tmp_path_factory.mktemp("semantic_dataset")
+    for split, count in (("train", 4), ("val", 2)):
+        image_dir = root / "images" / split
+        mask_dir = root / "labels" / split
+        image_dir.mkdir(parents=True)
+        mask_dir.mkdir(parents=True)
+        for index in range(count):
+            image = np.zeros((48, 64, 3), dtype=np.uint8)
+            image[:, :32, 1] = 160
+            image[:, 32:, 2] = 200
+            image = np.roll(image, index, axis=0)
+            mask = np.zeros((48, 64), dtype=np.uint8)
+            mask[16:, :32] = 1
+            mask[12:36, 32:56] = 2
+            mask[:2] = 255
+            _PILImage.fromarray(image).save(image_dir / f"{index:04d}.jpg")
+            _PILImage.fromarray(mask).save(mask_dir / f"{index:04d}.png")
+
+    data_yaml = root / "semantic.yml"
+    with data_yaml.open("w") as file:
+        yaml.safe_dump(
+            {
+                "path": str(root),
+                "train": "images/train",
+                "val": "images/val",
+                "nc": 3,
+                "names": {0: "background", 1: "road", 2: "vehicle"},
+                "ignore_index": 255,
+            },
+            file,
+        )
     return str(data_yaml)
 
 

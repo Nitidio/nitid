@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -8,9 +8,21 @@ include = ["dfine*", "tools*", "web*"]
 [project]
 name = "nitid"
 version = "0.1.0"
-description = "Ultralytics-style wrapper for the D-FINE object detector"
+description = "Ultralytics-style D-FINE detection and instance/semantic segmentation"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.10,<3.13"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "torch>=2.1",
     "torchvision>=0.16",
@@ -26,8 +38,8 @@ dependencies = [
     # 0.6.2 has broken source metadata and no CPython 3.11 wheel.
     "onnxsim>=0.6.5,<0.7",
     "tqdm>=4.66",
-    "tensorboard>=2.14",  # required by extern/dfine src/core/_config.py
-    "scipy>=1.10",        # required by extern/dfine HungarianMatcher (training)
+    "tensorboard>=2.14",
+    "scipy>=1.10",        # Hungarian matching during training
 ]
 
 [project.optional-dependencies]
@@ -75,9 +87,16 @@ web = [
 [project.scripts]
 dfine = "tools.dfine_cli:main"
 
+[project.urls]
+Documentation = "https://Vaelsys.github.io/nitid/"
+Issues = "https://github.com/Vaelsys/nitid/issues"
+Repository = "https://github.com/Vaelsys/nitid"
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "onnxruntime>=1.18,<1.24; python_version < '3.11'",
+    "onnxruntime>=1.18; python_version >= '3.11'",
 ]
 
 # ── uv ────────────────────────────────────────────────────────────────────────
@@ -109,7 +128,6 @@ torchvision = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-exclude = ["extern/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]   # pycodestyle, pyflakes, isort

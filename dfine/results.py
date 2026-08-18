@@ -1,6 +1,5 @@
 """
-Results and Boxes — return types from predict().
-Mirrors ultralytics.engine.results.Results / Boxes.
+Results, Boxes, and Masks — return types from predict().
 """
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
+import torch
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -36,6 +36,8 @@ class Results:
         path: str,
         names: dict[int, str],
         boxes=None,
+        masks=None,
+        semantic_mask: SemanticMask | None = None,
         save_path: str | None = None,
         speed: dict[str, float] | None = None,
         frame_metadata: FrameMetadata | None = None,
@@ -44,9 +46,24 @@ class Results:
         self.path = path
         self.names = names
         self.boxes = boxes
+        self.masks = masks
+        self.semantic_mask = semantic_mask
+        if semantic_mask is not None and (boxes is not None or masks is not None):
+            raise ValueError("semantic_mask cannot be combined with boxes or instance masks")
+        if semantic_mask is not None and semantic_mask.orig_shape != orig_img.shape[:2]:
+            raise ValueError(
+                "semantic_mask shape must match the original image, "
+                f"got {semantic_mask.orig_shape} and {orig_img.shape[:2]}"
+            )
         self.save_path = save_path
         self.speed = speed or {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
         self.frame_metadata = frame_metadata
+        self.semantic_save_path: str | None = None
+
+    @property
+    def semantic(self) -> SemanticMask | None:
+        """Dense semantic output; ergonomic alias for ``semantic_mask``."""
+        return self.semantic_mask
 
     def plot(
         self,
@@ -55,7 +72,7 @@ class Results:
         line_width: int | None = None,
         font_size: int | None = None,
     ) -> np.ndarray:
-        """Draw boxes on image. Returns HWC BGR numpy array."""
+        """Draw instance masks and boxes on the image."""
         from dfine.plotting import plot_results
 
         return plot_results(
@@ -65,6 +82,12 @@ class Results:
     def save(self, filename: str) -> None:
         """Save plotted image to disk."""
         cv2.imwrite(str(filename), self.plot())
+
+    def save_semantic(self, filename: str | Path, *, colorize: bool = False) -> None:
+        """Save the dense class-ID map, or a colorized preview, as an image."""
+        if self.semantic_mask is None:
+            raise ValueError("This result does not contain a semantic mask")
+        self.semantic_mask.save(filename, colorize=colorize)
 
     def save_json(self, path: str | Path) -> None:
         """Save detections as JSON."""
@@ -82,7 +105,13 @@ class Results:
             xywhn = self.boxes.xywhn
             for i in range(len(self)):
                 cls = int(self.boxes.cls[i])
-                coords = [f"{float(x):.6f}" for x in xywhn[i].tolist()]
+                if self.masks is not None and i < len(self.masks):
+                    polygon = self.masks.xyn[i]
+                    coords = [f"{float(x):.6f}" for x in polygon.reshape(-1).tolist()]
+                    if not coords:
+                        coords = [f"{float(x):.6f}" for x in xywhn[i].tolist()]
+                else:
+                    coords = [f"{float(x):.6f}" for x in xywhn[i].tolist()]
                 values = [str(cls), *coords]
                 if save_conf:
                     values.append(f"{float(self.boxes.conf[i]):.6f}")
@@ -164,6 +193,25 @@ class Results:
 
     def to_json(self) -> list[dict]:
         """Serialise detections to a list of dicts."""
+        if self.semantic_mask is not None:
+            values, counts = torch.unique(self.semantic_mask.data, return_counts=True)
+            classes = [
+                {
+                    "class": int(class_id),
+                    "name": self.names.get(int(class_id), "unknown"),
+                    "pixels": int(pixel_count),
+                }
+                for class_id, pixel_count in zip(values.tolist(), counts.tolist())
+            ]
+            return [
+                {
+                    "semantic": {
+                        "height": self.semantic_mask.orig_shape[0],
+                        "width": self.semantic_mask.orig_shape[1],
+                        "classes": classes,
+                    }
+                }
+            ]
         out: list[dict[str, object]] = []
         if self.boxes is None:
             return out
@@ -177,6 +225,12 @@ class Results:
             }
             if self.boxes.id is not None:
                 item["track_id"] = int(self.boxes.id[i])
+            if self.masks is not None and i < len(self.masks):
+                polygon = self.masks.xy[i]
+                item["segments"] = {
+                    "x": polygon[:, 0].tolist(),
+                    "y": polygon[:, 1].tolist(),
+                }
             out.append(item)
         return out
 
@@ -224,7 +278,137 @@ class Results:
         return 0 if self.boxes is None else len(self.boxes)
 
     def __repr__(self) -> str:
-        return f"Results(path={self.path!r}, detections={len(self)})"
+        if self.semantic_mask is not None:
+            return f"Results(path={self.path!r}, semantic_shape={self.semantic_mask.orig_shape})"
+        return f"Results(path={self.path!r}, detections={len(self)}, masks={len(self.masks or [])})"
+
+
+class SemanticMask:
+    """Dense semantic class IDs for one image at original resolution."""
+
+    def __init__(
+        self,
+        data: torch.Tensor,
+        orig_shape: tuple[int, int],
+        probs: torch.Tensor | None = None,
+    ) -> None:
+        if not isinstance(data, torch.Tensor):
+            raise TypeError(f"semantic mask data must be a torch.Tensor, got {type(data).__name__}")
+        if data.ndim != 2:
+            raise ValueError(f"semantic mask data must have shape [H, W], got {tuple(data.shape)}")
+        if data.dtype == torch.bool or torch.is_floating_point(data) or torch.is_complex(data):
+            raise TypeError(f"semantic mask data must contain integer class IDs, got {data.dtype}")
+        if len(orig_shape) != 2 or any(
+            not isinstance(value, int) or value < 1 for value in orig_shape
+        ):
+            raise ValueError(
+                f"orig_shape must contain positive (height, width), got {orig_shape!r}"
+            )
+        if tuple(data.shape) != orig_shape:
+            raise ValueError(
+                f"semantic mask shape must match orig_shape, got {tuple(data.shape)} and {orig_shape}"
+            )
+        self._data = data
+        self.orig_shape = orig_shape
+        if probs is not None:
+            if probs.ndim != 3 or tuple(probs.shape[-2:]) != orig_shape:
+                raise ValueError(
+                    "semantic probabilities must have shape [C, H, W] matching orig_shape"
+                )
+            if not torch.is_floating_point(probs):
+                raise TypeError("semantic probabilities must use a floating-point dtype")
+        self._probs = probs
+
+    @property
+    def data(self) -> torch.Tensor:
+        """Integer class-ID tensor with shape ``[H, W]``."""
+        return self._data
+
+    @property
+    def mask(self) -> torch.Tensor:
+        """Alias for the integer class-ID tensor."""
+        return self._data
+
+    @property
+    def probs(self) -> torch.Tensor | None:
+        """Optional per-class probabilities with shape ``[C, H, W]``."""
+        return self._probs
+
+    def colorize(self) -> np.ndarray:
+        """Return a deterministic HWC BGR visualization of the class map."""
+        from dfine.plotting import PALETTE
+
+        class_ids = self._data.detach().cpu().numpy()
+        image = np.zeros((*self.orig_shape, 3), dtype=np.uint8)
+        for class_id in np.unique(class_ids):
+            image[class_ids == class_id] = PALETTE[int(class_id) % len(PALETTE)]
+        return image
+
+    def save(self, filename: str | Path, *, colorize: bool = False) -> None:
+        """Save a lossless class-ID PNG or a colorized preview."""
+        path = Path(filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if colorize:
+            image = self.colorize()
+        else:
+            class_ids = self._data.detach().cpu().numpy()
+            if class_ids.size and (class_ids.min() < 0 or class_ids.max() > 65535):
+                raise ValueError("PNG class-ID maps support values from 0 through 65535")
+            image = class_ids.astype(np.uint8 if class_ids.max(initial=0) <= 255 else np.uint16)
+        if not cv2.imwrite(str(path), image):
+            raise OSError(f"Failed to save semantic mask to '{path}'")
+
+    def __repr__(self) -> str:
+        return (
+            f"SemanticMask(shape={self.orig_shape}, dtype={self._data.dtype}, "
+            f"device={self._data.device})"
+        )
+
+
+class Masks:
+    """Per-instance binary masks with polygon projections."""
+
+    def __init__(self, data, orig_shape: tuple[int, int]) -> None:
+        if data.ndim != 3:
+            raise ValueError("masks data must have shape [N, H, W]")
+        self._data = data
+        self.orig_shape = orig_shape
+
+    @property
+    def data(self):
+        """Raw mask tensor with shape ``[N, H, W]``."""
+        return self._data
+
+    @property
+    def xy(self) -> list[np.ndarray]:
+        """Largest external contour for each mask in absolute pixel coordinates."""
+        polygons: list[np.ndarray] = []
+        for mask in self._data.detach().cpu().numpy():
+            contours, _ = cv2.findContours(
+                mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
+            if not contours:
+                polygons.append(np.empty((0, 2), dtype=np.float32))
+                continue
+            contour = max(contours, key=cv2.contourArea).reshape(-1, 2)
+            polygons.append(contour.astype(np.float32, copy=False))
+        return polygons
+
+    @property
+    def xyn(self) -> list[np.ndarray]:
+        """Largest external contours normalized to ``[0, 1]``."""
+        height, width = self.orig_shape
+        scale = np.array([width, height], dtype=np.float32)
+        return [polygon / scale for polygon in self.xy]
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __bool__(self) -> bool:
+        return len(self) > 0
+
+    def __repr__(self) -> str:
+        return f"Masks(n={len(self)}, shape={self.orig_shape}, device={self._data.device})"
 
 
 class Boxes:

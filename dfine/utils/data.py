@@ -19,6 +19,14 @@ or split-first:
     path: /data/my_dataset
     train: train/images                 # train/labels
     val:   val/images
+
+Semantic masks:
+    path: /data/my_dataset
+    train: images/train
+    val:   images/val
+    train_masks: labels/train          # optional when inferable from images path
+    val_masks: labels/val
+    ignore_index: 255
 """
 
 from __future__ import annotations
@@ -35,6 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
 import torch
 import yaml
 from PIL import Image
@@ -44,9 +53,17 @@ from dfine.utils.augmentations import (
     AugmentationConfig,
     color_jitter_hsv,
     horizontal_flip,
+    horizontal_flip_masks,
     random_crop,
+    random_crop_instances,
+    random_crop_semantic,
+    resize_masks,
+    resize_semantic_mask,
     sanitize,
+    sanitize_instances,
     scale_translate,
+    scale_translate_instances,
+    scale_translate_semantic,
     stretch_resize,
     to_tensor,
 )
@@ -61,6 +78,14 @@ class DetectionSplitSpec:
     img_dir: Path
     ann_file: Path
     label_dir: Path | None = None
+
+
+@dataclass(frozen=True)
+class SemanticSplitSpec:
+    """Resolved image and dense-mask directories for one semantic split."""
+
+    img_dir: Path
+    mask_dir: Path
 
 
 def load_data_yaml(path: str | Path) -> dict:
@@ -97,7 +122,7 @@ def resolve_detection_split(data: str | Path, split: str) -> DetectionSplitSpec:
     if label_dir is not None:
         cache_dir = _dataset_cache_dir(root)
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_name = f"{split}_{_slugify_relpath(Path(cfg[split]))}.coco.json"
+        cache_name = f"{split}_{_slugify_relpath(Path(cfg[split]))}.v2.coco.json"
         ann_file = cache_dir / cache_name
         if not _yolo_cache_is_fresh(ann_file, img_dir, label_dir):
             convert_yolo_split_to_coco_json(img_dir, label_dir, ann_file, normalize_names(cfg))
@@ -111,6 +136,177 @@ def resolve_detection_split(data: str | Path, split: str) -> DetectionSplitSpec:
         "annotations/instances_*.json) or YOLO labels beside the images "
         "(e.g. images/train + labels/train, or train/images + train/labels)."
     )
+
+
+def resolve_semantic_split(data: str | Path, split: str) -> SemanticSplitSpec:
+    """Resolve a semantic split using explicit mask paths or images/labels mirroring."""
+    cfg = load_data_yaml(data)
+    if split not in cfg:
+        raise KeyError(f"Data YAML does not define split {split!r}")
+    root_value = cfg.get("path")
+    if not isinstance(root_value, (str, Path)):
+        raise ValueError("Data YAML must define a dataset 'path'")
+    root = Path(root_value).expanduser()
+    if not root.is_absolute():
+        root = (Path(data).resolve().parent / root).resolve()
+
+    split_value = cfg[split]
+    if not isinstance(split_value, (str, Path)):
+        raise ValueError(f"Data YAML {split!r} must be a directory path")
+    img_dir = root / split_value
+    mask_value = cfg.get(f"{split}_masks")
+    if mask_value is not None:
+        if not isinstance(mask_value, (str, Path)):
+            raise ValueError(f"Data YAML {split}_masks must be a directory path")
+        mask_dir = root / mask_value
+    else:
+        relative = Path(split_value)
+        parts = list(relative.parts)
+        if "images" in parts:
+            parts[parts.index("images")] = "labels"
+            mask_dir = root / Path(*parts)
+        elif relative.name == "images":
+            mask_dir = root / relative.parent / "labels"
+        else:
+            mask_dir = root / "labels" / relative.name
+
+    if not img_dir.is_dir():
+        raise FileNotFoundError(f"Semantic image directory not found: {img_dir}")
+    if not mask_dir.is_dir():
+        raise FileNotFoundError(f"Semantic mask directory not found: {mask_dir}")
+    return SemanticSplitSpec(img_dir=img_dir, mask_dir=mask_dir)
+
+
+class SemanticSegmentationDataset(Dataset):
+    """Image/dense-PNG pairs for semantic segmentation.
+
+    Every mask is a single-channel integer class map. Its relative path mirrors
+    the image path and its suffix is always ``.png``.
+    """
+
+    def __init__(
+        self,
+        spec: SemanticSplitSpec,
+        imgsz: int,
+        num_classes: int,
+        ignore_index: int = 255,
+        cache: bool | str = False,
+        augment: AugmentationConfig | None = None,
+        seed: int = 0,
+        retain_original_mask: bool = False,
+    ) -> None:
+        if imgsz < 1:
+            raise ValueError(f"imgsz must be positive, got {imgsz}")
+        if num_classes < 1:
+            raise ValueError(f"num_classes must be positive, got {num_classes}")
+        if 0 <= ignore_index < num_classes:
+            raise ValueError(
+                f"ignore_index={ignore_index} overlaps valid class IDs [0, {num_classes - 1}]"
+            )
+
+        self.spec = spec
+        self.imgsz = imgsz
+        self.num_classes = num_classes
+        self.ignore_index = ignore_index
+        self.augment = augment
+        self.seed = seed
+        self.retain_original_mask = retain_original_mask
+        self.epoch = 0
+        self.mosaic_enabled = False
+        self.image_paths = sorted(
+            path for path in spec.img_dir.rglob("*") if path.suffix.lower() in IMAGE_SUFFIXES
+        )
+        if not self.image_paths:
+            raise FileNotFoundError(f"No supported images found in semantic split: {spec.img_dir}")
+        self.mask_paths = [
+            spec.mask_dir / path.relative_to(spec.img_dir).with_suffix(".png")
+            for path in self.image_paths
+        ]
+        missing = [path for path in self.mask_paths if not path.is_file()]
+        if missing:
+            preview = ", ".join(str(path) for path in missing[:3])
+            suffix = " ..." if len(missing) > 3 else ""
+            raise FileNotFoundError(f"Missing {len(missing)} semantic mask(s): {preview}{suffix}")
+
+        self.cache = cache
+        self._cache: dict[int, tuple[Image.Image, torch.Tensor]] = {}
+        if cache is True or str(cache).lower() == "ram":
+            for index in range(len(self.image_paths)):
+                self._cache[index] = self._load_pair(index)
+        elif cache not in (False, None, "false"):
+            raise ValueError("cache must be False, True, or 'ram'")
+
+    def __len__(self) -> int:
+        return len(self.image_paths)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        cached = self._cache.get(index)
+        image, original_mask = self._load_pair(index) if cached is None else cached
+        image = image.copy()
+        original_mask = original_mask.clone()
+        original_height, original_width = original_mask.shape
+        mask = resize_semantic_mask(original_mask, self.imgsz)
+        image = image.resize((self.imgsz, self.imgsz), Image.Resampling.BILINEAR)
+
+        rng = random.Random(self.seed + self.epoch * max(len(self), 1) + index)
+        cfg = self.augment
+        if cfg and cfg.enabled:
+            if cfg.fliplr and rng.random() < cfg.fliplr:
+                image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+                mask = torch.flip(mask, dims=[1])
+            if cfg.scale or cfg.translate:
+                image, mask = scale_translate_semantic(
+                    image,
+                    mask,
+                    cfg.scale,
+                    cfg.translate,
+                    rng,
+                    self.ignore_index,
+                )
+            if cfg.crop and rng.random() < cfg.crop:
+                image, mask = random_crop_semantic(image, mask, cfg.crop, rng)
+                image = image.resize((self.imgsz, self.imgsz), Image.Resampling.BILINEAR)
+                mask = resize_semantic_mask(mask, self.imgsz)
+            image = color_jitter_hsv(image, cfg, rng)
+
+        target = {
+            "sem_mask": mask.long(),
+            "orig_size": torch.tensor([original_height, original_width], dtype=torch.long),
+            "image_id": torch.tensor([index], dtype=torch.long),
+        }
+        if self.retain_original_mask:
+            target["orig_mask"] = original_mask.long()
+        return to_tensor(image), target
+
+    def set_epoch(self, epoch: int, mosaic: bool = True) -> None:
+        del mosaic
+        self.epoch = epoch
+
+    def _load_pair(self, index: int) -> tuple[Image.Image, torch.Tensor]:
+        with Image.open(self.image_paths[index]) as image_file:
+            image = image_file.convert("RGB").copy()
+        with Image.open(self.mask_paths[index]) as mask_file:
+            mask_array = np.asarray(mask_file).copy()
+        if mask_array.ndim != 2 or not np.issubdtype(mask_array.dtype, np.integer):
+            raise ValueError(
+                f"Semantic mask must be a single-channel integer image: {self.mask_paths[index]}"
+            )
+        if mask_array.shape != (image.height, image.width):
+            raise ValueError(
+                "Semantic image and mask dimensions differ for "
+                f"{self.image_paths[index]}: image={(image.height, image.width)}, "
+                f"mask={mask_array.shape}"
+            )
+        invalid = (mask_array != self.ignore_index) & (
+            (mask_array < 0) | (mask_array >= self.num_classes)
+        )
+        if invalid.any():
+            invalid_id = int(mask_array[invalid][0])
+            raise ValueError(
+                f"Semantic mask {self.mask_paths[index]} contains class ID {invalid_id}; "
+                f"expected [0, {self.num_classes - 1}] or ignore_index={self.ignore_index}"
+            )
+        return image, torch.from_numpy(mask_array.astype(np.int64, copy=False))
 
 
 class CocoFinetuneDataset(Dataset):
@@ -137,6 +333,7 @@ class CocoFinetuneDataset(Dataset):
         cache: bool | str = False,
         augment: AugmentationConfig | None = None,
         seed: int = 0,
+        task: Literal["detect", "segment"] = "detect",
     ) -> None:
         from pycocotools.coco import COCO
 
@@ -149,6 +346,7 @@ class CocoFinetuneDataset(Dataset):
         self.mosaic_enabled = True
         self.seed = seed
         self.epoch = 0
+        self.task = task
 
         if cat_id_to_label is None:
             sorted_cat_ids = sorted(self.coco.cats)
@@ -158,6 +356,13 @@ class CocoFinetuneDataset(Dataset):
         self.single_cls = single_cls
         self.cache = cache
         self._image_cache: dict[int, Image.Image] = {}
+        if self.task == "segment" and not any(
+            ann.get("segmentation") for ann in self.coco.anns.values()
+        ):
+            raise ValueError(
+                "task='segment' requires polygon or RLE instance annotations; "
+                "the selected split contains bounding boxes only"
+            )
         if cache is True or str(cache).lower() == "ram":
             for index in range(len(self.ids)):
                 self._image_cache[index] = self._load_image(index)
@@ -168,7 +373,7 @@ class CocoFinetuneDataset(Dataset):
         return len(self.ids)
 
     def __getitem__(self, idx: int):
-        image, boxes, labels, img_id = self._load_item(idx)
+        image, boxes, labels, masks, img_id = self._load_item(idx)
         rng = random.Random(self.seed + self.epoch * max(len(self), 1) + idx)
         cfg = self.augment
         mosaic_active = bool(
@@ -179,46 +384,68 @@ class CocoFinetuneDataset(Dataset):
             and rng.random() < cfg.mosaic
         )
         if mosaic_active:
-            image, boxes, labels = self._mosaic(idx, rng)
+            image, boxes, labels, masks = self._mosaic(idx, rng)
         else:
             image, boxes = stretch_resize(image, boxes, self.imgsz)
+            masks = resize_masks(masks, self.imgsz)
 
         if cfg and cfg.enabled:
             if cfg.fliplr and rng.random() < cfg.fliplr:
                 image, boxes = horizontal_flip(image, boxes)
+                masks = horizontal_flip_masks(masks)
             if cfg.scale or cfg.translate:
-                image, boxes = scale_translate(image, boxes, cfg.scale, cfg.translate, rng)
+                if self.task == "segment":
+                    image, boxes, masks = scale_translate_instances(
+                        image, boxes, masks, cfg.scale, cfg.translate, rng
+                    )
+                else:
+                    image, boxes = scale_translate(image, boxes, cfg.scale, cfg.translate, rng)
             if cfg.crop and rng.random() < cfg.crop:
-                image, boxes, keep = random_crop(image, boxes, cfg.crop, rng)
+                if self.task == "segment":
+                    image, boxes, masks, keep = random_crop_instances(
+                        image, boxes, masks, cfg.crop, rng
+                    )
+                else:
+                    image, boxes, keep = random_crop(image, boxes, cfg.crop, rng)
                 labels = labels[keep]
                 image, boxes = stretch_resize(image, boxes, self.imgsz)
+                masks = resize_masks(masks, self.imgsz)
             image = color_jitter_hsv(image, cfg, rng)
             if cfg.mixup and rng.random() < cfg.mixup:
                 other_idx = rng.randrange(len(self))
-                other_image, other_boxes, other_labels, _ = self._load_item(other_idx)
+                other_image, other_boxes, other_labels, other_masks, _ = self._load_item(other_idx)
                 other_image, other_boxes = stretch_resize(other_image, other_boxes, self.imgsz)
+                other_masks = resize_masks(other_masks, self.imgsz)
                 ratio = rng.betavariate(32.0, 32.0)
                 image = Image.blend(image, other_image, 1.0 - ratio)
                 boxes = torch.cat((boxes, other_boxes))
                 labels = torch.cat((labels, other_labels))
+                masks = torch.cat((masks, other_masks))
 
-        boxes, labels = sanitize(boxes, labels, self.imgsz, self.imgsz)
+        if self.task == "segment":
+            boxes, labels, masks = sanitize_instances(boxes, labels, masks, self.imgsz, self.imgsz)
+        else:
+            boxes, labels = sanitize(boxes, labels, self.imgsz, self.imgsz)
         boxes = self._normalize_boxes(boxes)
         target = {
             "labels": labels,
             "boxes": boxes,
             "image_id": torch.tensor([img_id], dtype=torch.long),
         }
+        if self.task == "segment":
+            target["masks"] = masks
         return to_tensor(image), target
 
-    def _load_item(self, idx: int) -> tuple[Image.Image, torch.Tensor, torch.Tensor, int]:
+    def _load_item(
+        self, idx: int
+    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor, int]:
         img_id = self.ids[idx]
         image = self._image_cache.get(idx)
         if image is None:
             image = self._load_image(idx)
         width, height = image.size
         anns = self.coco.loadAnns(self.coco.getAnnIds(imgIds=img_id, iscrowd=False))
-        box_values, label_values = [], []
+        box_values, label_values, mask_values = [], [], []
         for ann in anns:
             x, y, w, h = ann["bbox"]
             if w <= 0 or h <= 0:
@@ -226,29 +453,42 @@ class CocoFinetuneDataset(Dataset):
             label = self.cat_id_to_label.get(ann["category_id"], 0)
             if self.classes is not None and label not in self.classes:
                 continue
+            if self.task == "segment" and not ann.get("segmentation"):
+                continue
             box_values.append([x, y, x + w, y + h])
             label_values.append(0 if self.single_cls else label)
+            if self.task == "segment":
+                mask_values.append(torch.from_numpy(self.coco.annToMask(ann)).to(torch.uint8))
         boxes = torch.tensor(box_values, dtype=torch.float32).reshape(-1, 4)
         labels = torch.tensor(label_values, dtype=torch.long)
-        return image.copy(), boxes, labels, img_id
+        masks = (
+            torch.stack(mask_values)
+            if mask_values
+            else torch.zeros((0, height, width), dtype=torch.uint8)
+        )
+        return image.copy(), boxes, labels, masks, img_id
 
     def _mosaic(
         self, idx: int, rng: random.Random
-    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor]:
+    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor]:
         half = self.imgsz // 2
         canvas = Image.new("RGB", (self.imgsz, self.imgsz), (114, 114, 114))
         indices = [idx, *(rng.randrange(len(self)) for _ in range(3))]
-        all_boxes, all_labels = [], []
+        all_boxes, all_labels, all_masks = [], [], []
         offsets = ((0, 0), (half, 0), (0, half), (half, half))
         for item_idx, (left, top) in zip(indices, offsets):
-            image, boxes, labels, _ = self._load_item(item_idx)
+            image, boxes, labels, masks, _ = self._load_item(item_idx)
             image, boxes = stretch_resize(image, boxes, half)
+            masks = resize_masks(masks, half)
             canvas.paste(image, (left, top))
             boxes[:, [0, 2]] += left
             boxes[:, [1, 3]] += top
             all_boxes.append(boxes)
             all_labels.append(labels)
-        return canvas, torch.cat(all_boxes), torch.cat(all_labels)
+            placed_masks = torch.zeros((len(masks), self.imgsz, self.imgsz), dtype=torch.uint8)
+            placed_masks[:, top : top + half, left : left + half] = masks
+            all_masks.append(placed_masks)
+        return canvas, torch.cat(all_boxes), torch.cat(all_labels), torch.cat(all_masks)
 
     def _normalize_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         result = boxes.clone()
@@ -291,6 +531,7 @@ def build_detection_dataloader(
     single_cls: bool = False,
     fraction: float = 1.0,
     augment: AugmentationConfig | None = None,
+    task: Literal["detect", "segment"] = "detect",
 ) -> DataLoader:
     """Build a DataLoader from COCO JSON or YOLO txt labels."""
     cfg = load_data_yaml(data)
@@ -309,6 +550,7 @@ def build_detection_dataloader(
         cache=cache,
         augment=augment if split == "train" else None,
         seed=seed,
+        task=task,
     )
 
     if not 0.0 < fraction <= 1.0:
@@ -319,6 +561,64 @@ def build_detection_dataloader(
         count = max(1, int(len(base_dataset) * fraction))
         generator = torch.Generator().manual_seed(seed)
         indices = torch.randperm(len(base_dataset), generator=generator)[:count].tolist()
+        dataset = Subset(base_dataset, indices)
+        dataset_size = count
+
+    generator = torch.Generator().manual_seed(seed)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=split == "train",
+        num_workers=workers,
+        collate_fn=_collate,
+        drop_last=split == "train" and dataset_size >= batch_size,
+        generator=generator,
+        worker_init_fn=_seed_worker if workers > 0 and deterministic else None,
+    )
+
+
+def build_semantic_dataloader(
+    data: str | Path,
+    split: str,
+    imgsz: int,
+    batch_size: int,
+    spec: SemanticSplitSpec | None = None,
+    workers: int = 0,
+    cache: bool | str = False,
+    seed: int = 0,
+    deterministic: bool = True,
+    fraction: float = 1.0,
+    augment: AugmentationConfig | None = None,
+) -> DataLoader:
+    """Build a semantic loader that preserves integer class maps."""
+    cfg = load_data_yaml(data)
+    names = normalize_names(cfg)
+    ignore_index = cfg.get("ignore_index", 255)
+    if isinstance(ignore_index, bool) or not isinstance(ignore_index, int):
+        raise ValueError("Data YAML ignore_index must be an integer")
+    if ignore_index < 0:
+        raise ValueError("Data YAML ignore_index must be non-negative")
+    if augment and augment.enabled and (augment.mosaic > 0 or augment.mixup > 0):
+        raise ValueError("Semantic training does not support mosaic or mixup augmentations")
+
+    base_dataset = SemanticSegmentationDataset(
+        spec=spec or resolve_semantic_split(data, split),
+        imgsz=imgsz,
+        num_classes=len(names),
+        ignore_index=ignore_index,
+        cache=cache,
+        augment=augment if split == "train" else None,
+        seed=seed,
+        retain_original_mask=split != "train",
+    )
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError("fraction must be in the range (0, 1]")
+    dataset: Dataset = base_dataset
+    dataset_size = len(base_dataset)
+    if fraction < 1.0:
+        count = max(1, int(dataset_size * fraction))
+        subset_generator = torch.Generator().manual_seed(seed)
+        indices = torch.randperm(dataset_size, generator=subset_generator)[:count].tolist()
         dataset = Subset(base_dataset, indices)
         dataset_size = count
 
@@ -459,8 +759,8 @@ def _load_yolo_annotations(
     width: int,
     height: int,
     names: dict[int, str],
-) -> list[dict[str, int | float | list[float]]]:
-    annotations: list[dict[str, int | float | list[float]]] = []
+) -> list[dict[str, object]]:
+    annotations: list[dict[str, object]] = []
     raw = label_path.read_text().splitlines()
 
     for line_no, line in enumerate(raw, start=1):
@@ -469,13 +769,15 @@ def _load_yolo_annotations(
             continue
 
         parts = stripped.split()
-        if len(parts) != 5:
+        is_box = len(parts) == 5
+        is_polygon = len(parts) >= 7 and (len(parts) - 1) % 2 == 0
+        if not is_box and not is_polygon:
             LOGGER.warning("Skipping malformed YOLO label row %s:%d", label_path, line_no)
             continue
 
         try:
             class_id = int(float(parts[0]))
-            cx, cy, bw, bh = (float(v) for v in parts[1:])
+            values = [float(value) for value in parts[1:]]
         except ValueError:
             LOGGER.warning("Skipping non-numeric YOLO label row %s:%d", label_path, line_no)
             continue
@@ -485,17 +787,32 @@ def _load_yolo_annotations(
                 "Skipping out-of-range YOLO class id %s in %s:%d", class_id, label_path, line_no
             )
             continue
-        if not all(math.isfinite(v) for v in (cx, cy, bw, bh)):
-            LOGGER.warning("Skipping non-finite YOLO box in %s:%d", label_path, line_no)
-            continue
-        if bw <= 0 or bh <= 0:
-            LOGGER.warning("Skipping non-positive YOLO box in %s:%d", label_path, line_no)
+        if not all(math.isfinite(value) for value in values):
+            LOGGER.warning("Skipping non-finite YOLO annotation in %s:%d", label_path, line_no)
             continue
 
-        x1 = (cx - bw / 2) * width
-        y1 = (cy - bh / 2) * height
-        x2 = (cx + bw / 2) * width
-        y2 = (cy + bh / 2) * height
+        segmentation: list[list[float]] | None = None
+        if is_box:
+            cx, cy, bw, bh = values
+            if bw <= 0 or bh <= 0:
+                LOGGER.warning("Skipping non-positive YOLO box in %s:%d", label_path, line_no)
+                continue
+            x1 = (cx - bw / 2) * width
+            y1 = (cy - bh / 2) * height
+            x2 = (cx + bw / 2) * width
+            y2 = (cy + bh / 2) * height
+        else:
+            points = [
+                [
+                    min(max(values[index] * width, 0.0), float(width)),
+                    min(max(values[index + 1] * height, 0.0), float(height)),
+                ]
+                for index in range(0, len(values), 2)
+            ]
+            x_values = [point[0] for point in points]
+            y_values = [point[1] for point in points]
+            x1, y1, x2, y2 = min(x_values), min(y_values), max(x_values), max(y_values)
+            segmentation = [[coordinate for point in points for coordinate in point]]
 
         x1 = min(max(x1, 0.0), float(width))
         y1 = min(max(y1, 0.0), float(height))
@@ -512,13 +829,29 @@ def _load_yolo_annotations(
         box_w = round(box_w, 6)
         box_h = round(box_h, 6)
 
-        annotations.append(
-            {
-                "category_id": class_id + 1,
-                "bbox": [x1, y1, box_w, box_h],
-                "area": round(box_w * box_h, 6),
-            }
-        )
+        area = box_w * box_h
+        if segmentation is not None:
+            polygon = segmentation[0]
+            point_count = len(polygon) // 2
+            area = (
+                abs(
+                    sum(
+                        polygon[2 * index] * polygon[2 * ((index + 1) % point_count) + 1]
+                        - polygon[2 * ((index + 1) % point_count)] * polygon[2 * index + 1]
+                        for index in range(point_count)
+                    )
+                )
+                / 2
+            )
+
+        annotation: dict[str, object] = {
+            "category_id": class_id + 1,
+            "bbox": [x1, y1, box_w, box_h],
+            "area": round(area, 6),
+        }
+        if segmentation is not None:
+            annotation["segmentation"] = segmentation
+        annotations.append(annotation)
 
     return annotations
 

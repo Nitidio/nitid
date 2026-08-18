@@ -93,10 +93,9 @@ services:
 
 Open your Mac terminal, navigate to the project root, and run the following commands **in order**.
 
-### Step 1 — Clone the repo and initialise submodules
+### Step 1 — Clone the repo
 ```bash
 git clone <repo> && cd nitid
-git submodule update --init    # pulls D-FINE source into extern/dfine
 ```
 
 ### Step 2 — Build the Docker image (~1–2 minutes)
@@ -136,9 +135,7 @@ uv run ruff check dfine/ tools/ tests/ web/ scripts/
 uv run mypy dfine/
 ```
 
-> **Note on ruff:** Running `uv run ruff check .` will also scan `extern/dfine/` (the third-party D-FINE submodule) and produce ~100+ noise warnings. Scope it to your own code using the command above instead.
-
-> **Note on mypy:** 19 pre-existing type errors are expected — they are acknowledged in `pyproject.toml` with `strict = false` and are being fixed gradually.
+Scope Ruff and mypy to the maintained package, tools, tests, web code, and scripts as shown above.
 
 ---
 

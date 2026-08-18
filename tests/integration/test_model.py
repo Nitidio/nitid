@@ -11,6 +11,40 @@ def test_model_task_property(tiny_checkpoint):
     assert model.task == "detect"
 
 
+def test_segment_model_task_property(tiny_segment_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    assert model.task == "segment"
+
+
+def test_checkpoint_task_must_match_requested_task(tiny_segment_checkpoint):
+    from dfine import DFINE
+
+    with pytest.raises(ValueError, match="Checkpoint task is 'segment'"):
+        DFINE(tiny_segment_checkpoint, task="detect", device="cpu", verbose=False)
+
+
+def test_invalid_task_is_rejected_before_loading():
+    from dfine import DFINE
+
+    with pytest.raises(ValueError, match="Unsupported task"):
+        DFINE("dfine_s", task="panoptic", device="cpu", verbose=False)
+
+
+@pytest.mark.parametrize("task", ["semantic", "sem_seg"])
+def test_semantic_checkpoint_loads_and_predicts(task, tiny_semantic_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task=task, device="cpu", verbose=False)
+
+    assert model.task == "semantic"
+    assert model._model.decoder.__class__.__name__ == "SemSegDecoder"
+    result = model.predict(np.zeros((48, 80, 3), dtype=np.uint8), imgsz=64)[0]
+    assert result.semantic is result.semantic_mask
+    assert result.semantic.mask.shape == (48, 80)
+
+
 def test_model_device_property(tiny_checkpoint):
     from dfine import DFINE
 
@@ -89,9 +123,9 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     download_calls = []
     load_calls = []
 
-    def fake_download_model(model, *, weights="default", output=None, force=False):
-        download_calls.append((model, weights, output))
-        asset = downloads.get_model_asset(model, weights=weights)
+    def fake_download_model(model, *, task="detect", weights="default", output=None, force=False):
+        download_calls.append((model, task, weights, output))
+        asset = downloads.get_model_asset(model, weights=weights, task=task)
         out_path = downloads.resolve_output_path(asset, output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(b"dummy_weights")
@@ -116,7 +150,7 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     # It should download to default filename in current working dir (None)
     _ = DFINE("dfine_s", device="cpu", verbose=False)
     assert len(download_calls) == 1
-    assert download_calls[0] == ("dfine_s", "obj2coco", None)
+    assert download_calls[0] == ("dfine_s", "detect", "obj2coco", None)
     assert load_calls[0] == "dfine_s_obj2coco_wrapped.pth"
     import os
 
@@ -129,8 +163,8 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     custom_path = tmp_path / "custom_dir" / "dfine_s.pth"
     _ = DFINE(str(custom_path), device="cpu", verbose=False)
     assert len(download_calls) == 1
-    assert download_calls[0][0:2] == ("dfine_s", "obj2coco")
-    assert str(download_calls[0][2]) == str(custom_path)
+    assert download_calls[0][0:3] == ("dfine_s", "detect", "obj2coco")
+    assert str(download_calls[0][3]) == str(custom_path)
     assert load_calls[0] == str(custom_path)
 
 
@@ -140,9 +174,11 @@ def test_model_weights_selects_official_variant(monkeypatch):
 
     observed = {}
 
-    def fake_download_model(model, *, weights="default", output=None, force=False):
-        observed.update(model=model, weights=weights)
-        return downloads.resolve_output_path(downloads.get_model_asset(model, weights), output)
+    def fake_download_model(model, *, task="detect", weights="default", output=None, force=False):
+        observed.update(model=model, task=task, weights=weights)
+        return downloads.resolve_output_path(
+            downloads.get_model_asset(model, weights, task=task), output
+        )
 
     def fake_load_checkpoint(path, device="cpu"):
         class DummyModel:
@@ -159,7 +195,7 @@ def test_model_weights_selects_official_variant(monkeypatch):
 
     model = DFINE("dfine_s", weights="coco", device="cpu", verbose=False)
 
-    assert observed == {"model": "dfine_s", "weights": "coco"}
+    assert observed == {"model": "dfine_s", "task": "detect", "weights": "coco"}
     assert model.weights == "coco"
 
 

@@ -2,6 +2,7 @@
 
 import logging
 
+import numpy as np
 import pytest
 import torch
 
@@ -41,6 +42,144 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     assert model.names == {0: "person", 1: "car"}
     assert model._cfg["num_classes"] == 2
     assert model._model.decoder.num_classes == 2
+
+
+def test_segment_train_and_validation_run_end_to_end(
+    tiny_segment_checkpoint, tiny_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    model = DFINE(
+        tiny_segment_checkpoint,
+        task="segment",
+        device="cpu",
+        verbose=False,
+    )
+    metrics = model.train(
+        data=tiny_dataset,
+        epochs=1,
+        imgsz=64,
+        batch=2,
+        augment=False,
+        plots=False,
+        project=str(tmp_path),
+        name="segment",
+        verbose=False,
+    )
+
+    row = metrics["history"][0]
+    assert model.task == "segment"
+    assert set(row) >= {
+        "loss_mask_bce",
+        "loss_mask_dice",
+        "mask_mAP50",
+        "mask_mAP50-95",
+    }
+    assert (tmp_path / "segment" / "last.pth").exists()
+
+    reloaded = DFINE(
+        tmp_path / "segment" / "last.pth",
+        task="segment",
+        device="cpu",
+        verbose=False,
+    )
+    result = reloaded.predict(np.zeros((64, 64, 3), dtype=np.uint8), conf=0.99)[0]
+    assert result.masks is not None
+
+
+def test_semantic_train_validation_and_checkpoint_reload_run_end_to_end(
+    tiny_semantic_checkpoint, tiny_semantic_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    model = DFINE(
+        tiny_semantic_checkpoint,
+        task="semantic",
+        device="cpu",
+        verbose=False,
+    )
+    metrics = model.train(
+        data=tiny_semantic_dataset,
+        epochs=1,
+        imgsz=64,
+        batch=2,
+        augment=False,
+        plots=False,
+        project=str(tmp_path),
+        name="semantic",
+        verbose=False,
+    )
+
+    row = metrics["history"][0]
+    assert set(row) >= {
+        "loss_ce",
+        "loss_dice",
+        "loss_aux",
+        "mIoU",
+        "pixel_accuracy",
+        "fitness",
+    }
+    assert 0.0 <= metrics["mIoU"] <= 1.0
+    assert 0.0 <= metrics["pixel_accuracy"] <= 1.0
+    checkpoint = tmp_path / "semantic" / "last.pth"
+    assert checkpoint.exists()
+
+    reloaded = DFINE(checkpoint, task="semantic", device="cpu", verbose=False)
+    validation = reloaded.val(
+        data=tiny_semantic_dataset,
+        imgsz=64,
+        batch=2,
+        plots=False,
+        save_dir=tmp_path / "semantic_val",
+        verbose=False,
+    )
+    assert set(validation) >= {"mIoU", "pixel_accuracy", "per_class", "pixels"}
+    assert validation["images"] == 2
+
+    resumed = DFINE(
+        tiny_semantic_checkpoint,
+        task="semantic",
+        device="cpu",
+        verbose=False,
+    )
+    resumed_metrics = resumed.train(
+        data=tiny_semantic_dataset,
+        epochs=2,
+        imgsz=64,
+        batch=2,
+        augment=False,
+        plots=False,
+        project=str(tmp_path),
+        name="semantic",
+        resume=True,
+        verbose=False,
+    )
+    assert [row["epoch"] for row in resumed_metrics["history"]] == [1, 2]
+
+
+def test_semantic_validation_supports_non_native_image_size(
+    tiny_semantic_checkpoint, tiny_semantic_dataset, tmp_path
+):
+    from dfine import DFINE
+
+    model = DFINE(
+        tiny_semantic_checkpoint,
+        task="semantic",
+        device="cpu",
+        verbose=False,
+    )
+    metrics = model.val(
+        data=tiny_semantic_dataset,
+        imgsz=32,
+        batch=2,
+        plots=False,
+        save_dir=tmp_path / "semantic_non_native_val",
+        verbose=False,
+    )
+
+    assert metrics["images"] == 2
+    assert 0.0 <= metrics["mIoU"] <= 1.0
+    assert 0.0 <= metrics["pixel_accuracy"] <= 1.0
 
 
 def test_repeated_train_calls_increment_run_directory(tiny_checkpoint, tiny_dataset, tmp_path):

@@ -1,28 +1,29 @@
 # nitid Roadmap
 
-*Last reviewed: 2026-08-06.*
+*Last reviewed: 2026-08-16.*
 
 This roadmap explains where nitid is heading, what is currently in scope, and what is intentionally out
 of scope. It is the canonical version; the [`ROADMAP.md`](https://github.com/Vaelsys/nitid/blob/develop/ROADMAP.md)
 at the repository root points here.
 
-nitid is an Ultralytics-style wrapper around the D-FINE object detector. The goal is not to replace
-D-FINE's research code, but to make D-FINE easier to use for common object detection workflows: install,
-download a model, predict, train, validate, export, and inspect results.
+nitid is an Ultralytics-style library for D-FINE object detection and instance segmentation. The goal
+is to make the published D-FINE models easier to use for common workflows: install, download a model,
+predict, train, validate, export, and inspect results.
 
 ## Product direction
 
 nitid should feel familiar to users who already know Ultralytics YOLO, while keeping D-FINE as the
-underlying detection model. The experience we are building toward:
+underlying model family. The experience we are building toward:
 
 1. Install nitid.
 2. Load a model by name, such as `dfine_s`.
-3. Run prediction on images, videos, folders, streams, or screen input.
-4. Save annotated outputs and structured detection results.
-5. Fine-tune on custom detection datasets.
-6. Validate training quality with standard detection metrics.
-7. Export models for deployment.
-8. Use docs, CLI help, and examples without reading the internals first.
+3. Select object detection or instance segmentation explicitly.
+4. Run prediction on images, videos, folders, streams, or screen input.
+5. Save annotated outputs, masks, and structured results.
+6. Fine-tune on custom detection or instance-segmentation datasets.
+7. Validate training quality with standard box and mask metrics.
+8. Export models for deployment.
+9. Use docs, CLI help, and examples without reading the internals first.
 
 ### Where nitid competes
 
@@ -31,9 +32,9 @@ Three bets, in the order they earn their keep:
 - **Edge and compliance.** A certified runtime, a published hardware support matrix, and a video
   pipeline built for IP cameras rather than files. **No comparable project contests this ground** — it
   is the clearest reason for nitid to exist independently, and it ranks highest for that reason.
-- **D-FINE fidelity and depth.** nitid runs Peterande's reference implementation as a submodule rather
-  than a port, ships self-contained checkpoints, and preserves proposal ranking across a class-taxonomy
-  change. Depth over breadth.
+- **D-FINE fidelity and depth.** nitid ships the full architecture in its package, loads published
+  checkpoints strictly, provides detection and instance segmentation, and preserves proposal ranking
+  across a class-taxonomy change. Depth over breadth.
 - **Model breadth.** Covering the YOLO family so nitid can be an entry door for users migrating from
   Ultralytics. Deliberately last, and deliberately conditional — see below.
 
@@ -46,14 +47,15 @@ The full comparison — including the parts where nitid loses — is in
 
 ## In scope
 
-- D-FINE object detection.
+- D-FINE object detection and instance segmentation.
 - A YOLO-familiar Python API through the `DFINE` class.
 - Command-line workflows for prediction, training, validation, export, download, and model information.
 - Automatic download and wrapping of official D-FINE checkpoints.
 - Prediction on images, videos, folders, streams, screen capture, and numpy arrays.
-- Result helpers for annotated images, JSON, YOLO TXT labels, CSV, pandas DataFrames, timing
-  information, and object crops.
-- Fine-tuning and validation on COCO-style and YOLO-format detection datasets.
+- Result helpers for annotated images and masks, JSON, YOLO TXT labels, CSV, pandas DataFrames,
+  timing information, and object crops.
+- Fine-tuning and validation on COCO-style and YOLO-format detection and instance-segmentation
+  datasets.
 - Training quality features: AMP, EMA, resume, per-epoch metrics, callbacks, experiment tracking.
 - Export to ONNX, OpenVINO IR, TorchScript, and TensorRT.
 - Video ingest for real deployments — RTSP, ONVIF discovery, hardware-accelerated decode.
@@ -70,33 +72,30 @@ Each of these has a gate that would change the answer. None is a permanent refus
 |---|---|---|
 | Reimplementing the Ultralytics platform or HUB | Not the product | Nothing foreseeable |
 | Our own SAHI, tracker, or annotation tool | Good MIT implementations exist; reimplementing them is not a differentiator | Nothing foreseeable |
-| Replacing the D-FINE research repository | nitid is a wrapper, deliberately | Nothing foreseeable |
+| Becoming a general research framework | nitid is a focused library for published D-FINE models | Nothing foreseeable |
 | Diverging from D-FINE's training recipe without evidence | Reproducibility is the point | Measured improvement, documented |
 | Every deployment runtime at once | Each target must be testable and supportable | A target enters via the hardware matrix, not ad hoc |
 
-!!! question "Open: what happens to #123?"
-    [#123](https://github.com/Vaelsys/nitid/issues/123) proposes segmentation, pose and OBB heads that
-    share the D-FINE backbone, citing D-FINE-seg and DETRPose as precedent. One reading is that this is
-    *depth* — the same network, an incremental head, squarely in nitid's lane. The other is that it is
-    *breadth*, chasing a project that already shipped 13 tasks. This roadmap does not decide it. The
-    decision belongs with the maintainers and should be recorded as an ADR either way.
+Instance segmentation was accepted as D-FINE depth rather than general model breadth: it shares the
+integrated D-FINE architecture and public API while adding a task-specific mask head, losses, results,
+and validation. Other tasks still require separate evidence and an explicit scope decision.
 
 ## Current status
 
 nitid has a complete first workflow today:
 
 - Install from the repository with `uv` (PyPI publishing is in progress — see Phase 1b).
-- Download and wrap official D-FINE checkpoints automatically, across four sizes and two weight variants.
-- Predict from Python or the CLI, on any supported source type.
-- Export detections as annotated images, JSON, YOLO TXT, CSV, pandas DataFrames, and crops.
-- Fine-tune and validate on COCO JSON or YOLO txt datasets, with per-class AP, confusion matrix and
-  PR/F1 curves.
+- Download and wrap published detection and instance-segmentation checkpoints automatically.
+- Predict boxes or instance masks from Python or the CLI, on any supported source type.
+- Export results as annotated images, JSON, YOLO TXT, CSV, pandas DataFrames, and crops.
+- Fine-tune and validate detection or instance segmentation on COCO JSON or YOLO txt datasets, with
+  box/mask AP, per-class AP, confusion matrices, and PR/F1 curves.
 - Train with AMP, EMA, resume, callbacks, and W&B or MLflow tracking, with per-run `args.yaml`,
   `environment.yaml`, `results.csv` and `results.png`.
 - Export to ONNX, OpenVINO IR, TorchScript, and TensorRT.
 - Capture diagnostics with `--report` or `dfine bugreport`.
 - Run browser-based detection through the multi-user web application.
-- 221 tests in CI across Python 3.10, 3.11 and 3.12, with ruff, mypy and coverage reporting.
+- More than 300 tests in CI across Python 3.10, 3.11 and 3.12, with Ruff, mypy, and coverage reporting.
 
 ## Phases
 
@@ -121,7 +120,7 @@ from **2026-09-11** and CE marking from **2027-12-11**. These are fixed calendar
 aspirations, and this slice outranks everything else on the list.
 
 - Extend `SECURITY.md` with response-time commitments and a named internal owner.
-- Generate an SBOM (CycloneDX) covering `uv.lock` and the pinned `extern/dfine` commit.
+- Generate an SBOM (CycloneDX) covering `uv.lock` and the packaged model implementation.
 - Publish the supported-version window.
 
 First slice of [#125](https://github.com/Vaelsys/nitid/issues/125).
@@ -130,12 +129,13 @@ First slice of [#125](https://github.com/Vaelsys/nitid/issues/125).
 
 [#33](https://github.com/Vaelsys/nitid/issues/33) is a hard prerequisite for shipping tracking, for
 [#56](https://github.com/Vaelsys/nitid/issues/56), and for any optional-dependency approach to breadth.
-It is also larger than it looks: the wheel currently would not contain D-FINE at all.
+The model implementation is now included in source and wheel distributions; publishing and release
+automation remain.
 
 | Work | Days |
 |---|---|
-| Decide and implement D-FINE source packaging. Recommendation: vendor `extern/dfine` into the wheel with the accompanying NOTICE. Runtime download to a cache is rejected — it breaks air-gapped installs and complicates the SBOM, both disqualifying for a compliance product. | 4 |
-| Make `_DFINE_ROOT` and `_CONFIG_ROOT` resolve from both a checkout and an installed wheel; update `tests/conftest.py` | 1.5 |
+| Verify the packaged D-FINE source and accompanying notices in release artifacts | 1 |
+| Test model construction from installed source and wheel distributions | 0.5 |
 | Add a `nitid` console script alongside `dfine` — free before the first release, a deprecation cycle after | 0.5 |
 | Release workflow: tag → build → TestPyPI → PyPI trusted publishing. Claim the `nitid` name now; it is currently unregistered | 2 |
 | Versioning and CHANGELOG policy; pip install path in README and docs | 1 |
@@ -179,9 +179,10 @@ Honest about the things that are neither differentiators nor currently scheduled
   limitation for anyone training at scale. Estimated 8–12 d, after Phase 1.
 - **No quantisation.** Awkward given the edge focus: INT8 is how a detector fits on an edge
   accelerator. Scope will be decided by spike S5 and the hardware matrix.
-- **Stale documentation.** `docs/public_release_checklist.md` still lists as missing roughly seventeen
-  things that now exist, and `CLAUDE.md` describes the trainer and validator as incomplete. Both need a
-  pass; the checklist's Ultralytics-gap framing is now superseded by
+- **Segmentation benchmark parity is not yet recorded.** Unit and integration coverage plus the
+  COCO128-seg smoke run establish the workflow, but published-checkpoint parity on a standard COCO
+  validation split remains an acceptance gate. See the
+  [public release checklist](public_release_checklist.md#api-and-model-acceptance).
 
 ## Documentation
 

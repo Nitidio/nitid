@@ -49,6 +49,95 @@ def test_predict_returns_results_object(tiny_checkpoint):
     assert isinstance(results[0], Results)
 
 
+def test_segment_predict_returns_aligned_full_resolution_masks(tiny_segment_checkpoint):
+    from dfine import DFINE
+    from dfine.results import Masks
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    frame = np.zeros((64, 96, 3), dtype=np.uint8)
+    result = model.predict(frame, conf=0.0)[0]
+
+    assert isinstance(result.masks, Masks)
+    assert len(result.masks) == len(result.boxes)
+    assert result.masks.data.shape == (len(result.boxes), 64, 96)
+    assert result.masks.data.dtype == torch.uint8
+    assert set(result.masks.data.unique().tolist()) <= {0, 1}
+    assert result.plot().shape == frame.shape
+
+
+def test_segment_predict_flip_augmentation_keeps_masks_aligned(tiny_segment_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    result = model.predict(_random_frame(shape=(64, 96, 3)), conf=0.0, augment=True)[0]
+
+    assert result.masks is not None
+    assert len(result.masks) == len(result.boxes)
+
+
+def test_semantic_predict_restores_resolution_and_optionally_returns_probabilities(
+    tiny_semantic_checkpoint,
+):
+    from dfine import DFINE
+    from dfine.results import SemanticMask
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    frame = _random_frame(shape=(48, 80, 3))
+    result = model.predict(frame, imgsz=64, return_probs=True)[0]
+
+    assert isinstance(result.semantic, SemanticMask)
+    assert result.boxes is None
+    assert result.masks is None
+    assert result.semantic.mask.shape == (48, 80)
+    assert result.semantic.mask.dtype == torch.int64
+    assert result.semantic.probs.shape == (3, 48, 80)
+    assert torch.allclose(result.semantic.probs.sum(0), torch.ones(48, 80), atol=1e-5)
+    assert result.plot().shape == frame.shape
+
+
+def test_semantic_predict_tta_and_saved_artifacts(tiny_semantic_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    result = model.predict(
+        _random_frame(shape=(48, 80, 3)),
+        imgsz=64,
+        augment=True,
+        save=True,
+        project=str(tmp_path),
+    )[0]
+
+    assert Path(result.save_path).is_file()
+    assert Path(result.semantic_save_path).is_file()
+    raw_mask = np.asarray(Image.open(result.semantic_save_path))
+    assert raw_mask.shape == (48, 80)
+    assert np.array_equal(raw_mask, result.semantic.mask.cpu().numpy())
+
+
+def test_semantic_predict_rejects_class_filtering(tiny_semantic_checkpoint):
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    with pytest.raises(ValueError, match="does not support classes"):
+        model.predict(np.zeros((64, 64, 3), dtype=np.uint8), imgsz=64, classes=[1])
+
+
+def test_semantic_predict_accepts_paths_lists_and_streaming(tiny_semantic_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    first = _random_frame(seed=1, shape=(40, 56, 3))
+    second = _random_frame(seed=2, shape=(52, 44, 3))
+    image_path = tmp_path / "first.jpg"
+    assert cv2.imwrite(str(image_path), first)
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    results = model.predict([str(image_path), second], imgsz=64)
+    streamed = model.predict(str(image_path), imgsz=64, stream=True)
+
+    assert [result.semantic.orig_shape for result in results] == [(40, 56), (52, 44)]
+    assert next(streamed).semantic.orig_shape == (40, 56)
+
+
 def test_predict_returns_speed_timings(tiny_checkpoint):
     from dfine import DFINE
 

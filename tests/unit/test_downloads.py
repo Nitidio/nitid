@@ -10,6 +10,43 @@ from dfine.utils import downloads
 def test_model_registry_contains_architectures_and_weight_variants():
     assert downloads.list_models() == ["dfine_l", "dfine_m", "dfine_s", "dfine_x"]
     assert downloads.list_weights("dfine_s") == ["coco", "obj2coco"]
+    assert downloads.list_models("segment") == [
+        "dfine_l",
+        "dfine_m",
+        "dfine_n",
+        "dfine_s",
+        "dfine_x",
+    ]
+    assert downloads.list_weights("dfine_s", task="segment") == ["coco"]
+    assert downloads.list_models("semantic") == [
+        "dfine_l",
+        "dfine_m",
+        "dfine_n",
+        "dfine_s",
+        "dfine_x",
+    ]
+    assert downloads.list_weights("dfine_s", task="semantic") == ["coco"]
+
+
+def test_segment_asset_uses_coco_mask_checkpoint():
+    asset = downloads.get_model_asset("dfine_s", task="segment")
+    assert asset.task == "segment"
+    assert asset.weights == "coco"
+    assert asset.url.endswith("/dfine_seg_s_coco.pt")
+    assert asset.filename == "dfine_seg_s_coco_wrapped.pth"
+
+
+def test_segment_nano_aliases_resolve():
+    assert downloads.get_model_asset("n", task="segment").model == "dfine_n"
+    assert downloads.get_model_asset("d-fine-n", task="segment").model == "dfine_n"
+
+
+def test_semantic_asset_uses_instance_checkpoint_as_initialization():
+    asset = downloads.get_model_asset("dfine_n", task="semantic")
+    assert asset.task == "semantic"
+    assert asset.weights == "coco"
+    assert asset.url.endswith("/dfine_seg_n_coco.pt")
+    assert asset.filename == "dfine_semantic_n_coco_init_wrapped.pth"
 
 
 @pytest.mark.parametrize(
@@ -60,24 +97,22 @@ def test_resolve_output_path_uses_variant_specific_filename():
 
 
 @pytest.mark.parametrize(
-    ("weights", "raw_suffix", "config_suffix", "wrapped_name"),
+    ("weights", "raw_suffix", "wrapped_name"),
     [
         (
             "default",
             "dfine_s_obj2coco.pth",
-            "objects365/dfine_hgnetv2_s_obj2coco.yml",
             "dfine_s_obj2coco_wrapped.pth",
         ),
         (
             "coco",
             "dfine_s_coco.pth",
-            "dfine_hgnetv2_s_coco.yml",
             "dfine_s_coco_wrapped.pth",
         ),
     ],
 )
 def test_download_model_converts_selected_checkpoint(
-    monkeypatch, tmp_path, weights, raw_suffix, config_suffix, wrapped_name
+    monkeypatch, tmp_path, weights, raw_suffix, wrapped_name
 ):
     calls = {}
 
@@ -101,7 +136,9 @@ def test_download_model_converts_selected_checkpoint(
     assert out.read_bytes() == b"wrapped"
     assert calls["url"].endswith(raw_suffix)
     assert calls["weights"].endswith(raw_suffix)
-    assert calls["config"].endswith(config_suffix)
+    assert calls["config"]["task"] == "detect"
+    assert calls["config"]["num_classes"] == 80
+    assert calls["config"]["HGNetv2"]["name"] == "B0"
     assert calls["names_file"].endswith("configs/datasets/coco.yml")
 
 
@@ -116,3 +153,54 @@ def test_download_model_skips_existing_variant_output(monkeypatch, tmp_path):
 
     assert downloads.download_model("dfine_s", output=tmp_path) == out
     assert out.read_bytes() == b"existing"
+
+
+def test_download_segment_model_embeds_segment_config(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_urlretrieve(url, filename):
+        calls["url"] = url
+        Path(filename).write_bytes(b"raw")
+        return filename, None
+
+    def fake_convert(weights, config, names_file, output):
+        calls["config"] = config
+        Path(output).write_bytes(b"wrapped")
+
+    monkeypatch.setattr(downloads, "urlretrieve", fake_urlretrieve)
+    monkeypatch.setattr(downloads, "convert_checkpoint", fake_convert)
+
+    output = downloads.download_model("dfine_s", task="segment", output=tmp_path)
+
+    assert output.name == "dfine_seg_s_coco_wrapped.pth"
+    assert calls["url"].endswith("/dfine_seg_s_coco.pt")
+    assert calls["config"]["task"] == "segment"
+    assert "masks" in calls["config"]["DFINECriterion"]["losses"]
+
+
+def test_download_semantic_model_transfers_instance_fuser(monkeypatch, tmp_path):
+    import torch
+
+    from dfine.nn.native_build import build_native_model
+    from dfine.utils.checkpoint import load_checkpoint_state
+
+    instance_model = build_native_model("dfine_n", num_classes=80, task="segment")
+
+    def fake_urlretrieve(url, filename):
+        del url
+        torch.save({"model": instance_model.state_dict()}, filename)
+        return filename, None
+
+    monkeypatch.setattr(downloads, "urlretrieve", fake_urlretrieve)
+    output = downloads.download_model("dfine_n", task="semantic", output=tmp_path)
+    checkpoint = load_checkpoint_state(output)
+
+    assert output.name == "dfine_semantic_n_coco_init_wrapped.pth"
+    assert checkpoint["task"] == "semantic"
+    assert checkpoint["config"]["task"] == "semantic"
+    assert checkpoint["config"]["num_classes"] == 80
+    assert all(
+        torch.equal(checkpoint["model"][name], value)
+        for name, value in instance_model.state_dict().items()
+        if name.startswith("decoder.mask_decoder.")
+    )
