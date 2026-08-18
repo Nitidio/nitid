@@ -8,6 +8,35 @@ from __future__ import annotations
 import torch
 
 
+def crop_masks_to_boxes(masks: torch.Tensor, boxes: torch.Tensor) -> torch.Tensor:
+    """Zero each instance mask outside its corresponding xyxy box."""
+    if masks.ndim != 3:
+        raise ValueError(f"masks must have shape [N, H, W], got {tuple(masks.shape)}")
+    if boxes.ndim != 2 or boxes.shape[1] != 4:
+        raise ValueError(f"boxes must have shape [N, 4], got {tuple(boxes.shape)}")
+    if masks.shape[0] != boxes.shape[0]:
+        raise ValueError(
+            "masks and boxes must contain the same number of instances, "
+            f"got {masks.shape[0]} and {boxes.shape[0]}"
+        )
+    if masks.shape[0] == 0:
+        return masks
+
+    boxes = boxes.to(device=masks.device)
+    height, width = masks.shape[-2:]
+    ys = torch.arange(height, device=masks.device)[None, :, None]
+    xs = torch.arange(width, device=masks.device)[None, None, :]
+    inside = (
+        (xs >= boxes[:, 0, None, None])
+        & (xs < boxes[:, 2, None, None])
+        & (ys >= boxes[:, 1, None, None])
+        & (ys < boxes[:, 3, None, None])
+    )
+    if masks.dtype == torch.bool:
+        return masks & inside
+    return masks * inside.to(dtype=masks.dtype)
+
+
 def scale_boxes(boxes, from_shape: tuple, to_shape: tuple):
     """
     Scale xyxy boxes from one image shape to another.

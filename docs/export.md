@@ -25,6 +25,23 @@ uv run dfine export model=dfine_l format=onnx
 
 The exported model takes a single input `images [B, 3, H, W]` and returns
 `(labels, boxes, scores)` with the postprocessor in deploy mode baked in.
+Segmentation exports return `(labels, boxes, scores, masks)`; `masks` contains
+the selected low-resolution mask probabilities and is aligned with the first
+three outputs.
+
+Semantic segmentation exports return one output, `semantic_logits [B, C, H,
+W]`, at model-input resolution. Apply softmax for per-class probabilities and
+argmax over axis 1 for the class-ID map. The integration test executes this
+graph with ONNX Runtime and checks numerical parity with PyTorch.
+
+```python
+semantic = DFINE("semantic_best.pth", task="semantic")
+semantic.export(format="onnx", output="semantic.onnx")
+```
+
+ONNX is currently the supported semantic export target. Detection and instance
+segmentation retain the OpenVINO, TorchScript, and TensorRT targets documented
+below.
 
 ### Options
 
@@ -42,7 +59,7 @@ The exported model takes a single input `images [B, 3, H, W]` and returns
 model.export(format="onnx", dynamic=True, simplify=False)
 ```
 
-Dynamic axes: `batch` (axis 0) and spatial dimensions (axes 2, 3).
+Dynamic export currently marks the batch axis as dynamic.
 
 ## OpenVINO
 

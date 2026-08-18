@@ -1,5 +1,5 @@
 """
-dfine-wrap: Ultralytics-style wrapper for D-FINE object detection.
+nitid: Ultralytics-style D-FINE detection and instance/semantic segmentation.
 
 Usage:
     from dfine import DFINE
@@ -31,6 +31,7 @@ from dfine.onvif import (
     ONVIFMediaProfile,
     discover_onvif_devices,
 )
+from dfine.results import SemanticMask
 from dfine.utils.reporting import BugReport, bugreport
 from dfine.utils.sources import GStreamerFrameSource
 
@@ -47,6 +48,7 @@ __all__ = [
     "ONVIFDevice",
     "ONVIFError",
     "ONVIFMediaProfile",
+    "SemanticMask",
     "GStreamerFrameSource",
     "GStreamerHardwareProfile",
     "build_gstreamer_output_pipeline",

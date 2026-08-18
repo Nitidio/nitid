@@ -5,6 +5,8 @@ arguments:
 
 ```bash
 uv run dfine predict model=dfine_s source=image.jpg conf=0.5
+uv run dfine predict model=dfine_s task=segment source=image.jpg conf=0.5
+uv run dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
 ```
 
 ## Before using the command
@@ -14,7 +16,6 @@ Complete the repository installation first:
 ```bash
 git clone https://github.com/Vaelsys/nitid.git
 cd nitid
-git submodule update --init
 uv sync
 ```
 

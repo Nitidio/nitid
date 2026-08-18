@@ -157,7 +157,17 @@ class DFINETrainer:
         self.ema_model: ModelEMA | None = None
         self.train_args: dict[str, object] = {}
         self.start_epoch = 0
-        self._display_loss_keys = ("loss_bbox", "loss_giou", "loss_vfl", "loss_fgl")
+        self._display_loss_keys = (
+            "loss_bbox",
+            "loss_giou",
+            "loss_vfl",
+            "loss_fgl",
+            "loss_mask_bce",
+            "loss_mask_dice",
+            "loss_ce",
+            "loss_dice",
+            "loss_aux",
+        )
         self._base_callbacks = self._empty_callback_registry()
         self.callbacks = self._empty_callback_registry()
         self._register_callbacks(callbacks, self._base_callbacks)
@@ -408,6 +418,15 @@ class DFINETrainer:
             close_mosaic=close_mosaic,
         )
         augmentation.validate()
+        from dfine.tasks import normalize_task
+
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        semantic_config = self.cfg.get("SemanticSegmentation", {})
+        ignore_index = (
+            int(semantic_config.get("ignore_index", 255))
+            if isinstance(semantic_config, Mapping)
+            else 255
+        )
         self._set_reproducibility(seed, deterministic)
         batch = self._validate_batch_size(batch)
         self._apply_freeze(freeze)
@@ -623,6 +642,19 @@ class DFINETrainer:
                     images = torch.nn.functional.interpolate(
                         images, size=(size, size), mode="bilinear", align_corners=False
                     )
+                    for target in targets:
+                        masks = target.get("masks")
+                        if isinstance(masks, torch.Tensor) and masks.numel():
+                            target["masks"] = torch.nn.functional.interpolate(
+                                masks[:, None].float(), size=(size, size), mode="nearest"
+                            )[:, 0].to(masks.dtype)
+                        semantic_mask = target.get("sem_mask")
+                        if isinstance(semantic_mask, torch.Tensor):
+                            target["sem_mask"] = torch.nn.functional.interpolate(
+                                semantic_mask[None, None].float(),
+                                size=(size, size),
+                                mode="nearest",
+                            )[0, 0].to(semantic_mask.dtype)
                 targets = [
                     {
                         k: v.to(self.device) if isinstance(v, torch.Tensor) else v
@@ -664,7 +696,12 @@ class DFINETrainer:
 
                 epoch_loss += loss.item()
                 batch_count += 1
-                instances += sum(int(t["labels"].numel()) for t in targets)
+                if task == "semantic":
+                    instances += sum(
+                        int((target["sem_mask"] != ignore_index).sum().item()) for target in targets
+                    )
+                else:
+                    instances += sum(int(t["labels"].numel()) for t in targets)
                 for key, value in loss_dict.items():
                     loss_sums[key] += float(value.detach().item())
 
@@ -945,9 +982,26 @@ class DFINETrainer:
         fraction: float = 1.0,
         augment=None,
     ):
-        from dfine.utils.data import build_coco_dataloader
+        from dfine.tasks import normalize_task
+        from dfine.utils.data import build_detection_dataloader, build_semantic_dataloader
 
-        return build_coco_dataloader(
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        if task == "semantic":
+            if classes is not None or single_cls:
+                raise ValueError("Semantic training does not support classes or single_cls")
+            return build_semantic_dataloader(
+                data,
+                split="train",
+                imgsz=imgsz,
+                batch_size=batch,
+                workers=workers,
+                cache=cache,
+                seed=seed,
+                deterministic=deterministic,
+                fraction=fraction,
+                augment=augment,
+            )
+        return build_detection_dataloader(
             data,
             split="train",
             imgsz=imgsz,
@@ -960,6 +1014,7 @@ class DFINETrainer:
             single_cls=single_cls,
             fraction=fraction,
             augment=augment,
+            task=task,
         )
 
     @staticmethod
@@ -1409,7 +1464,7 @@ class DFINETrainer:
     def _finalize_metrics(self, history: list[dict[str, float | int]], best_epoch: int = 0) -> dict:
         if history:
             final_row = history[-1]
-            return {
+            metrics = {
                 "loss": float(final_row["loss"]),
                 "fitness": float(final_row.get("fitness", 0.0)),
                 "mAP50": float(final_row.get("mAP50", 0.0)),
@@ -1417,8 +1472,15 @@ class DFINETrainer:
                 "best_epoch": best_epoch,
                 "history": history,
             }
+            if "mask_mAP50" in final_row:
+                metrics["mask_mAP50"] = float(final_row["mask_mAP50"])
+                metrics["mask_mAP50-95"] = float(final_row["mask_mAP50-95"])
+            if "mIoU" in final_row:
+                metrics["mIoU"] = float(final_row["mIoU"])
+                metrics["pixel_accuracy"] = float(final_row["pixel_accuracy"])
+            return metrics
 
-        return {
+        metrics = {
             "loss": 0.0,
             "fitness": 0.0,
             "mAP50": 0.0,
@@ -1426,6 +1488,13 @@ class DFINETrainer:
             "best_epoch": best_epoch,
             "history": [],
         }
+        if str(self.cfg.get("task", "detect")).lower() == "segment":
+            metrics["mask_mAP50"] = 0.0
+            metrics["mask_mAP50-95"] = 0.0
+        if str(self.cfg.get("task", "detect")).lower() == "semantic":
+            metrics["mIoU"] = 0.0
+            metrics["pixel_accuracy"] = 0.0
+        return metrics
 
     def _validate_epoch(
         self,
@@ -1463,10 +1532,15 @@ class DFINETrainer:
         }
 
     def _compact_val_metrics(self, val_metrics: dict[str, object]) -> dict[str, float]:
-        return {
-            key: _as_float(val_metrics.get(key, 0.0))
-            for key in ("precision", "recall", "mAP50", "mAP50-95", "fitness")
-        }
+        if "mIoU" in val_metrics:
+            return {
+                key: _as_float(val_metrics.get(key, 0.0))
+                for key in ("mIoU", "pixel_accuracy", "fitness")
+            }
+        keys = ["precision", "recall", "mAP50", "mAP50-95", "fitness"]
+        if "mask_mAP50" in val_metrics:
+            keys.extend(["mask_mAP50", "mask_mAP50-95"])
+        return {key: _as_float(val_metrics.get(key, 0.0)) for key in keys}
 
     def _write_results_row(self, path: Path, row: dict[str, float | int]) -> None:
         exists = path.exists()
@@ -1493,6 +1567,10 @@ class DFINETrainer:
             "f1",
             "mAP50",
             "mAP50-95",
+            "mask_mAP50",
+            "mask_mAP50-95",
+            "mIoU",
+            "pixel_accuracy",
             "fitness",
         ]
         ordered = [key for key in priority if key in row]
@@ -1520,6 +1598,21 @@ class DFINETrainer:
             axes[0, 1].plot(epochs, metrics["mAP50-95"], label="mAP50-95", color="tab:blue")
         if "mAP50" in metrics:
             axes[0, 1].plot(epochs, metrics["mAP50"], label="mAP50", color="tab:orange")
+        if "mask_mAP50-95" in metrics:
+            axes[0, 1].plot(
+                epochs, metrics["mask_mAP50-95"], label="mask mAP50-95", color="tab:pink"
+            )
+        if "mask_mAP50" in metrics:
+            axes[0, 1].plot(epochs, metrics["mask_mAP50"], label="mask mAP50", color="tab:olive")
+        if "mIoU" in metrics:
+            axes[0, 1].plot(epochs, metrics["mIoU"], label="mIoU", color="tab:blue")
+        if "pixel_accuracy" in metrics:
+            axes[0, 1].plot(
+                epochs,
+                metrics["pixel_accuracy"],
+                label="pixel accuracy",
+                color="tab:orange",
+            )
         axes[0, 1].set_title("Validation")
         axes[0, 1].legend(fontsize=8)
         axes[0, 1].grid(True, alpha=0.3)
@@ -1562,6 +1655,19 @@ class DFINETrainer:
             if validated
             else ["validation=skipped"]
         )
+        if validated and "mIoU" in row:
+            val_fields = [
+                f"mIoU={float(row['mIoU']):.3f}",
+                f"pixel_acc={float(row['pixel_accuracy']):.3f}",
+                f"fitness={float(row.get('fitness', 0.0)):.3f}",
+            ]
+        if validated and "mask_mAP50" in row:
+            val_fields.extend(
+                [
+                    f"mask_mAP50={float(row['mask_mAP50']):.3f}",
+                    f"mask_mAP50-95={float(row['mask_mAP50-95']):.3f}",
+                ]
+            )
         parts = [
             f"Epoch {epoch}/{epochs}",
             f"loss={float(row.get('loss', 0.0)):.4f}",

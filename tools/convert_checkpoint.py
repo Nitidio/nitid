@@ -7,7 +7,8 @@ Migrates a raw D-FINE .pth (weights only) into the dfine-wrap format
 Usage:
     python tools/convert_checkpoint.py \
         --weights dfine_l.pth \
-        --config  configs/models/dfine_l.yml \
+        --model   dfine_l \
+        --task    detect \
         --names   configs/datasets/coco.yml \
         --output  dfine_l_wrapped.pth
 """
@@ -16,7 +17,9 @@ from __future__ import annotations
 
 import argparse
 import copy
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import torch
 import yaml
@@ -25,8 +28,7 @@ import yaml
 def _load_config(file_path: str | Path) -> dict:
     """
     Load a D-FINE YAML config, recursively resolving ``__include__`` directives.
-    Mirrors the logic in extern/dfine/src/core/yaml_utils.py so that
-    convert_checkpoint.py works without importing the D-FINE package.
+    Includes inherited YAML files recursively and merges nested mappings.
     """
     file_path = Path(file_path).resolve()
     with open(file_path) as f:
@@ -52,7 +54,12 @@ def _merge(dst: dict, src: dict) -> dict:
     return dst
 
 
-def convert(weights: str, config: str, names_file: str, output: str) -> None:
+def convert(
+    weights: str,
+    config: str | Path | Mapping[str, Any],
+    names_file: str,
+    output: str,
+) -> None:
     print(f"Loading weights from {weights}")
     ckpt = torch.load(weights, map_location="cpu", weights_only=False)
 
@@ -65,7 +72,12 @@ def convert(weights: str, config: str, names_file: str, output: str) -> None:
         state_dict = ckpt.get("model", ckpt)
         print("Using model weights (ckpt['model'])")
 
-    cfg = _load_config(config)
+    cfg = copy.deepcopy(dict(config)) if isinstance(config, Mapping) else _load_config(config)
+    from dfine.tasks import normalize_task
+    from dfine.utils.checkpoint import CHECKPOINT_FORMAT_VERSION
+
+    task = normalize_task(str(cfg.get("task", "detect")))
+    cfg["task"] = task
 
     with open(names_file) as f:
         names_cfg = yaml.safe_load(f)
@@ -77,11 +89,14 @@ def convert(weights: str, config: str, names_file: str, output: str) -> None:
         names = {int(k): v for k, v in raw_names.items()}
 
     out_ckpt = {
+        "format_version": CHECKPOINT_FORMAT_VERSION,
+        "task": task,
         "model": state_dict,
         "config": cfg,
         "names": names,
         "epoch": ckpt.get("epoch", 0),
         "metrics": ckpt.get("metrics", {}),
+        "training_state": {},
     }
     torch.save(out_ckpt, output)
     print(f"Saved wrapped checkpoint to {output}  ({len(names)} classes)")
@@ -90,11 +105,20 @@ def convert(weights: str, config: str, names_file: str, output: str) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description="Convert raw D-FINE checkpoint to dfine-wrap format")
     p.add_argument("--weights", required=True)
-    p.add_argument("--config", required=True)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--model", choices=["dfine_n", "dfine_s", "dfine_m", "dfine_l", "dfine_x"])
+    source.add_argument("--config", help="Path to a self-contained YAML config")
+    p.add_argument("--task", choices=["detect", "segment"], default="detect")
     p.add_argument("--names", required=True)
     p.add_argument("--output", required=True)
     args = p.parse_args()
-    convert(args.weights, args.config, args.names, args.output)
+    if args.model:
+        from dfine.nn.configs import make_model_config
+
+        config = make_model_config(args.model, task=args.task)
+    else:
+        config = args.config
+    convert(args.weights, config, args.names, args.output)
 
 
 if __name__ == "__main__":

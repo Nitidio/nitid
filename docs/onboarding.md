@@ -10,7 +10,6 @@ Prerequisites: Python 3.10+, [`uv`](https://github.com/astral-sh/uv), Node.js 18
 
 ```bash
 git clone https://github.com/Vaelsys/nitid.git && cd nitid
-git submodule update --init        # pulls D-FINE source into extern/dfine
 uv sync --extra dev                # installs runtime + pytest, ruff, mypy
 ```
 
@@ -33,18 +32,16 @@ dfine/              Public Python package — the only thing users import
   trainer.py        Fine-tuning worker
   validator.py      COCO evaluation worker
   exporter.py       ONNX / OpenVINO / TorchScript / TensorRT export worker
-  results.py        Results + Boxes return types
-  nn/               build_model, build_postprocessor, build_criterion
+  results.py        Results + Boxes + Masks return types
+  nn/               Integrated detection/segmentation architecture and losses
   utils/            sources.py (LoadSource), plotting, misc helpers
 tools/
   dfine_cli.py      `dfine` CLI entry point
   convert_checkpoint.py   Wraps raw D-FINE .pth into nitid format
-extern/dfine/       D-FINE submodule (git submodule, not pip dependency)
 configs/
   datasets/         coco.yml and example_custom.yml
-  models/           Reference YAMLs (prefer extern/dfine/configs/ in code)
 tests/
-  unit/             Pure Python — no GPU, no checkpoint, no submodule
+  unit/             Pure Python — no GPU or downloaded checkpoint
   integration/      Use tiny_checkpoint fixture (see §5)
   conftest.py       Session-scoped fixture that builds a tiny model at test time
 web/
@@ -57,26 +54,15 @@ docs/               All documentation lives here
 
 ## 3. The architecture in one paragraph
 
-`DFINE` in `dfine/model.py` is the only class users touch. It loads a wrapped `.pth` checkpoint, and every public method (`predict`, `train`, `val`, `export`) lazily imports its worker class and delegates to it. The four worker classes in the table above are internal — not part of the public API. D-FINE's own source code lives in `extern/dfine/` and is accessed via `sys.path` manipulation (not pip). A shim module handles the three imports that would break on import because they need optional training-only packages.
+`DFINE` in `dfine/model.py` is the only class users touch. It loads a self-contained `.pth` checkpoint and delegates `predict`, `train`, `val`, and `export` to internal workers. Model construction, detection losses, mask losses, and postprocessing live under `dfine/nn/`. The checkpoint's embedded `task` selects either detection or instance segmentation, and an explicitly requested task must match it.
 
 ---
 
-## 4. The D-FINE import shim — read this before touching `nn/`
+## 4. Model core
 
-D-FINE's `src/__init__.py` eagerly imports `src.data` (needs `faster_coco_eval`) and `src.misc` (needs `calflops`, `loguru`) at module load time. These are training-only packages not available in the default install.
+`dfine/nn/native_build.py` is the construction boundary for both tasks. Keep architecture settings in `dfine/nn/configs.py`, route checkpoint construction through `build_model`, and route losses through `build_criterion`. Do not add import-path mutation or runtime source discovery: the installed package must contain everything required to construct a model.
 
-`_ensure_dfine_on_path()` (called inside every worker before any `src.*` import) does two things:
-
-1. Adds `extern/dfine` to `sys.path`.
-2. Pre-registers three stub modules in `sys.modules` **before** any real import runs, so Python never executes the problematic `__init__.py` files:
-
-| Stub | Blocks | Exposes |
-|---|---|---|
-| `src` | `src/__init__` (imports data) | namespace package |
-| `src.data` | `coco_dataset` → `faster_coco_eval` | `DataLoader` from torch |
-| `src.misc` | `profiler_utils` → `calflops` | namespace package (real sub-modules importable) |
-
-**Rule:** Always call `_ensure_dfine_on_path()` before any `from src.xxx import yyy` statement. Forgetting this will cause `ModuleNotFoundError` in clean installs.
+Detection and segmentation share the backbone, encoder, transformer decoder, boxes, and class logits. `task="segment"` enables the mask head and mask losses. New code must preserve strict state-dict compatibility with published checkpoints.
 
 ---
 
@@ -106,7 +92,7 @@ If you ever load a raw checkpoint and get a `KeyError`, run `tools/convert_check
 uv run pytest tests/unit
 ```
 
-No submodule, no GPU, no checkpoint needed. These test pure Python logic: `Results`/`Boxes` shapes, export argument validation, data YAML parsing, etc.
+No GPU or downloaded checkpoint is needed. These test pure Python logic, model construction, `Results`/`Boxes`/`Masks`, export argument validation, and dataset parsing.
 
 ### Integration tests
 
@@ -145,10 +131,10 @@ DFINE.predict()
   └─ DFINEPredictor.predict()
        └─ LoadSource (dfine/utils/sources.py)
             yields (tensor [1,3,H,W], orig_img HWC BGR, path_str)
-       └─ DFINE.forward() → {pred_logits [B,300,C], pred_boxes [B,300,4]} (cxcywh, normalised)
+       └─ DFINE.forward() → logits + boxes, and query masks for segmentation
        └─ DFINEPostProcessor(raw, orig_target_sizes)
             → [{labels, boxes, scores}]  boxes: absolute xyxy pixel coords
-       └─ Results(boxes=Boxes._data [N,6])  — x1 y1 x2 y2 conf cls
+       └─ Results(boxes=[N,6], masks=[N,H,W] for segmentation)
 ```
 
 The 300 queries are D-FINE's fixed-size output head. After postprocessing only the above-threshold detections remain in `Boxes._data`.
@@ -187,7 +173,8 @@ The integration tests use a synthetic tiny model — they never touch a real che
 ```bash
 uv run python tools/convert_checkpoint.py \
     --weights dfine_l.pth \
-    --config  extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
+    --model   dfine_l \
+    --task    detect \
     --names   configs/datasets/coco.yml \
     --output  dfine_l_wrapped.pth
 ```
@@ -205,10 +192,9 @@ uv run dfine predict model=dfine_l source=image.jpg conf=0.5
 | Symptom | Cause | Fix |
 |---|---|---|
 | `KeyError: 'config'` loading a `.pth` | Raw D-FINE checkpoint | Run `convert_checkpoint.py` |
-| `ModuleNotFoundError: src.data` | `_ensure_dfine_on_path()` not called | Call it before any `src.*` import |
 | `RuntimeError: shape mismatch` during export | `imgsz` ≠ `eval_spatial_size` | Match `imgsz` to `cfg["eval_spatial_size"]` (default 640) |
 | `AMP has no effect` warning | Running on CPU with `amp=True` | Expected — silently degrades to FP32 |
-| `git submodule` directory is empty | Cloned without `--recurse-submodules` | `git submodule update --init` |
+| Explicit task does not match checkpoint | Detection checkpoint opened as segmentation, or conversely | Select a matching model/task pair |
 
 ---
 

@@ -5,9 +5,9 @@ Use this page when nitid does not start, a command is missing, a model does not 
 Most nitid problems come from one missing setup step. The usual flow is:
 
 1. You run a command.
-2. That command looks for the project environment, D-FINE source files, or a model checkpoint.
+2. That command looks for the project environment or a model checkpoint.
 3. If one of those pieces is missing, Python prints an error.
-4. The fix is usually to install dependencies, initialise the submodule, download a model, or use the right command form.
+4. The fix is usually to install dependencies, download a model, or use the right command form.
 
 ## `dfine: command not found`
 
@@ -75,28 +75,6 @@ uv sync --frozen --extra dev
 
 See the [macOS Docker setup](macos_docker_setup.md) for details.
 
-## `extern/dfine` is empty or a config file is missing
-
-### What it means
-
-nitid wraps D-FINE, but the original D-FINE code lives in a Git submodule at `extern/dfine`.
-
-If that folder is empty, model download, checkpoint conversion, training, validation, and export can fail because nitid cannot find D-FINE config files.
-
-### Fix
-
-Run this from the repository root:
-
-```bash
-git submodule update --init
-```
-
-If you cloned the repo again, you can also clone with submodules from the start:
-
-```bash
-git clone --recurse-submodules https://github.com/Vaelsys/nitid.git
-```
-
 ## Model download fails
 
 ### What it means
@@ -108,24 +86,18 @@ The workflow is:
 ```text
 DFINE("dfine_s")
 -> nitid checks the model registry
--> resolves the default Objects365-to-COCO weight variant
+-> resolves weights for the selected task
 -> downloads the official D-FINE checkpoint
--> reads the matching D-FINE config from extern/dfine
+-> builds the matching integrated model configuration
 -> reads COCO names from configs/datasets/coco.yml
 -> writes dfine_s_obj2coco_wrapped.pth
 ```
 
-If the internet connection, D-FINE submodule, or class names file is missing, the download or wrapping step can fail.
+If the internet connection or class names file is missing, the download or wrapping step can fail.
 
 ### Fix
 
-First check that the submodule exists:
-
-```bash
-git submodule update --init
-```
-
-Then try a direct download command:
+Try a direct download command:
 
 ```bash
 uv run dfine download model=dfine_s
@@ -143,8 +115,7 @@ To replace an existing wrapped checkpoint:
 uv run dfine download model=dfine_s output=models force=true
 ```
 
-Supported model names are `dfine_s`, `dfine_m`, `dfine_l`, and `dfine_x`.
-Supported weight variants are `obj2coco` (the default) and `coco`.
+Detection supports pretrained S/M/L/X models and the `obj2coco` (default) and `coco` variants. Instance segmentation supports pretrained N/S/M/L/X models with `task=segment` and COCO weights.
 
 ## Raw D-FINE checkpoint gives `KeyError: 'config'`
 
@@ -175,7 +146,8 @@ If you have your own raw checkpoint, convert it:
 ```bash
 uv run python tools/convert_checkpoint.py \
     --weights dfine_l.pth \
-    --config extern/dfine/configs/dfine/dfine_hgnetv2_l_coco.yml \
+    --model dfine_l \
+    --task detect \
     --names configs/datasets/coco.yml \
     --output dfine_l_wrapped.pth
 ```

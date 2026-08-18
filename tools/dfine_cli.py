@@ -56,11 +56,11 @@ Usage:
   dfine COMMAND [key=value ...] [--report]
 
 Commands:
-  predict  Run object detection on an image, directory, video, URL, or webcam
+  predict  Run detection, instance segmentation, or semantic segmentation
   track    Detect and track objects with persistent IDs across video frames
   download Download and wrap an official D-FINE checkpoint
-  train    Fine-tune a model on a COCO-format dataset
-  val      Evaluate a model and report COCO metrics
+  train    Fine-tune detection, instance-, or semantic-segmentation models
+  val      Evaluate detection/instance mAP or semantic mIoU
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
   info     Show model parameters, GFLOPs, and checkpoint size
   gstreamer-info  Show GStreamer and hardware codec profile availability
@@ -81,6 +81,7 @@ Required:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   conf=FLOAT          Confidence threshold (default: 0.5)
   imgsz=INT           Square inference image size (default: 640)
@@ -104,8 +105,9 @@ Options:
   output_hardware_profile=NAME  Encoder: software, vaapi, v4l2, nvidia, jetson
   output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
+  return_probs=BOOL   Retain full-resolution semantic probabilities (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
-  save=BOOL           Save annotated images (default: false)
+  save=BOOL           Save overlays and semantic class-ID maps (default: false)
   project=PATH        Parent output directory when save=true (default: runs/detect)
   name=NAME           Run directory name when save=true (default: exp)
   save_dir=PATH       Exact output directory override
@@ -116,6 +118,7 @@ Options:
 Examples:
   dfine predict model=dfine_l source=image.jpg
   dfine predict model=dfine_l weights=coco source=image.jpg save=true
+  dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
   dfine predict model=dfine_l source=video.mp4 conf=0.3 stream=true
 """,
     "track": """\
@@ -207,7 +210,9 @@ Usage:
   dfine download [model=MODEL] [key=value ...]
 
 Options:
-  model=NAME          dfine_s, dfine_m, dfine_l, or dfine_x (default: dfine_l)
+  model=NAME          dfine_n (segmentation only), dfine_s, dfine_m, dfine_l, or dfine_x
+                      (default: dfine_l)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   output=PATH         Output directory or .pth file (default: current directory)
   force=BOOL          Overwrite an existing wrapped checkpoint (default: false)
@@ -217,6 +222,8 @@ wrapped .pth format. The filename includes the resolved weight variant.
 
 Examples:
   dfine download model=dfine_s
+  dfine download model=dfine_s task=segment
+  dfine download model=dfine_s task=semantic
   dfine download model=dfine_s weights=coco
   dfine download model=dfine_m output=models
   dfine download model=dfine_l output=models/custom.pth force=true
@@ -226,10 +233,11 @@ Usage:
   dfine train model=MODEL data=DATA [key=value ...]
 
 Required:
-  data=PATH           Dataset YAML file using COCO-format annotations
+  data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   epochs=INT          Number of training epochs (default: 50)
   imgsz=INT           Square training image size (default: 640)
@@ -284,16 +292,19 @@ Options:
 
 Example:
   dfine train model=dfine_l data=coco.yaml epochs=50 batch=16 mlflow=true
+  dfine train model=dfine_s task=segment data=instances.yaml epochs=50
+  dfine train model=dfine_s task=semantic data=semantic.yaml epochs=50
 """,
     "val": """\
 Usage:
   dfine val model=MODEL data=DATA [key=value ...]
 
 Required:
-  data=PATH           Dataset YAML file using COCO-format annotations
+  data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   imgsz=INT           Square validation image size (default: 640)
   batch=INT           Batch size (default: 16)
@@ -309,6 +320,8 @@ Options:
 
 Example:
   dfine val model=dfine_l data=coco.yaml split=val batch=16
+  dfine val model=dfine_s task=segment data=instances.yaml
+  dfine val model=semantic_last.pth task=semantic data=semantic.yaml
 """,
     "export": """\
 Usage:
@@ -316,6 +329,7 @@ Usage:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
   imgsz=INT           Square export image size (default: 640)
@@ -335,6 +349,8 @@ Options:
 
 Examples:
   dfine export model=dfine_l format=onnx
+  dfine export model=dfine_s task=segment format=onnx
+  dfine export model=semantic_best.pth task=semantic format=onnx
   dfine export model=dfine_l weights=coco format=openvino
   dfine export model=dfine_l format=tensorrt half=true
 """,
@@ -344,6 +360,7 @@ Usage:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   detailed=BOOL       Include per-layer parameter counts (default: false)
 
@@ -589,12 +606,19 @@ def _execute(argv: list[str]) -> None:
 
     if command == "download":
         model_name = kwargs.pop("model", "dfine_l")
+        task = kwargs.pop("task", "detect")
         weights = kwargs.pop("weights", "default")
         output = kwargs.pop("output", None)
         force = kwargs.pop("force", False)
         from dfine.utils.downloads import download_model
 
-        path = download_model(model=model_name, weights=weights, output=output, force=force)
+        path = download_model(
+            model=model_name,
+            task=task,
+            weights=weights,
+            output=output,
+            force=force,
+        )
         print(f"Downloaded wrapped checkpoint to {path}")
         return
 
@@ -625,11 +649,12 @@ def _execute(argv: list[str]) -> None:
         return
 
     model_path = kwargs.pop("model", "dfine_l")
+    task = kwargs.pop("task", "detect")
     weights = kwargs.pop("weights", "default")
 
     from dfine import DFINE
 
-    model = DFINE(model_path, weights=weights)
+    model = DFINE(model_path, task=task, weights=weights)
 
     if command in {"predict", "track"}:
         source = kwargs.pop("source", None)
@@ -644,6 +669,8 @@ def _execute(argv: list[str]) -> None:
                 print(r)
                 if getattr(r, "save_path", None):
                     print(f"Saved {r.save_path}")
+                if getattr(r, "semantic_save_path", None):
+                    print(f"Saved {r.semantic_save_path}")
             if output_label is not None:
                 print(f"Wrote annotated output to {output_label}")
         else:
@@ -685,9 +712,9 @@ def main(argv: list[str] | None = None, report_dir: str | Path = "runs/bugreport
     command = argv[1].lower() if len(argv) > 1 else ""
     if not report_requested:
         if command == "bugreport":
+            parse_args(argv)
             from dfine.utils.reporting import write_standalone_report
 
-            parse_args(argv)
             path = write_standalone_report(report_dir)
             print(f"Bug report saved to {path}")
             return

@@ -15,6 +15,8 @@ ENCODER_SCORE_KEYS = (
 CLASS_SPECIFIC_PREFIXES = (
     "decoder.dec_score_head.",
     "decoder.denoising_class_embed.",
+    "decoder.classifier.",
+    "decoder.aux_head.",
 )
 
 
@@ -65,6 +67,20 @@ def _custom_class_transfer_state(
         transfer[name] = generic.repeat(repeats).to(dtype=target.dtype)
         mapped.append(name)
     return transfer, mapped
+
+
+def compatible_pretrained_state(
+    pretrained_state: dict[str, torch.Tensor], model: nn.Module
+) -> dict[str, torch.Tensor]:
+    """Select pretrained tensors whose names and shapes match ``model`` exactly."""
+    target_state = model.state_dict()
+    return {
+        name: value
+        for name, value in pretrained_state.items()
+        if isinstance(value, torch.Tensor)
+        and name in target_state
+        and value.shape == target_state[name].shape
+    }
 
 
 def adapt_model_to_classes(

@@ -12,8 +12,9 @@ from typing import Callable, Generator
 import torch
 
 from dfine.media import Frame, FrameMetadata, FrameSink, OpenCVVideoSink
-from dfine.results import Boxes, Results
-from dfine.utils.ops import clip_boxes
+from dfine.results import Boxes, Masks, Results, SemanticMask
+from dfine.tasks import normalize_task
+from dfine.utils.ops import clip_boxes, crop_masks_to_boxes
 from dfine.utils.sources import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, LoadSource
 
 
@@ -34,6 +35,7 @@ class DFINEPredictor:
         self.model = model
         self.device = device
         self.names = names
+        self.task = normalize_task(str(cfg.get("task", "detect")))
 
         from dfine.nn.build import build_postprocessor
 
@@ -44,6 +46,7 @@ class DFINEPredictor:
         self,
         source,
         conf: float,
+        mask_threshold: float,
         imgsz: int,
         classes: list[int] | None,
         stream: bool,
@@ -71,8 +74,13 @@ class DFINEPredictor:
         run_mode: str = "predict",
         run_metadata: dict[str, object] | None = None,
         frame_sink: FrameSink | None = None,
+        return_probs: bool = False,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
+        if not 0.0 <= mask_threshold <= 1.0:
+            raise ValueError("mask_threshold must be between 0 and 1")
+        if self.task == "semantic" and classes is not None:
+            raise ValueError("Semantic prediction does not support classes filtering")
         loader = LoadSource(
             source,
             imgsz=imgsz,
@@ -100,6 +108,7 @@ class DFINEPredictor:
                 "mode": run_mode,
                 "source": source,
                 "conf": conf,
+                "mask_threshold": mask_threshold,
                 "imgsz": imgsz,
                 "classes": classes,
                 "stream": stream,
@@ -123,6 +132,7 @@ class DFINEPredictor:
                 "rtsp_username": rtsp_username,
                 "rtsp_authenticated": rtsp_username is not None,
                 "iou": iou,
+                "return_probs": return_probs,
             }
             if run_metadata:
                 metadata.update(run_metadata)
@@ -133,11 +143,13 @@ class DFINEPredictor:
             loader,
             conf,
             classes,
+            mask_threshold=mask_threshold,
             augment=augment,
             iou=iou,
             save_dir=save_dir,
             result_processor=result_processor,
             frame_sink=frame_sink,
+            return_probs=return_probs,
         )
         return gen if stream else list(gen)
 
@@ -146,14 +158,17 @@ class DFINEPredictor:
         loader: LoadSource,
         conf,
         classes,
+        mask_threshold: float = 0.5,
         augment: bool = False,
         iou: float = 0.85,
         save_dir: Path | None = None,
         result_processor: Callable[[Results], Results] | None = None,
         frame_sink: FrameSink | None = None,
+        return_probs: bool = False,
     ) -> Generator:
         """Yield one Results object per frame/image."""
         seen: dict[str, int] = {}
+        semantic_seen: dict[str, int] = {}
         video_sink: OpenCVVideoSink | None = None
         video_output_path: Path | None = None
         source_iter = loader.iter_samples()
@@ -178,35 +193,35 @@ class DFINEPredictor:
                 with torch.no_grad():
                     raw = self.model(tensor)
                     detections = self._postprocessor(raw, orig_size)
+                    if not isinstance(detections, list):
+                        raise RuntimeError("Prediction postprocessor returned an invalid result")
                     merged_det = detections[0]
-                    merged_det["num_orig"] = len(merged_det["boxes"])
+                    if self.task != "semantic":
+                        merged_det["num_orig"] = len(merged_det["boxes"])
 
                     if augment:
                         # Run prediction on horizontally flipped image
                         tensor_flipped = torch.flip(tensor, dims=[3])
                         raw_flipped = self.model(tensor_flipped)
                         detections_flipped = self._postprocessor(raw_flipped, orig_size)
+                        if not isinstance(detections_flipped, list):
+                            raise RuntimeError(
+                                "Prediction postprocessor returned an invalid result"
+                            )
                         det_flipped = detections_flipped[0]
-
-                        # Flip the xyxy pixel-space coordinates back to the original view.
-                        boxes_flipped_back = det_flipped["boxes"].clone()
-                        if len(boxes_flipped_back) > 0:
-                            x1 = w - boxes_flipped_back[:, 2]
-                            x2 = w - boxes_flipped_back[:, 0]
-                            boxes_flipped_back[:, 0] = x1
-                            boxes_flipped_back[:, 2] = x2
-
-                        # Combine detections
-                        merged_det = {
-                            "labels": torch.cat(
-                                [merged_det["labels"], det_flipped["labels"]], dim=0
-                            ),
-                            "boxes": torch.cat([merged_det["boxes"], boxes_flipped_back], dim=0),
-                            "scores": torch.cat(
-                                [merged_det["scores"], det_flipped["scores"]], dim=0
-                            ),
-                            "num_orig": merged_det["num_orig"],
-                        }
+                        if self.task == "semantic":
+                            flipped_logits = torch.flip(det_flipped["semantic_logits"], dims=[2])
+                            merged_det = {
+                                "semantic_logits": (merged_det["semantic_logits"] + flipped_logits)
+                                / 2
+                            }
+                            det_flipped = {}
+                        else:
+                            self._merge_augmented_detections(
+                                merged_det,
+                                det_flipped,
+                                width=w,
+                            )
                 inference_ms = (time.perf_counter() - inference_start) * 1000
 
                 postprocess_start = time.perf_counter()
@@ -216,9 +231,11 @@ class DFINEPredictor:
                     path,
                     conf,
                     classes,
+                    mask_threshold=mask_threshold,
                     augment=augment,
                     iou=iou,
                     frame_metadata=sample.frame.metadata,
+                    return_probs=return_probs,
                 )
                 result.speed = {
                     "preprocess": preprocess_ms,
@@ -245,9 +262,16 @@ class DFINEPredictor:
                         assert video_output_path is not None
                         video_sink.write(Frame(image=result.plot(), metadata=sample.frame.metadata))
                         result.save_path = str(video_output_path)
+                        self._save_semantic_mask(
+                            result,
+                            save_dir,
+                            self._output_filename(path, index),
+                            semantic_seen,
+                        )
                     else:
                         save_path = self._save_result(result, save_dir, index, seen)
                         result.save_path = str(save_path)
+                        self._save_semantic_mask(result, save_dir, save_path.name, semantic_seen)
                 yield result
         finally:
             if video_sink is not None:
@@ -270,6 +294,46 @@ class DFINEPredictor:
         )
         result.save(str(out_path))
         return out_path
+
+    def _save_semantic_mask(
+        self,
+        result: Results,
+        save_dir: Path,
+        output_name: str,
+        seen: dict[str, int],
+    ) -> None:
+        """Save a lossless class-ID PNG alongside semantic visualizations."""
+        if result.semantic_mask is None:
+            return
+        mask_path = self._resolve_output_path(
+            save_dir / "masks" / f"{Path(output_name).stem}.png",
+            seen,
+        )
+        result.save_semantic(mask_path)
+        result.semantic_save_path = str(mask_path)
+
+    @staticmethod
+    def _merge_augmented_detections(
+        merged_det: dict,
+        det_flipped: dict,
+        *,
+        width: int,
+    ) -> None:
+        """Merge a flipped detection view into the original-view dictionary in place."""
+        masks_flipped_back = det_flipped.get("masks")
+        if masks_flipped_back is not None:
+            masks_flipped_back = torch.flip(masks_flipped_back, dims=[2])
+        boxes_flipped_back = det_flipped["boxes"].clone()
+        if len(boxes_flipped_back) > 0:
+            x1 = width - boxes_flipped_back[:, 2]
+            x2 = width - boxes_flipped_back[:, 0]
+            boxes_flipped_back[:, 0] = x1
+            boxes_flipped_back[:, 2] = x2
+        merged_det["labels"] = torch.cat([merged_det["labels"], det_flipped["labels"]], dim=0)
+        merged_det["boxes"] = torch.cat([merged_det["boxes"], boxes_flipped_back], dim=0)
+        merged_det["scores"] = torch.cat([merged_det["scores"], det_flipped["scores"]], dim=0)
+        if "masks" in merged_det and masks_flipped_back is not None:
+            merged_det["masks"] = torch.cat([merged_det["masks"], masks_flipped_back], dim=0)
 
     def _resolve_output_path(self, out_path: Path, seen: dict[str, int]) -> Path:
         count = seen.get(out_path.name, 0)
@@ -318,17 +382,44 @@ class DFINEPredictor:
         path: str,
         conf_thr,
         classes,
+        mask_threshold: float = 0.5,
         augment: bool = False,
         iou: float = 0.85,
         frame_metadata: FrameMetadata | None = None,
+        return_probs: bool = False,
     ) -> Results:
         """
         det is one element from DFINEPostProcessor output:
             {labels: [N], boxes: [N, 4] xyxy in pixel coords, scores: [N]}
         """
+        if self.task == "semantic":
+            logits = det.get("semantic_logits")
+            if not isinstance(logits, torch.Tensor):
+                raise RuntimeError("Semantic postprocessor did not return logits")
+            probabilities = torch.softmax(logits, dim=0)
+            if probabilities.shape[0] != len(self.names):
+                raise RuntimeError(
+                    "Semantic output channel count does not match checkpoint taxonomy: "
+                    f"channels={probabilities.shape[0]}, names={len(self.names)}"
+                )
+            class_ids = probabilities.argmax(dim=0).to(torch.int64)
+            h, w = orig_img.shape[:2]
+            return Results(
+                orig_img=orig_img,
+                path=path,
+                names=self.names,
+                semantic_mask=SemanticMask(
+                    class_ids,
+                    orig_shape=(h, w),
+                    probs=probabilities if return_probs else None,
+                ),
+                frame_metadata=frame_metadata,
+            )
+
         labels = det["labels"]
         boxes = det["boxes"]
         scores = det["scores"]
+        masks = det.get("masks")
         num_orig = det.get("num_orig", len(boxes))
 
         # Assign view tracking labels (0 = original view, 1 = flipped TTA view)
@@ -337,6 +428,8 @@ class DFINEPredictor:
 
         mask = scores > conf_thr
         labels, boxes, scores, views = labels[mask], boxes[mask], scores[mask], views[mask]
+        if masks is not None:
+            masks = masks[mask]
 
         if classes is not None:
             cls_tensor = torch.tensor(classes, device=labels.device)
@@ -347,6 +440,8 @@ class DFINEPredictor:
                 scores[class_mask],
                 views[class_mask],
             )
+            if masks is not None:
+                masks = masks[class_mask]
 
         if augment and len(boxes) > 0:
             import torchvision
@@ -371,9 +466,23 @@ class DFINEPredictor:
 
             keep_indices = torch.where(keep)[0]
             labels, boxes, scores = labels[keep_indices], boxes[keep_indices], scores[keep_indices]
+            if masks is not None:
+                masks = masks[keep_indices]
 
         h, w = orig_img.shape[:2]
         boxes = clip_boxes(boxes, (h, w))
+        result_masks = None
+        if masks is not None:
+            masks = (
+                torch.nn.functional.interpolate(
+                    masks[:, None].float(), size=(h, w), mode="bilinear", align_corners=False
+                )[:, 0]
+                if len(masks)
+                else torch.zeros((0, h, w), device=masks.device)
+            )
+            masks = masks >= mask_threshold
+            masks = crop_masks_to_boxes(masks, boxes)
+            result_masks = Masks(masks.to(torch.uint8), orig_shape=(h, w))
 
         if len(boxes):
             data = torch.cat([boxes, scores.unsqueeze(1), labels.unsqueeze(1).float()], dim=1)
@@ -385,5 +494,6 @@ class DFINEPredictor:
             path=path,
             names=self.names,
             boxes=Boxes(data, orig_shape=(h, w)),
+            masks=result_masks,
             frame_metadata=frame_metadata,
         )

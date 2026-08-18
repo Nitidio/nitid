@@ -16,8 +16,6 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -29,6 +27,9 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --extra dev
+
+      - name: Check lockfile
+        run: uv lock --check
 
       - name: Run ruff
         run: uv run ruff check .
@@ -46,8 +47,6 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -82,8 +81,6 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -97,4 +94,36 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run mypy
-        run: uv run mypy dfine/
+        run: uv run mypy dfine/ tools/ scripts/
+
+  package:
+    name: Installed wheel acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: uv sync --extra dev --extra train
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Verify wheel contents
+        run: uv run python scripts/verify_wheel.py dist/*.whl
+
+      - name: Replace editable install with wheel
+        run: uv pip install --python .venv/bin/python --reinstall --no-deps dist/*.whl
+
+      - name: Verify installed detection and segmentation APIs
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/scripts/verify_install.py"
+          "$GITHUB_WORKSPACE/.venv/bin/dfine" --help

@@ -1,4 +1,4 @@
-"""Unit tests for DFINETrainer helper methods (no D-FINE submodule needed)."""
+"""Unit tests for DFINETrainer helper methods."""
 
 import itertools
 import math
