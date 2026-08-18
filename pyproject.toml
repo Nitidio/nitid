@@ -95,7 +95,8 @@ Repository = "https://github.com/Vaelsys/nitid"
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
-    "onnxruntime>=1.18",
+    "onnxruntime>=1.18,<1.24; python_version < '3.11'",
+    "onnxruntime>=1.18; python_version >= '3.11'",
 ]
 
 # ── uv ────────────────────────────────────────────────────────────────────────
