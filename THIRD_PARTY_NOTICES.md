@@ -21,3 +21,17 @@ upstream copyright and modification notices.
 The imported code has been modified for nitid, including package-relative
 imports, removal of application-framework dependencies, native task/model
 validation, and composition through nitid's model builder.
+
+## DETRPose pose-estimation architecture
+
+The DETRPose architecture contract and the native pose implementation derived
+from it are based on:
+
+- DETRPose, Copyright (c) 2025 The DETRPose Authors.
+  Source: https://github.com/SebastianJanampa/DETRPose
+  Audited commit: `4e4a842aaa5afb3d13b40224f070bc3e8e8503f6`
+
+DETRPose is provided under the Apache License 2.0. The repository's root
+`LICENSE` file contains the license text. The nitid implementation uses its own
+package, task, device, data, and training abstractions; it does not require the
+upstream repository at runtime.
