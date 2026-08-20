@@ -28,13 +28,7 @@ def weighting_function(
         left_values = [-((step) ** i) + 1 for i in range(reg_max // 2 - 1, 0, -1)]
         right_values = [(step) ** i - 1 for i in range(1, reg_max // 2)]
         values_f: list[float] = (
-            [-upper_bound2_v]
-            + [-upper_bound1_v]
-            + left_values
-            + [0.0]
-            + right_values
-            + [upper_bound1_v]
-            + [upper_bound2_v]
+            [-upper_bound2_v] + left_values + [0.0] + right_values + [upper_bound2_v]
         )
         return torch.tensor([values_f], dtype=up.dtype, device=up.device)
     else:

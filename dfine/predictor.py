@@ -12,7 +12,7 @@ from typing import Callable, Generator
 import torch
 
 from dfine.media import Frame, FrameMetadata, FrameSink, OpenCVVideoSink
-from dfine.results import Boxes, Masks, Results, SemanticMask
+from dfine.results import Boxes, Keypoints, Masks, Results, SemanticMask
 from dfine.tasks import normalize_task
 from dfine.utils.ops import clip_boxes, crop_masks_to_boxes
 from dfine.utils.sources import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, LoadSource
@@ -420,6 +420,7 @@ class DFINEPredictor:
         boxes = det["boxes"]
         scores = det["scores"]
         masks = det.get("masks")
+        keypoints = det.get("keypoints")
         num_orig = det.get("num_orig", len(boxes))
 
         # Assign view tracking labels (0 = original view, 1 = flipped TTA view)
@@ -430,6 +431,8 @@ class DFINEPredictor:
         labels, boxes, scores, views = labels[mask], boxes[mask], scores[mask], views[mask]
         if masks is not None:
             masks = masks[mask]
+        if keypoints is not None:
+            keypoints = keypoints[mask]
 
         if classes is not None:
             cls_tensor = torch.tensor(classes, device=labels.device)
@@ -442,6 +445,8 @@ class DFINEPredictor:
             )
             if masks is not None:
                 masks = masks[class_mask]
+            if keypoints is not None:
+                keypoints = keypoints[class_mask]
 
         if augment and len(boxes) > 0:
             import torchvision
@@ -468,6 +473,8 @@ class DFINEPredictor:
             labels, boxes, scores = labels[keep_indices], boxes[keep_indices], scores[keep_indices]
             if masks is not None:
                 masks = masks[keep_indices]
+            if keypoints is not None:
+                keypoints = keypoints[keep_indices]
 
         h, w = orig_img.shape[:2]
         boxes = clip_boxes(boxes, (h, w))
@@ -484,6 +491,10 @@ class DFINEPredictor:
             masks = crop_masks_to_boxes(masks, boxes)
             result_masks = Masks(masks.to(torch.uint8), orig_shape=(h, w))
 
+        result_keypoints = (
+            Keypoints(keypoints, orig_shape=(h, w)) if keypoints is not None else None
+        )
+
         if len(boxes):
             data = torch.cat([boxes, scores.unsqueeze(1), labels.unsqueeze(1).float()], dim=1)
         else:
@@ -495,5 +506,6 @@ class DFINEPredictor:
             names=self.names,
             boxes=Boxes(data, orig_shape=(h, w)),
             masks=result_masks,
+            keypoints=result_keypoints,
             frame_metadata=frame_metadata,
         )

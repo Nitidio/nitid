@@ -10,7 +10,7 @@ from urllib.request import urlretrieve
 
 import torch
 
-from dfine.nn.configs import make_model_config
+from dfine.nn.configs import make_model_config, make_pose_config
 from dfine.tasks import normalize_task
 from tools.convert_checkpoint import convert as convert_checkpoint
 
@@ -120,6 +120,26 @@ SEMANTIC_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
     for model in ("dfine_n", "dfine_s", "dfine_m", "dfine_l", "dfine_x")
 }
 
+POSE_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
+    model: {
+        "coco": _asset(
+            model,
+            "coco",
+            f"{model}_coco.pth",
+            task="pose",
+            release_root=_RELEASE_ROOT,
+        ),
+        "default": _asset(
+            model,
+            "default",
+            f"{model}_coco.pth",
+            task="pose",
+            release_root=_RELEASE_ROOT,
+        ),
+    }
+    for model in ("detrpose_n", "detrpose_s", "detrpose_m", "detrpose_l", "detrpose_x")
+}
+
 DEFAULT_WEIGHTS = "obj2coco"
 _MODEL_ALIASES = {
     "n": "dfine_n",
@@ -132,6 +152,16 @@ _MODEL_ALIASES = {
     "d_fine_m": "dfine_m",
     "d_fine_l": "dfine_l",
     "d_fine_x": "dfine_x",
+    "detrpose_n": "detrpose_n",
+    "detrpose_s": "detrpose_s",
+    "detrpose_m": "detrpose_m",
+    "detrpose_l": "detrpose_l",
+    "detrpose_x": "detrpose_x",
+    "pose_n": "detrpose_n",
+    "pose_s": "detrpose_s",
+    "pose_m": "detrpose_m",
+    "pose_l": "detrpose_l",
+    "pose_x": "detrpose_x",
 }
 _WEIGHT_ALIASES = {
     "default": DEFAULT_WEIGHTS,
@@ -159,6 +189,8 @@ def _registry(task: str) -> dict[str, dict[str, ModelAsset]]:
         return MODEL_REGISTRY
     if resolved_task == "segment":
         return SEGMENT_MODEL_REGISTRY
+    if resolved_task == "pose":
+        return POSE_MODEL_REGISTRY
     return SEMANTIC_MODEL_REGISTRY
 
 
@@ -244,6 +276,13 @@ def download_model(
         print(f"Converting to nitid checkpoint: {out_path}")
         if asset.task == "semantic":
             _wrap_semantic_initialization(raw_path, asset, names, out_path)
+        elif asset.task == "pose":
+            convert_checkpoint(
+                weights=str(raw_path),
+                config=make_pose_config(asset.model),
+                names_file=str(names),
+                output=str(out_path),
+            )
         else:
             convert_checkpoint(
                 weights=str(raw_path),
