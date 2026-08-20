@@ -389,4 +389,25 @@ def make_pose_config(
             "reg_max": spec.reg_max,
             "reg_scale": spec.reg_scale,
         },
+        "matcher": {
+            "weight_dict": {
+                "cost_class": 2.0,
+                "cost_keypoints": 5.0,
+                "cost_oks": 2.0,
+            },
+            "num_body_points": schema.num_keypoints,
+            "use_focal_loss": True,
+        },
+        "DFINECriterion": {
+            "weight_dict": {
+                "loss_vfl": 1.0,
+                "loss_keypoints": 5.0,
+                "loss_oks": 2.0,
+                "loss_fgl": 1.0,
+                "loss_ddf": 1.5,
+            },
+            "losses": ["vfl", "keypoints", "local"],
+            "reg_max": spec.reg_max,
+            "num_body_points": schema.num_keypoints,
+        },
     }

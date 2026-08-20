@@ -247,6 +247,12 @@ def build_native_criterion_from_config(config: Mapping[str, Any]) -> nn.Module:
 
     if task == "segment" and "masks" not in criterion_config["losses"]:
         criterion_config["losses"].append("masks")
+    elif task == "pose" and "keypoints" not in criterion_config["losses"]:
+        criterion_config["losses"].append("keypoints")
+
+    num_body_points = config.get("num_body_points", criterion_config.get("num_body_points", 17))
+    matcher_config.setdefault("num_body_points", num_body_points)
+    criterion_config.setdefault("num_body_points", num_body_points)
     criterion_config.setdefault("label_smoothing", 0.0)
 
     return DFINECriterion(
