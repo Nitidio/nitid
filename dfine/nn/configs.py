@@ -328,3 +328,65 @@ def make_detection_config(
         num_classes=num_classes,
         image_size=image_size,
     )
+
+
+def make_pose_config(
+    model_size: str,
+    *,
+    dataset: str = "coco",
+    image_size: tuple[int, int] = (640, 640),
+) -> dict[str, Any]:
+    """Create a self-contained runtime config for DETRPose models."""
+    from dfine.pose_contract import get_pose_model_spec, get_pose_schema
+
+    spec = get_pose_model_spec(model_size)
+    schema = get_pose_schema(dataset)
+
+    return {
+        "task": "pose",
+        "model": "DFINE",
+        "num_classes": spec.public_num_classes,
+        "eval_spatial_size": list(image_size),
+        "dataset": schema.name,
+        "num_body_points": schema.num_keypoints,
+        "DFINE": {
+            "backbone": "HGNetv2",
+            "encoder": "HybridEncoder",
+            "decoder": "DETRPoseDecoder",
+        },
+        "HGNetv2": {
+            "name": spec.backbone,
+            "return_idx": list(spec.backbone_return_idx),
+            "freeze_at": -1,
+            "freeze_norm": False,
+            "use_lab": True,
+            "pretrained": False,
+        },
+        "HybridEncoder": {
+            "in_channels": list(spec.encoder_in_channels),
+            "feat_strides": list(spec.feature_strides),
+            "hidden_dim": spec.hidden_dim,
+            "use_encoder_idx": [len(spec.encoder_in_channels) - 1],
+            "dim_feedforward": spec.encoder_feedforward_dim,
+            "expansion": spec.encoder_expansion,
+            "depth_mult": spec.encoder_depth_mult,
+            "pe_mode": "sinehw",
+            "pe_temperature_h": 20.0,
+            "pe_temperature_w": 20.0,
+        },
+        "DETRPoseDecoder": {
+            "hidden_dim": spec.hidden_dim,
+            "nhead": 8,
+            "num_queries": spec.num_queries,
+            "num_decoder_layers": spec.decoder_layers,
+            "dim_feedforward": spec.decoder_feedforward_dim,
+            "num_feature_levels": len(spec.feature_strides),
+            "dec_n_points": spec.decoder_points,
+            "num_classes": spec.internal_num_classes,
+            "num_body_points": schema.num_keypoints,
+            "feat_strides": list(spec.feature_strides),
+            "eval_spatial_size": list(image_size),
+            "reg_max": spec.reg_max,
+            "reg_scale": spec.reg_scale,
+        },
+    }

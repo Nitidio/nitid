@@ -15,8 +15,15 @@ import torch.nn as nn
 
 from dfine.tasks import Task, normalize_task
 
-from .architecture import DFINEModel, DFINETransformer, HGNetv2, HybridEncoder, SemSegDecoder
-from .configs import get_model_config
+from .architecture import (
+    DETRPoseDecoder,
+    DFINEModel,
+    DFINETransformer,
+    HGNetv2,
+    HybridEncoder,
+    SemSegDecoder,
+)
+from .configs import get_model_config, make_pose_config
 from .losses import DFINECriterion, HungarianMatcher, SemSegCriterion
 
 
@@ -57,11 +64,17 @@ def _compose_native_model(
     device: str | torch.device | None,
 ) -> DFINEModel:
     enable_mask_head = task == "segment"
-    backbone_config["pretrained"] = False
-    encoder_config["eval_spatial_size"] = image_size
-    if task != "semantic":
-        decoder_config["eval_spatial_size"] = image_size
-        decoder_config["enable_mask_head"] = enable_mask_head
+    if image_size is not None:
+        encoder_config["eval_spatial_size"] = image_size
+        if task != "semantic":
+            decoder_config["eval_spatial_size"] = image_size
+            if task == "segment":
+                decoder_config["enable_mask_head"] = True
+    elif task == "pose":
+        encoder_config["eval_spatial_size"] = (640, 640)
+        decoder_config["eval_spatial_size"] = (640, 640)
+    elif task == "segment":
+        decoder_config["enable_mask_head"] = True
 
     encoder_strides = encoder_config["feat_strides"]
     if (enable_mask_head or task == "semantic") and 8 not in encoder_strides:
@@ -74,11 +87,15 @@ def _compose_native_model(
 
     backbone = HGNetv2(in_channels=in_channels, **backbone_config)
     encoder = HybridEncoder(**encoder_config)
+    decoder_kwargs = copy.deepcopy(decoder_config)
+    dec_num_classes = decoder_kwargs.pop("num_classes", num_classes)
     decoder: nn.Module
     if task == "semantic":
-        decoder = SemSegDecoder(num_classes=num_classes, **decoder_config)
+        decoder = SemSegDecoder(num_classes=dec_num_classes, **decoder_kwargs)
+    elif task == "pose":
+        decoder = DETRPoseDecoder(num_classes=dec_num_classes, **decoder_kwargs)
     else:
-        decoder = DFINETransformer(num_classes=num_classes, **decoder_config)
+        decoder = DFINETransformer(num_classes=dec_num_classes, **decoder_kwargs)
     native_model = DFINEModel(backbone=backbone, encoder=encoder, decoder=decoder)
     return native_model.to(device) if device is not None else native_model
 
@@ -99,6 +116,19 @@ def build_native_model(
         raise ValueError(f"in_channels must be 3 or 4, got {in_channels}")
 
     resolved_task = normalize_task(task)
+    if resolved_task == "pose":
+        config = make_pose_config(model, image_size=image_size or (640, 640))
+        return _compose_native_model(
+            backbone_config=config["HGNetv2"],
+            encoder_config=config["HybridEncoder"],
+            decoder_config=config["DETRPoseDecoder"],
+            num_classes=config["num_classes"],
+            task=resolved_task,
+            image_size=image_size,
+            in_channels=in_channels,
+            device=device,
+        )
+
     config = get_model_config(model)
     decoder_config = config["DFINETransformer"]
     if resolved_task == "semantic":
@@ -133,18 +163,19 @@ def build_native_model_from_config(
         raise ValueError("D-FINE config in_channels must be 3 or 4")
 
     task = _checkpoint_task(config)
-    decoder_key = "SemSegDecoder" if task == "semantic" else "DFINETransformer"
-    # Older semantic configs stored dense-head inputs under DFINETransformer.
-    # Retain that read path for checkpoint compatibility.
-    if decoder_key not in config and task == "semantic":
-        decoder_key = "DFINETransformer"
-    decoder_config = _component_config(config, decoder_key)
-    if task == "semantic" and decoder_key == "DFINETransformer":
-        decoder_config = {
-            key: decoder_config[key]
-            for key in ("feat_channels", "mask_dim", "mask_low_level_ch")
-            if key in decoder_config
-        }
+    if task == "pose":
+        decoder_config = _component_config(config, "DETRPoseDecoder")
+    elif task == "semantic":
+        decoder_key = "SemSegDecoder" if "SemSegDecoder" in config else "DFINETransformer"
+        decoder_config = _component_config(config, decoder_key)
+        if decoder_key == "DFINETransformer":
+            decoder_config = {
+                key: decoder_config[key]
+                for key in ("feat_channels", "mask_dim", "mask_low_level_ch")
+                if key in decoder_config
+            }
+    else:
+        decoder_config = _component_config(config, "DFINETransformer")
 
     return _compose_native_model(
         backbone_config=_component_config(config, "HGNetv2"),

@@ -92,7 +92,12 @@ def load_checkpoint(path: str | Path, device: str = "cpu"):
     cfg["task"] = task
     names = ckpt.get("names", {})
     model = build_model(cfg)
-    model.load_state_dict(ckpt["model"])
+    raw_state = ckpt["model"]
+    mapped_state = {}
+    for k, v in raw_state.items():
+        new_k = "decoder." + k[len("transformer.") :] if k.startswith("transformer.") else k
+        mapped_state[new_k] = v
+    model.load_state_dict(mapped_state, strict=True)
     model.to(device)
     model.eval()
     return model, cfg, names

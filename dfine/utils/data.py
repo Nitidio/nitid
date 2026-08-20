@@ -333,7 +333,7 @@ class CocoFinetuneDataset(Dataset):
         cache: bool | str = False,
         augment: AugmentationConfig | None = None,
         seed: int = 0,
-        task: Literal["detect", "segment"] = "detect",
+        task: Literal["detect", "segment", "pose"] = "detect",
     ) -> None:
         from pycocotools.coco import COCO
 
@@ -531,7 +531,7 @@ def build_detection_dataloader(
     single_cls: bool = False,
     fraction: float = 1.0,
     augment: AugmentationConfig | None = None,
-    task: Literal["detect", "segment"] = "detect",
+    task: Literal["detect", "segment", "pose"] = "detect",
 ) -> DataLoader:
     """Build a DataLoader from COCO JSON or YOLO txt labels."""
     cfg = load_data_yaml(data)

@@ -14,6 +14,8 @@ from dfine.tasks import SUPPORTED_TASKS, get_task_contract, normalize_task
         ("semantic", "semantic"),
         ("SEM_SEG", "semantic"),
         ("sem-seg", "semantic"),
+        ("pose", "pose"),
+        ("keypoint", "pose"),
     ],
 )
 def test_normalize_task_accepts_canonical_names_and_documented_aliases(value, expected):
@@ -21,7 +23,7 @@ def test_normalize_task_accepts_canonical_names_and_documented_aliases(value, ex
 
 
 def test_normalize_task_rejects_unknown_and_non_string_values():
-    with pytest.raises(ValueError, match="detect, segment, semantic"):
+    with pytest.raises(ValueError, match="detect, segment, semantic, pose"):
         normalize_task("panoptic")
     with pytest.raises(TypeError, match="task must be a string"):
         normalize_task(1)  # type: ignore[arg-type]
@@ -30,7 +32,7 @@ def test_normalize_task_rejects_unknown_and_non_string_values():
 def test_semantic_task_contract_is_dense_and_uses_instance_pretraining():
     contract = get_task_contract("sem_seg")
 
-    assert SUPPORTED_TASKS == ("detect", "segment", "semantic")
+    assert SUPPORTED_TASKS == ("detect", "segment", "semantic", "pose")
     assert contract.name == "semantic"
     assert contract.result_fields == ("semantic_mask",)
     assert contract.instance_level is False
