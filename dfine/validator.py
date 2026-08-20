@@ -132,6 +132,34 @@ def _restore_original_coordinates(
     return restored
 
 
+def _restore_original_keypoints(
+    keypoints: torch.Tensor, original_width: int, original_height: int, imgsz: int
+) -> torch.Tensor:
+    """Map absolute xy keypoints from D-FINE's square resize to original pixels."""
+    restored = keypoints.clone()
+    if restored.numel():
+        scale_x = original_width / imgsz
+        scale_y = original_height / imgsz
+        if restored.dim() == 2 and restored.shape[1] % 3 == 0:
+            res_view = restored.view(restored.shape[0], -1, 3)
+            res_view[..., 0] *= scale_x
+            res_view[..., 1] *= scale_y
+            res_view[..., 0].clamp_(0, original_width)
+            res_view[..., 1].clamp_(0, original_height)
+        elif restored.dim() == 2 and restored.shape[1] % 2 == 0:
+            res_view = restored.view(restored.shape[0], -1, 2)
+            res_view[..., 0] *= scale_x
+            res_view[..., 1] *= scale_y
+            res_view[..., 0].clamp_(0, original_width)
+            res_view[..., 1].clamp_(0, original_height)
+        elif restored.dim() == 3:
+            restored[..., 0] *= scale_x
+            restored[..., 1] *= scale_y
+            restored[..., 0].clamp_(0, original_width)
+            restored[..., 1].clamp_(0, original_height)
+    return restored
+
+
 def _as_float(value: object, default: float = 0.0) -> float:
     if isinstance(value, (int, float)):
         return float(value)
@@ -277,6 +305,9 @@ class DFINEValidator:
                     pred_masks = det.get("masks")
                     if pred_masks is not None:
                         pred_masks = pred_masks.detach().cpu()
+                    pred_keypoints = det.get("keypoints")
+                    if pred_keypoints is not None:
+                        pred_keypoints = pred_keypoints.detach().cpu()
                     pred_records.append(
                         {"boxes": pred_boxes, "scores": pred_scores, "labels": pred_labels}
                     )
@@ -288,6 +319,15 @@ class DFINEValidator:
                         original_height=int(image_info["height"]),
                         imgsz=imgsz,
                     )
+                    coco_keypoints = None
+                    if pred_keypoints is not None:
+                        coco_keypoints = _restore_original_keypoints(
+                            pred_keypoints,
+                            original_width=int(image_info["width"]),
+                            original_height=int(image_info["height"]),
+                            imgsz=imgsz,
+                        )
+
                     mask = pred_scores > conf
                     selected = torch.where(mask)[0]
                     selected_masks = None
@@ -324,6 +364,12 @@ class DFINEValidator:
                             if isinstance(counts, bytes):
                                 encoded["counts"] = counts.decode("ascii")
                             result["segmentation"] = encoded
+                        if coco_keypoints is not None:
+                            kpt_inst = coco_keypoints[pred_index].numpy()
+                            if kpt_inst.ndim == 2 and kpt_inst.shape[-1] == 2:
+                                vis = np.ones((kpt_inst.shape[0], 1), dtype=np.float32) * 2.0
+                                kpt_inst = np.hstack([kpt_inst, vis])
+                            result["keypoints"] = kpt_inst.flatten().tolist()
                         coco_results.append(result)
 
         with contextlib.redirect_stdout(io.StringIO()):
@@ -338,6 +384,7 @@ class DFINEValidator:
         }
         per_class_rows: list[PerClassRow] = []
         mask_metrics = {"mask_mAP50-95": 0.0, "mask_mAP50": 0.0}
+        pose_metrics = {"pose_mAP50-95": 0.0, "pose_mAP50": 0.0}
 
         if coco_results:
             with contextlib.redirect_stdout(io.StringIO()):
@@ -379,6 +426,18 @@ class DFINEValidator:
                     "mask_mAP50-95": mean_valid(mask_precision[:, :, :, 0, -1]),
                     "mask_mAP50": mean_valid(mask_precision[0, :, :, 0, -1]),
                 }
+
+            if task == "pose" and any("keypoints" in item for item in coco_results):
+                coco_pose_eval = COCOeval(coco_gt, coco_dt, "keypoints")
+                coco_pose_eval.params.maxDets = [1, 10, 100, 300]
+                with contextlib.redirect_stdout(io.StringIO()):
+                    coco_pose_eval.evaluate()
+                    coco_pose_eval.accumulate()
+                pose_precision = coco_pose_eval.eval["precision"]
+                pose_metrics = {
+                    "pose_mAP50-95": mean_valid(pose_precision[:, :, :, 0, -1]),
+                    "pose_mAP50": mean_valid(pose_precision[0, :, :, 0, -1]),
+                }
         elif verbose:
             LOGGER.info("No detections above conf threshold — metrics are zero")
 
@@ -393,8 +452,16 @@ class DFINEValidator:
         fitness = self._fitness(
             precision,
             recall,
-            mask_metrics["mask_mAP50"] if task == "segment" else coco_metrics["mAP50"],
-            mask_metrics["mask_mAP50-95"] if task == "segment" else coco_metrics["mAP50-95"],
+            (
+                mask_metrics["mask_mAP50"]
+                if task == "segment"
+                else (pose_metrics["pose_mAP50"] if task == "pose" else coco_metrics["mAP50"])
+            ),
+            (
+                mask_metrics["mask_mAP50-95"]
+                if task == "segment"
+                else (pose_metrics["pose_mAP50-95"] if task == "pose" else coco_metrics["mAP50-95"])
+            ),
         )
 
         confusion_matrix, class_ids = self._confusion_matrix(gt_records, pred_records, best_conf)
@@ -413,6 +480,7 @@ class DFINEValidator:
         metrics = {
             **coco_metrics,
             **(mask_metrics if task == "segment" else {}),
+            **(pose_metrics if task == "pose" else {}),
             "images": len(gt_records),
             "instances": int(sum(gt["labels"].numel() for gt in gt_records)),
             "precision": precision,

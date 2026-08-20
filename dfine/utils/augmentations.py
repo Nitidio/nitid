@@ -339,3 +339,85 @@ def _clip_boxes(boxes: torch.Tensor, width: int, height: int) -> torch.Tensor:
 
 def _valid_boxes(boxes: torch.Tensor) -> torch.Tensor:
     return (boxes[:, 2] - boxes[:, 0] >= 1.0) & (boxes[:, 3] - boxes[:, 1] >= 1.0)
+
+
+COCO_FLIP_MAP = [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
+
+
+def horizontal_flip_keypoints(
+    keypoints: torch.Tensor,
+    width: float,
+    flip_map: list[int] | None = None,
+) -> torch.Tensor:
+    """Flip keypoint x-coordinates and swap bilateral joint pairs."""
+    if not keypoints.numel():
+        return keypoints.clone()
+
+    res = keypoints.clone()
+    if res.dim() == 2 and res.shape[1] % 3 == 0:
+        num_kpts = res.shape[1] // 3
+        res = res.view(-1, num_kpts, 3)
+    elif res.dim() == 2 and res.shape[1] % 2 == 0:
+        num_kpts = res.shape[1] // 2
+        res = res.view(-1, num_kpts, 2)
+
+    # Flip x coordinates for keypoints
+    res[..., 0] = width - res[..., 0]
+
+    # Swap bilateral pairs if flip_map is provided
+    map_to_use = (
+        flip_map if flip_map is not None else (COCO_FLIP_MAP if res.shape[1] == 17 else None)
+    )
+    if map_to_use is not None and len(map_to_use) == res.shape[1]:
+        res = res[:, map_to_use, :]
+
+    return res.view_as(keypoints)
+
+
+def stretch_resize_keypoints(
+    keypoints: torch.Tensor, orig_w: float, orig_h: float, target_size: int
+) -> torch.Tensor:
+    """Scale keypoints to a square target size."""
+    if not keypoints.numel():
+        return keypoints.clone()
+
+    scale_x, scale_y = target_size / max(1.0, orig_w), target_size / max(1.0, orig_h)
+    res = keypoints.clone()
+    if res.dim() == 2 and res.shape[1] % 3 == 0:
+        num_kpts = res.shape[1] // 3
+        res_view = res.view(-1, num_kpts, 3)
+        res_view[..., 0] *= scale_x
+        res_view[..., 1] *= scale_y
+    elif res.dim() == 2 and res.shape[1] % 2 == 0:
+        num_kpts = res.shape[1] // 2
+        res_view = res.view(-1, num_kpts, 2)
+        res_view[..., 0] *= scale_x
+        res_view[..., 1] *= scale_y
+    elif res.dim() == 3:
+        res[..., 0] *= scale_x
+        res[..., 1] *= scale_y
+    return res
+
+
+def scale_translate_keypoints(
+    keypoints: torch.Tensor, factor: float, left: float, top: float
+) -> torch.Tensor:
+    """Scale and translate keypoints."""
+    if not keypoints.numel():
+        return keypoints.clone()
+
+    res = keypoints.clone()
+    if res.dim() == 2 and res.shape[1] % 3 == 0:
+        num_kpts = res.shape[1] // 3
+        res_view = res.view(-1, num_kpts, 3)
+        res_view[..., 0] = res_view[..., 0] * factor + left
+        res_view[..., 1] = res_view[..., 1] * factor + top
+    elif res.dim() == 2 and res.shape[1] % 2 == 0:
+        num_kpts = res.shape[1] // 2
+        res_view = res.view(-1, num_kpts, 2)
+        res_view[..., 0] = res_view[..., 0] * factor + left
+        res_view[..., 1] = res_view[..., 1] * factor + top
+    elif res.dim() == 3:
+        res[..., 0] = res[..., 0] * factor + left
+        res[..., 1] = res[..., 1] * factor + top
+    return res
