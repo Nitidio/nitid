@@ -53,6 +53,7 @@ from dfine.utils.augmentations import (
     AugmentationConfig,
     color_jitter_hsv,
     horizontal_flip,
+    horizontal_flip_keypoints,
     horizontal_flip_masks,
     random_crop,
     random_crop_instances,
@@ -63,8 +64,10 @@ from dfine.utils.augmentations import (
     sanitize_instances,
     scale_translate,
     scale_translate_instances,
+    scale_translate_keypoints,
     scale_translate_semantic,
     stretch_resize,
+    stretch_resize_keypoints,
     to_tensor,
 )
 from dfine.utils.logging import LOGGER
@@ -363,6 +366,21 @@ class CocoFinetuneDataset(Dataset):
                 "task='segment' requires polygon or RLE instance annotations; "
                 "the selected split contains bounding boxes only"
             )
+        if self.task == "pose" and not any(
+            ann.get("keypoints") and int(ann.get("num_keypoints", 0)) > 0
+            for ann in self.coco.anns.values()
+        ):
+            raise ValueError(
+                "task='pose' requires COCO keypoint annotations; "
+                "the selected split contains no visible keypoints"
+            )
+        if (
+            self.task == "pose"
+            and augment
+            and augment.enabled
+            and (augment.mosaic > 0 or augment.mixup > 0)
+        ):
+            raise ValueError("Pose training does not support mosaic or mixup augmentations")
         if cache is True or str(cache).lower() == "ram":
             for index in range(len(self.ids)):
                 self._image_cache[index] = self._load_image(index)
@@ -373,31 +391,54 @@ class CocoFinetuneDataset(Dataset):
         return len(self.ids)
 
     def __getitem__(self, idx: int):
-        image, boxes, labels, masks, img_id = self._load_item(idx)
+        image, boxes, labels, masks, keypoints, areas, img_id = self._load_item(idx)
         rng = random.Random(self.seed + self.epoch * max(len(self), 1) + idx)
         cfg = self.augment
         mosaic_active = bool(
             cfg
             and cfg.enabled
+            and self.task != "pose"
             and self.mosaic_enabled
             and cfg.mosaic > 0
             and rng.random() < cfg.mosaic
         )
         if mosaic_active:
             image, boxes, labels, masks = self._mosaic(idx, rng)
+            keypoints = torch.zeros((0, 0), dtype=torch.float32)
+            areas = torch.zeros((len(labels),), dtype=torch.float32)
         else:
+            orig_w, orig_h = image.size
             image, boxes = stretch_resize(image, boxes, self.imgsz)
+            if self.task == "pose":
+                keypoints = stretch_resize_keypoints(keypoints, orig_w, orig_h, self.imgsz)
+                areas = (
+                    areas
+                    * (self.imgsz / max(1.0, float(orig_w)))
+                    * (self.imgsz / max(1.0, float(orig_h)))
+                )
             masks = resize_masks(masks, self.imgsz)
 
         if cfg and cfg.enabled:
             if cfg.fliplr and rng.random() < cfg.fliplr:
                 image, boxes = horizontal_flip(image, boxes)
                 masks = horizontal_flip_masks(masks)
+                if self.task == "pose":
+                    keypoints = horizontal_flip_keypoints(keypoints, width=self.imgsz)
             if cfg.scale or cfg.translate:
                 if self.task == "segment":
                     image, boxes, masks = scale_translate_instances(
                         image, boxes, masks, cfg.scale, cfg.translate, rng
                     )
+                elif self.task == "pose":
+                    width, height = image.size
+                    factor = rng.uniform(1.0 - cfg.scale, 1.0 + cfg.scale)
+                    new_w, new_h = max(1, round(width * factor)), max(1, round(height * factor))
+                    tx = round(rng.uniform(-cfg.translate, cfg.translate) * width)
+                    ty = round(rng.uniform(-cfg.translate, cfg.translate) * height)
+                    left, top = (width - new_w) // 2 + tx, (height - new_h) // 2 + ty
+                    image, boxes = scale_translate_with_params(image, boxes, factor, left, top)
+                    keypoints = scale_translate_keypoints(keypoints, factor, left, top)
+                    areas = areas * factor * factor
                 else:
                     image, boxes = scale_translate(image, boxes, cfg.scale, cfg.translate, rng)
             if cfg.crop and rng.random() < cfg.crop:
@@ -405,15 +446,30 @@ class CocoFinetuneDataset(Dataset):
                     image, boxes, masks, keep = random_crop_instances(
                         image, boxes, masks, cfg.crop, rng
                     )
+                elif self.task == "pose":
+                    image, boxes, keypoints, keep = random_crop_pose(
+                        image, boxes, keypoints, cfg.crop, rng
+                    )
                 else:
                     image, boxes, keep = random_crop(image, boxes, cfg.crop, rng)
                 labels = labels[keep]
+                areas = areas[keep]
+                crop_w, crop_h = image.size
                 image, boxes = stretch_resize(image, boxes, self.imgsz)
+                if self.task == "pose":
+                    keypoints = stretch_resize_keypoints(keypoints, crop_w, crop_h, self.imgsz)
+                    areas = (
+                        areas
+                        * (self.imgsz / max(1.0, float(crop_w)))
+                        * (self.imgsz / max(1.0, float(crop_h)))
+                    )
                 masks = resize_masks(masks, self.imgsz)
             image = color_jitter_hsv(image, cfg, rng)
             if cfg.mixup and rng.random() < cfg.mixup:
                 other_idx = rng.randrange(len(self))
-                other_image, other_boxes, other_labels, other_masks, _ = self._load_item(other_idx)
+                other_image, other_boxes, other_labels, other_masks, _, _, _ = self._load_item(
+                    other_idx
+                )
                 other_image, other_boxes = stretch_resize(other_image, other_boxes, self.imgsz)
                 other_masks = resize_masks(other_masks, self.imgsz)
                 ratio = rng.betavariate(32.0, 32.0)
@@ -424,6 +480,10 @@ class CocoFinetuneDataset(Dataset):
 
         if self.task == "segment":
             boxes, labels, masks = sanitize_instances(boxes, labels, masks, self.imgsz, self.imgsz)
+        elif self.task == "pose":
+            boxes, labels, keypoints, areas = sanitize_pose(
+                boxes, labels, keypoints, areas, self.imgsz, self.imgsz
+            )
         else:
             boxes, labels = sanitize(boxes, labels, self.imgsz, self.imgsz)
         boxes = self._normalize_boxes(boxes)
@@ -434,18 +494,29 @@ class CocoFinetuneDataset(Dataset):
         }
         if self.task == "segment":
             target["masks"] = masks
+        if self.task == "pose":
+            target["keypoints"] = normalize_keypoints_for_pose_loss(keypoints, self.imgsz)
+            target["area"] = (areas / float(self.imgsz * self.imgsz)).clamp(min=1e-6)
         return to_tensor(image), target
 
     def _load_item(
         self, idx: int
-    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor, int]:
+    ) -> tuple[
+        Image.Image,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        int,
+    ]:
         img_id = self.ids[idx]
         image = self._image_cache.get(idx)
         if image is None:
             image = self._load_image(idx)
         width, height = image.size
         anns = self.coco.loadAnns(self.coco.getAnnIds(imgIds=img_id, iscrowd=False))
-        box_values, label_values, mask_values = [], [], []
+        box_values, label_values, mask_values, keypoint_values, area_values = [], [], [], [], []
         for ann in anns:
             x, y, w, h = ann["bbox"]
             if w <= 0 or h <= 0:
@@ -455,6 +526,12 @@ class CocoFinetuneDataset(Dataset):
                 continue
             if self.task == "segment" and not ann.get("segmentation"):
                 continue
+            if self.task == "pose":
+                raw_keypoints = ann.get("keypoints")
+                if not raw_keypoints or int(ann.get("num_keypoints", 0)) <= 0:
+                    continue
+                keypoint_values.append(raw_keypoints)
+                area_values.append(float(ann.get("area", w * h)))
             box_values.append([x, y, x + w, y + h])
             label_values.append(0 if self.single_cls else label)
             if self.task == "segment":
@@ -466,7 +543,13 @@ class CocoFinetuneDataset(Dataset):
             if mask_values
             else torch.zeros((0, height, width), dtype=torch.uint8)
         )
-        return image.copy(), boxes, labels, masks, img_id
+        keypoints = (
+            torch.tensor(keypoint_values, dtype=torch.float32).reshape(len(keypoint_values), -1)
+            if keypoint_values
+            else torch.zeros((0, 0), dtype=torch.float32)
+        )
+        areas = torch.tensor(area_values, dtype=torch.float32)
+        return image.copy(), boxes, labels, masks, keypoints, areas, img_id
 
     def _mosaic(
         self, idx: int, rng: random.Random
@@ -477,7 +560,7 @@ class CocoFinetuneDataset(Dataset):
         all_boxes, all_labels, all_masks = [], [], []
         offsets = ((0, 0), (half, 0), (0, half), (half, half))
         for item_idx, (left, top) in zip(indices, offsets):
-            image, boxes, labels, masks, _ = self._load_item(item_idx)
+            image, boxes, labels, masks, _, _, _ = self._load_item(item_idx)
             image, boxes = stretch_resize(image, boxes, half)
             masks = resize_masks(masks, half)
             canvas.paste(image, (left, top))
@@ -515,6 +598,120 @@ def _collate(batch):
     """Stack images into [B,C,H,W]; keep targets as a list of dicts."""
     images, targets = zip(*batch)
     return torch.stack(images), list(targets)
+
+
+def scale_translate_with_params(
+    image: Image.Image,
+    boxes: torch.Tensor,
+    factor: float,
+    left: int,
+    top: int,
+    fill: tuple[int, int, int] = (114, 114, 114),
+) -> tuple[Image.Image, torch.Tensor]:
+    """Apply a fixed scale/translate transform shared by boxes and keypoints."""
+    width, height = image.size
+    new_w, new_h = max(1, round(width * factor)), max(1, round(height * factor))
+    resized = image.resize((new_w, new_h), Image.Resampling.BILINEAR)
+    canvas = Image.new("RGB", (width, height), fill)
+    canvas.paste(resized, (left, top))
+    result = boxes.clone()
+    if result.numel():
+        result[:, [0, 2]] = result[:, [0, 2]] * factor + left
+        result[:, [1, 3]] = result[:, [1, 3]] * factor + top
+        result[:, [0, 2]].clamp_(0, width)
+        result[:, [1, 3]].clamp_(0, height)
+    return canvas, result
+
+
+def random_crop_pose(
+    image: Image.Image,
+    boxes: torch.Tensor,
+    keypoints: torch.Tensor,
+    gain: float,
+    rng: random.Random,
+) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Crop an image while keeping pose boxes and keypoints aligned."""
+    width, height = image.size
+    left = round(rng.uniform(0.0, gain) * width)
+    right = round(rng.uniform(0.0, gain) * width)
+    top = round(rng.uniform(0.0, gain) * height)
+    bottom = round(rng.uniform(0.0, gain) * height)
+    if left + right >= width or top + bottom >= height:
+        return image, boxes, keypoints, torch.ones(len(boxes), dtype=torch.bool)
+
+    result_boxes = boxes.clone()
+    result_boxes[:, [0, 2]] -= left
+    result_boxes[:, [1, 3]] -= top
+    crop_w, crop_h = width - left - right, height - top - bottom
+    result_boxes[:, [0, 2]].clamp_(0, crop_w)
+    result_boxes[:, [1, 3]].clamp_(0, crop_h)
+    keep = (result_boxes[:, 2] - result_boxes[:, 0] >= 1.0) & (
+        result_boxes[:, 3] - result_boxes[:, 1] >= 1.0
+    )
+
+    result_keypoints = keypoints.clone()
+    if result_keypoints.numel():
+        view = result_keypoints.view(result_keypoints.shape[0], -1, 3)
+        view[..., 0] -= left
+        view[..., 1] -= top
+        outside = (
+            (view[..., 0] < 0)
+            | (view[..., 0] > crop_w)
+            | (view[..., 1] < 0)
+            | (view[..., 1] > crop_h)
+        )
+        view[..., 2] = torch.where(outside, torch.zeros_like(view[..., 2]), view[..., 2])
+        view[..., 0].clamp_(0, crop_w)
+        view[..., 1].clamp_(0, crop_h)
+
+    return (
+        image.crop((left, top, width - right, height - bottom)),
+        result_boxes[keep],
+        result_keypoints[keep],
+        keep,
+    )
+
+
+def sanitize_pose(
+    boxes: torch.Tensor,
+    labels: torch.Tensor,
+    keypoints: torch.Tensor,
+    areas: torch.Tensor,
+    width: int,
+    height: int,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Clip boxes and remove invalid pose instances with no visible keypoints."""
+    boxes = boxes.clone()
+    if boxes.numel():
+        boxes[:, [0, 2]].clamp_(0, width)
+        boxes[:, [1, 3]].clamp_(0, height)
+    keep = (boxes[:, 2] - boxes[:, 0] >= 1.0) & (boxes[:, 3] - boxes[:, 1] >= 1.0)
+    keep = keep & torch.isfinite(boxes).all(dim=1)
+    if keypoints.numel():
+        view = keypoints.view(keypoints.shape[0], -1, 3)
+        outside = (
+            (view[..., 0] < 0)
+            | (view[..., 0] > width)
+            | (view[..., 1] < 0)
+            | (view[..., 1] > height)
+        )
+        view[..., 2] = torch.where(outside, torch.zeros_like(view[..., 2]), view[..., 2])
+        view[..., 0].clamp_(0, width)
+        view[..., 1].clamp_(0, height)
+        keep = keep & (view[..., 2] > 0).any(dim=1)
+    else:
+        keep = keep & torch.zeros_like(keep)
+    return boxes[keep], labels[keep], keypoints[keep], areas[keep]
+
+
+def normalize_keypoints_for_pose_loss(keypoints: torch.Tensor, image_size: int) -> torch.Tensor:
+    """Convert COCO interleaved ``x,y,v`` keypoints to DETRPose loss format."""
+    if not keypoints.numel():
+        return torch.zeros((0, 0), dtype=torch.float32, device=keypoints.device)
+    view = keypoints.view(keypoints.shape[0], -1, 3)
+    xy = view[..., :2].reshape(keypoints.shape[0], -1) / float(image_size)
+    visibility = (view[..., 2] > 0).to(dtype=keypoints.dtype)
+    return torch.cat([xy, visibility], dim=1)
 
 
 def build_detection_dataloader(

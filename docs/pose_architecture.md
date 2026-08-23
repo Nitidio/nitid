@@ -10,8 +10,9 @@ The reserved public API is:
 DFINE("detrpose_n", task="pose")
 ```
 
-This API becomes operational only when native inference and official-checkpoint parity are complete.
-Until then, pose is intentionally absent from the runnable task registry.
+This API is operational for native inference with wrapped DETRPose checkpoints and official DETRPose
+checkpoint conversion. Pose training and validation use COCO keypoint annotations and keep the public
+task surface constrained to single-class person pose estimation.
 
 ## Model family
 

@@ -11,6 +11,7 @@ from urllib.request import urlretrieve
 import torch
 
 from dfine.nn.configs import make_model_config, make_pose_config
+from dfine.pose_contract import get_pose_checkpoint
 from dfine.tasks import normalize_task
 from tools.convert_checkpoint import convert as convert_checkpoint
 
@@ -57,6 +58,17 @@ def _asset(
                 else f"{model}_{weights}_wrapped.pth"
             )
         ),
+    )
+
+
+def _pose_asset(model: str, weights: str) -> ModelAsset:
+    checkpoint = get_pose_checkpoint(model, "coco")
+    return ModelAsset(
+        model=model,
+        task="pose",
+        weights=weights,
+        url=checkpoint.url,
+        filename=f"{model}_coco_wrapped.pth",
     )
 
 
@@ -122,20 +134,8 @@ SEMANTIC_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
 
 POSE_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
     model: {
-        "coco": _asset(
-            model,
-            "coco",
-            f"{model}_coco.pth",
-            task="pose",
-            release_root=_RELEASE_ROOT,
-        ),
-        "default": _asset(
-            model,
-            "default",
-            f"{model}_coco.pth",
-            task="pose",
-            release_root=_RELEASE_ROOT,
-        ),
+        "coco": _pose_asset(model, "coco"),
+        "default": _pose_asset(model, "default"),
     }
     for model in ("detrpose_n", "detrpose_s", "detrpose_m", "detrpose_l", "detrpose_x")
 }
@@ -226,6 +226,8 @@ def get_model_asset(
     weights_key = _normalize_weights(weights)
     if resolved_task in {"segment", "semantic"} and weights_key == DEFAULT_WEIGHTS:
         weights_key = "coco"
+    if resolved_task == "pose" and weights_key == DEFAULT_WEIGHTS:
+        weights_key = "default"
     variants = registry[model_key]
     if weights_key not in variants:
         choices = ", ".join(sorted(variants))

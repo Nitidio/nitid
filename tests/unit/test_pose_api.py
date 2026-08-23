@@ -14,6 +14,7 @@ import torch
 from dfine.model import DFINE
 from dfine.nn.build import build_model
 from dfine.nn.configs import make_pose_config
+from dfine.nn.postprocessor import DETRPosePostProcessor
 from dfine.results import Boxes, Keypoints, Results
 from dfine.utils.checkpoint import save_checkpoint
 
@@ -76,6 +77,21 @@ def test_results_with_keypoints_serialization_and_plotting() -> None:
     plotted = results.plot()
     assert plotted.shape == (480, 640, 3)
     assert isinstance(plotted, np.ndarray)
+
+
+def test_pose_postprocessor_exposes_single_public_person_class() -> None:
+    postprocessor = DETRPosePostProcessor(num_top_queries=2, num_body_points=17)
+    outputs = {
+        "pred_logits": torch.tensor([[[0.0, 10.0], [8.0, -8.0]]]),
+        "pred_keypoints": torch.full((1, 2, 34), 0.5),
+    }
+
+    results = postprocessor(outputs, torch.tensor([[640.0, 480.0]]))
+
+    assert isinstance(results, list)
+    assert results[0]["labels"].tolist() == [0, 0]
+    assert results[0]["keypoints"].shape == (2, 17, 2)
+    assert torch.allclose(results[0]["keypoints"][0, 0], torch.tensor([320.0, 240.0]))
 
 
 def test_dfine_pose_model_inference() -> None:

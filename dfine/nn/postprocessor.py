@@ -166,7 +166,13 @@ class SemanticPostProcessor(nn.Module):
 
 
 class DETRPosePostProcessor(nn.Module):
-    """Convert raw DETRPose query outputs into per-image pixel-space keypoints and boxes."""
+    """Convert raw DETRPose query outputs into per-image pixel-space keypoints.
+
+    DETRPose trains with two internal logits, but nitid exposes pose as a
+    single public ``person`` class. Boxes returned here are derived from visible
+    keypoint coordinates for compatibility with the common ``Results`` object;
+    they are not native box predictions from the model.
+    """
 
     def __init__(
         self,
@@ -192,7 +198,6 @@ class DETRPosePostProcessor(nn.Module):
         logits = outputs["pred_logits"]
         raw_keypoints = outputs["pred_keypoints"]
         bs = logits.shape[0]
-        num_classes = logits.shape[-1]
 
         if raw_keypoints.ndim == 3:
             keypoints_norm = raw_keypoints.reshape(bs, -1, self.num_body_points, 2)
@@ -200,13 +205,11 @@ class DETRPosePostProcessor(nn.Module):
             keypoints_norm = raw_keypoints
 
         probabilities = torch.sigmoid(logits)
-        num_select = min(self.num_top_queries, probabilities.flatten(1).shape[1])
-        scores, indices = torch.topk(probabilities.flatten(1), num_select, dim=-1)
+        query_scores = probabilities.max(dim=-1).values
+        num_select = min(self.num_top_queries, query_scores.shape[1])
+        scores, query_indices = torch.topk(query_scores, num_select, dim=-1)
+        labels = torch.zeros_like(query_indices)
 
-        labels = indices % num_classes
-        query_indices = indices // num_classes
-
-        # Gather top-k keypoints
         gathered_kpts = keypoints_norm.gather(
             dim=1,
             index=query_indices.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, self.num_body_points, 2),

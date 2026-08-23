@@ -137,6 +137,58 @@ def test_segment_loader_keeps_masks_aligned_through_augmentations(tiny_dataset):
     assert target["masks"].sum() > 0
 
 
+def test_pose_loader_returns_keypoints_and_area_in_loss_format(tmp_path):
+    root = tmp_path / "pose"
+    img_dir = root / "images" / "train"
+    ann_dir = root / "annotations"
+    img_dir.mkdir(parents=True)
+    ann_dir.mkdir()
+    Image.fromarray(np.zeros((80, 100, 3), dtype=np.uint8)).save(img_dir / "pose.jpg")
+
+    keypoints = []
+    for index in range(17):
+        keypoints.extend([10.0 + index, 20.0 + index, 2])
+    annotations = {
+        "images": [{"id": 1, "file_name": "pose.jpg", "width": 100, "height": 80}],
+        "annotations": [
+            {
+                "id": 1,
+                "image_id": 1,
+                "category_id": 1,
+                "bbox": [10.0, 20.0, 50.0, 40.0],
+                "area": 2000.0,
+                "iscrowd": 0,
+                "num_keypoints": 17,
+                "keypoints": keypoints,
+            }
+        ],
+        "categories": [{"id": 1, "name": "person", "keypoints": [str(i) for i in range(17)]}],
+    }
+    (ann_dir / "person_keypoints_train.json").write_text(json.dumps(annotations))
+    data_yaml = root / "data.yml"
+    data_yaml.write_text(
+        yaml.safe_dump(
+            {
+                "path": str(root),
+                "train": "images/train",
+                "train_ann": "annotations/person_keypoints_train.json",
+                "names": {0: "person"},
+            }
+        )
+    )
+
+    loader = build_detection_dataloader(data_yaml, "train", 64, 1, task="pose")
+    _, targets = next(iter(loader))
+    target = targets[0]
+
+    assert target["labels"].tolist() == [0]
+    assert target["keypoints"].shape == (1, 51)
+    assert target["area"].shape == (1,)
+    assert torch.all((target["keypoints"][0, :34] >= 0) & (target["keypoints"][0, :34] <= 1))
+    assert torch.equal(target["keypoints"][0, 34:], torch.ones(17))
+    assert torch.allclose(target["area"], torch.tensor([0.25]))
+
+
 def test_semantic_loader_preserves_dense_class_ids(tiny_semantic_dataset):
     loader = build_semantic_dataloader(
         tiny_semantic_dataset,
