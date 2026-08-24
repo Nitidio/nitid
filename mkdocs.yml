@@ -30,4 +30,3 @@ nav:
       - Onboarding: onboarding.md
       - Project Recap: project_recap.md
       - macOS Docker Setup: macos_docker_setup.md
-      - Public Release Checklist: public_release_checklist.md
