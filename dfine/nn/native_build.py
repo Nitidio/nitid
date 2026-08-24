@@ -236,6 +236,12 @@ def build_native_criterion_from_config(config: Mapping[str, Any]) -> nn.Module:
     if task == "semantic":
         criterion_config = _component_config(config, "SemSegCriterion")
         return SemSegCriterion(num_classes=num_classes, **criterion_config)
+    if task == "pose":
+        decoder_config = _component_config(config, "DETRPoseDecoder")
+        decoder_num_classes = decoder_config.get("num_classes")
+        if not isinstance(decoder_num_classes, int) or decoder_num_classes < 1:
+            raise ValueError("D-FINE pose decoder num_classes must be a positive integer")
+        num_classes = decoder_num_classes
 
     criterion_config = _component_config(config, "DFINECriterion")
     matcher_value = criterion_config.pop("matcher", config.get("matcher"))

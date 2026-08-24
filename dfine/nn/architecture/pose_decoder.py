@@ -92,7 +92,8 @@ class Integral(nn.Module):
     def forward(self, x: torch.Tensor, project: torch.Tensor) -> torch.Tensor:
         shape = x.shape
         x_soft = F.softmax(x.reshape(-1, self.reg_max + 1), dim=1)
-        x_proj = F.linear(x_soft, project.to(x.device)).reshape(-1, 4)
+        weights = project.to(device=x.device, dtype=x_soft.dtype).view(1, -1)
+        x_proj = (x_soft * weights).sum(dim=1).reshape(-1, 4)
         return x_proj.reshape(list(shape[:-1]) + [-1])
 
 
@@ -308,7 +309,8 @@ class DeformableTransformerDecoderLayer(nn.Module):
     def with_pos_embed(tensor: torch.Tensor, pos: torch.Tensor | None) -> torch.Tensor:
         if pos is not None:
             n_p = pos.shape[2]
-            tensor[:, :, -n_p:] += pos
+            tensor = tensor.clone()
+            tensor[:, :, -n_p:] = tensor[:, :, -n_p:] + pos
         return tensor
 
     def forward_ffn(self, tgt: torch.Tensor) -> torch.Tensor:
@@ -697,6 +699,11 @@ class DETRPoseDecoder(nn.Module):
         else:
             anchors_buf = cast(torch.Tensor, self.anchors)
             valid_mask_buf = cast(torch.Tensor, self.valid_mask)
+            if (
+                anchors_buf.shape[1] != memory.shape[1]
+                or valid_mask_buf.shape[1] != memory.shape[1]
+            ):
+                anchors_buf, valid_mask_buf = self._generate_anchors(spatial_shapes, memory.device)
             output_proposals = anchors_buf.repeat(memory.size(0), 1, 1)
             output_memory = memory.masked_fill(valid_mask_buf, float(0))
 

@@ -958,6 +958,13 @@ class DFINEValidator:
                 _as_float(metrics["mask_mAP50"]),
                 _as_float(metrics["mask_mAP50-95"]),
             )
+        if "pose_mAP50" in metrics:
+            LOGGER.info(
+                "%22s %10.3f %10.3f",
+                "Pose",
+                _as_float(metrics["pose_mAP50"]),
+                _as_float(metrics["pose_mAP50-95"]),
+            )
         if not per_class_rows:
             return
 

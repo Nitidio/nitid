@@ -26,13 +26,13 @@ def build_postprocessor(cfg: Mapping[str, Any]) -> nn.Module:
     if task == "semantic":
         return SemanticPostProcessor().eval()
 
-    num_classes = _positive_int(cfg, "num_classes")
     decoder_value = cfg.get("DFINETransformer") or cfg.get("DETRPoseDecoder")
     if not isinstance(decoder_value, Mapping):
         raise ValueError("D-FINE config must contain DFINETransformer or DETRPoseDecoder mapping")
     num_queries = _positive_int(decoder_value, "num_queries")
 
     if task == "pose":
+        num_classes = _positive_int(decoder_value, "num_classes")
         num_body_points = int(decoder_value.get("num_body_points", 17))
         return DETRPosePostProcessor(
             num_classes=num_classes,
@@ -40,6 +40,7 @@ def build_postprocessor(cfg: Mapping[str, Any]) -> nn.Module:
             num_body_points=num_body_points,
         ).eval()
 
+    num_classes = _positive_int(cfg, "num_classes")
     postprocessor_value = cfg.get("DFINEPostProcessor", {})
     if not isinstance(postprocessor_value, Mapping):
         raise ValueError("D-FINE config DFINEPostProcessor must be a mapping")
