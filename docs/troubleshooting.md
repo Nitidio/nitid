@@ -79,7 +79,9 @@ See the [macOS Docker setup](macos_docker_setup.md) for details.
 
 ### What it means
 
-When you use an official model name like `dfine_s`, nitid downloads the official raw D-FINE checkpoint and converts it into a nitid-wrapped `.pth` file.
+When you use a supported model name like `dfine_s` or `detrpose_n`, nitid
+resolves the selected task, downloads the matching checkpoint when needed, and
+prepares it for the integrated runtime.
 
 The workflow is:
 
@@ -87,10 +89,9 @@ The workflow is:
 DFINE("dfine_s")
 -> nitid checks the model registry
 -> resolves weights for the selected task
--> downloads the official D-FINE checkpoint
+-> downloads the official checkpoint when needed
 -> builds the matching integrated model configuration
--> reads COCO names from configs/datasets/coco.yml
--> writes dfine_s_obj2coco_wrapped.pth
+-> writes a local prepared checkpoint
 ```
 
 If the internet connection or class names file is missing, the download or wrapping step can fail.
@@ -115,19 +116,25 @@ To replace an existing wrapped checkpoint:
 uv run dfine download model=dfine_s output=models force=true
 ```
 
-Detection supports pretrained S/M/L/X models and the `obj2coco` (default) and `coco` variants. Instance segmentation supports pretrained N/S/M/L/X models with `task=segment` and COCO weights.
+Detection supports pretrained S/M/L/X models and the `obj2coco` (default) and
+`coco` variants. Instance segmentation supports pretrained N/S/M/L/X models
+with `task=segment` and COCO weights. Semantic models initialize from the
+matching segmentation checkpoint. Pose uses `detrpose_n` through `detrpose_x`
+with `task=pose`.
 
-## Raw D-FINE checkpoint gives `KeyError: 'config'`
+## Checkpoint gives `KeyError: 'config'`
 
 ### What it means
 
-nitid expects a wrapped checkpoint. A wrapped checkpoint stores the weights, D-FINE config, class names, epoch, and metrics in one file.
+nitid expects a runtime checkpoint with embedded config and class names. Training
+runs save this format automatically.
 
-A raw D-FINE checkpoint usually only contains weights. That is why nitid cannot find `config`.
+Some external research checkpoints contain only weights. That is why nitid
+cannot find `config`.
 
 ### Fix
 
-If you are using an official model, use the model name and let nitid download and wrap it:
+If you are using an official model, use the model name and let nitid prepare it:
 
 ```python
 from dfine import DFINE
@@ -141,7 +148,8 @@ Or use the CLI:
 uv run dfine download model=dfine_s
 ```
 
-If you have your own raw checkpoint, convert it:
+If you are maintaining support for a new upstream checkpoint, use the conversion
+tool explicitly:
 
 ```bash
 uv run python tools/convert_checkpoint.py \
@@ -152,7 +160,8 @@ uv run python tools/convert_checkpoint.py \
     --output dfine_l_wrapped.pth
 ```
 
-See the [Quick Start](quickstart.md) for a longer explanation.
+Most users should not need this path; use supported model names or checkpoints
+created by `model.train(...)`.
 
 ## CUDA is not available
 

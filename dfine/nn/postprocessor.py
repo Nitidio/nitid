@@ -163,3 +163,85 @@ class SemanticPostProcessor(nn.Module):
         self.eval()
         self.deploy_mode = True
         return self
+
+
+class DETRPosePostProcessor(nn.Module):
+    """Convert raw DETRPose query outputs into per-image pixel-space keypoints.
+
+    DETRPose trains with two internal logits, but nitid exposes pose as a
+    single public ``person`` class. Boxes returned here are derived from visible
+    keypoint coordinates for compatibility with the common ``Results`` object;
+    they are not native box predictions from the model.
+    """
+
+    def __init__(
+        self,
+        *,
+        num_classes: int = 2,
+        num_top_queries: int = 60,
+        num_body_points: int = 17,
+    ) -> None:
+        super().__init__()
+        self.num_classes = num_classes
+        self.num_top_queries = num_top_queries
+        self.num_body_points = num_body_points
+        self.deploy_mode = False
+
+    def forward(
+        self,
+        outputs: dict[str, torch.Tensor],
+        original_sizes: torch.Tensor,
+    ) -> (
+        list[dict[str, torch.Tensor]]
+        | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+    ):
+        logits = outputs["pred_logits"]
+        raw_keypoints = outputs["pred_keypoints"]
+        bs = logits.shape[0]
+
+        if raw_keypoints.ndim == 3:
+            keypoints_norm = raw_keypoints.reshape(bs, -1, self.num_body_points, 2)
+        else:
+            keypoints_norm = raw_keypoints
+
+        probabilities = torch.sigmoid(logits)
+        query_scores = probabilities.max(dim=-1).values
+        num_select = min(self.num_top_queries, query_scores.shape[1])
+        scores, query_indices = torch.topk(query_scores, num_select, dim=-1)
+        labels = torch.zeros_like(query_indices)
+
+        gathered_kpts = keypoints_norm.gather(
+            dim=1,
+            index=query_indices.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, self.num_body_points, 2),
+        )
+
+        # Scale normalized [0, 1] keypoints to original image [W, H]
+        target_sizes = original_sizes.unsqueeze(1).unsqueeze(1)  # [B, 1, 1, 2] (w, h)
+        keypoints_pixel = gathered_kpts * target_sizes
+
+        # Derive bounding boxes from keypoints
+        x_min = keypoints_pixel[..., 0].min(dim=-1)[0]
+        y_min = keypoints_pixel[..., 1].min(dim=-1)[0]
+        x_max = keypoints_pixel[..., 0].max(dim=-1)[0]
+        y_max = keypoints_pixel[..., 1].max(dim=-1)[0]
+        boxes = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
+
+        if self.deploy_mode:
+            return labels, boxes, scores, keypoints_pixel
+
+        results = []
+        for batch_index in range(bs):
+            results.append(
+                {
+                    "labels": labels[batch_index],
+                    "boxes": boxes[batch_index],
+                    "scores": scores[batch_index],
+                    "keypoints": keypoints_pixel[batch_index],
+                }
+            )
+        return results
+
+    def deploy(self) -> DETRPosePostProcessor:
+        self.eval()
+        self.deploy_mode = True
+        return self

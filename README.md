@@ -1,6 +1,6 @@
 # nitid
 
-**Ultralytics-style D-FINE object detection and instance segmentation.**
+**Ultralytics-style D-FINE detection, segmentation, and pose estimation.**
 
 [![CI](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml/badge.svg)](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Vaelsys.github.io/nitid/)
@@ -18,14 +18,14 @@ Example prediction using D-FINE-S on a street image.
 ## Why nitid?
 
 - Familiar Ultralytics-style API
-- Automatic download and wrapping of official D-FINE checkpoints
+- Automatic download of supported official checkpoints
 - Python API, CLI and web interface
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated video output
 - Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented recording
 - ONVIF camera discovery, profile selection, and secure RTSP resolution
-- Detection and instance segmentation with COCO-pretrained weights
-- Fine-tuning and validation for detection, instance masks, and dense semantic masks
-- ONNX, TorchScript and TensorRT export
+- Detection, instance segmentation, semantic segmentation, and DETRPose
+- Fine-tuning and validation for boxes, masks, dense semantic maps, and COCO keypoints
+- ONNX, OpenVINO, TorchScript, and TensorRT export where supported by task
 
 ## Installation
 
@@ -84,6 +84,15 @@ print(result.masks.data.shape)  # [N, H, W]
 result.save("segmented.jpg")
 ```
 
+Pose estimation uses DETRPose model names and returns COCO-style person keypoints:
+
+```python
+pose = DFINE("detrpose_n", task="pose")
+result = pose.predict("person.jpg", conf=0.25)[0]
+print(result.keypoints.xy.shape)  # [N, 17, 2]
+result.save("pose.jpg")
+```
+
 ### Training
 
 ```python
@@ -114,6 +123,14 @@ result.save_semantic("class_ids.png")
 
 See the [fine-tuning guide](docs/fine_tuning.md#dense-semantic-masks) for the
 dataset layout and `ignore_index` contract.
+
+Pose training uses COCO-keypoints JSON annotations:
+
+```python
+pose = DFINE("detrpose_n", task="pose")
+metrics = pose.train(data="pose_dataset.yml", epochs=50)
+print(metrics["pose_mAP50"], metrics["pose_mAP50-95"])
+```
 
 ### Tracking
 
@@ -181,6 +198,7 @@ metrics = model.val(
 
 ```python
 model.export(format="onnx")
+model.export(format="openvino")
 model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
@@ -224,7 +242,7 @@ For the full guide:
 
 ## Official Models
 
-> 💡 Detection defaults to Objects365→COCO weights for S/M/L/X. `task="segment"` selects COCO-pretrained instance-segmentation weights for N/S/M/L/X. `task="semantic"` initializes its shared feature extractor and mask fuser from the matching instance checkpoint while its dense classifier starts fresh.
+> 💡 Detection defaults to Objects365→COCO weights for S/M/L/X. `task="segment"` selects COCO-pretrained instance-segmentation weights for N/S/M/L/X. `task="semantic"` initializes shared features from the matching segmentation checkpoint while its dense classifier starts fresh. `task="pose"` uses DETRPose N/S/M/L/X checkpoints for single-class person keypoints.
 
 Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 
@@ -247,7 +265,7 @@ nitid includes a browser-based UI for running detection without writing code. Up
 # Install web extras
 uv sync --extra web
 
-# Download the recommended wrapped checkpoint into models/
+# Download the recommended checkpoint into models/
 uv run dfine download model=dfine_l output=models
 
 # Start the API (single worker — inference is not thread-safe)
@@ -262,29 +280,6 @@ Register an account on first visit. The API is self-documented at `http://localh
 
 See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables, REST API reference, data model, and implementation notes.
 
-
-## Converting a raw D-FINE checkpoint
-
-Only needed if you have your own D-FINE checkpoint. If you're using an official model, `DFINE("dfine_s")` downloads and wraps it automatically — skip this section.
-
-```bash
-uv run python tools/convert_checkpoint.py \
-    --weights dfine_l.pth \
-    --model   dfine_l \
-    --task    detect \
-    --names   configs/datasets/coco.yml \
-    --output  dfine_l_wrapped.pth
-```
-
-| Argument | Description |
-|---|---|
-| `--weights` | Raw D-FINE checkpoint |
-| `--model` | Architecture: `dfine_n`, `dfine_s`, `dfine_m`, `dfine_l`, or `dfine_x` |
-| `--task` | `detect`, `segment`, or `semantic` |
-| `--names` | YAML with a `names:` mapping — use `configs/datasets/coco.yml` for COCO models |
-| `--output` | Path for the wrapped output |
-
-EMA weights are used automatically when present, matching D-FINE's own inference scripts.
 
 ## Documentation
 
@@ -327,7 +322,7 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that build
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, disk size |
 | TensorRT export | Supported | Supported (see Installation) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, … | `"detect"`, `"segment"`, or `"semantic"` |
+| `model.task` | `"detect"`, `"segment"`, … | `"detect"`, `"segment"`, `"semantic"`, or `"pose"` |
 
 ## Contributing
 
@@ -335,7 +330,7 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup inst
 
 ## Acknowledgements
 
-nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE) and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
+nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), and [DETRPose](https://github.com/SebastianJanampa/DETRPose). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
 
 ```bibtex
 @article{peng2024dfine,

@@ -9,9 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Apache 2.0 LICENSE
-- Auto-download and runtime wrapping of D-FINE checkpoints
+- Auto-download and runtime preparation of supported official checkpoints
 - D-FINE instance segmentation through `DFINE(..., task="segment")`, including pretrained weights,
   prediction masks, fine-tuning, COCO mask validation, and export
+- Semantic segmentation through `DFINE(..., task="semantic")`, including dense-mask training,
+  mIoU validation, inference overlays/class-ID maps, and ONNX/OpenVINO export
+- DETRPose through `DFINE(..., task="pose")`, including official checkpoint loading, COCO-keypoint
+  training/validation, visualization, and ONNX/OpenVINO export
 - COCO polygon/RLE and YOLO polygon dataset support for instance-segmentation training
 - GitHub Actions CI (lint + unit tests)
 - Pre-commit hooks (ruff, mypy)
@@ -21,5 +25,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Jupyter/Colab tutorial notebook
 
 ### Changed
-- Integrated the D-FINE architecture, losses, and postprocessing into the installable package so
-  detection and instance segmentation use the same self-contained model core
+- Integrated the model architectures, losses, and postprocessing into the installable package so
+  supported tasks use the same self-contained runtime core

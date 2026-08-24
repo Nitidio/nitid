@@ -60,13 +60,14 @@ model = DFINE("dfine_s", device="cuda:0")
 model_coco = DFINE("dfine_s", weights="coco", device="cuda:0")
 segmenter = DFINE("dfine_s", task="segment", device="cuda:0")
 semantic = DFINE("semantic_best.pth", task="semantic", device="cuda:0")
+pose = DFINE("detrpose_n", task="pose", device="cuda:0")
 ```
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str \| Path` | `"dfine_l"` | Wrapped checkpoint path or architecture name (`dfine_n` through `dfine_x`; detection pretrained defaults are available for S/M/L/X and segmentation for N/S/M/L/X) |
-| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, or `"semantic"` (`"sem_seg"` alias). Must match an explicit checkpoint's embedded task. |
-| `weights` | `str` | `"default"` | Detection: `"default"`/`"obj2coco"` or `"coco"`. Segmentation: `"default"`/`"coco"`. Do not combine a non-default value with a checkpoint path. |
+| `model`   | `str \| Path` | `"dfine_l"` | Checkpoint path or architecture name (`dfine_n` through `dfine_x`; `detrpose_n` through `detrpose_x` for pose) |
+| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, `"semantic"` (`"sem_seg"` alias), or `"pose"`. Must match an explicit checkpoint's embedded task. |
+| `weights` | `str` | `"default"` | Detection: `"default"`/`"obj2coco"` or `"coco"`. Segmentation and pose: `"default"`/`"coco"`. Do not combine a non-default value with a checkpoint path. |
 | `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
 | `verbose` | `bool`| `True`  | Print load summary |
 
@@ -144,6 +145,7 @@ playback stays close to the original duration.
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
 | `masks`    | `Masks \| None` | Full-resolution instance masks for `task="segment"` |
+| `keypoints` | `Keypoints \| None` | Per-instance keypoints for `task="pose"` |
 | `semantic` | `SemanticMask \| None` | Original-resolution class map for `task="semantic"`; alias of `semantic_mask` |
 | `semantic_save_path` | `str \| None` | Lossless class-ID PNG written under `masks/` when semantic prediction uses `save=True` |
 | `save_path` | `str \| None`  | Saved annotated image or video path when `save=True` |
@@ -167,6 +169,8 @@ r.crop(save_dir="crops")  # save crops into class-name folders
 r.masks.data       # uint8 [N, H, W], aligned with r.boxes
 r.masks.xy         # absolute polygon coordinates
 r.masks.xyn        # normalized polygon coordinates
+r.keypoints.xy     # float [N, K, 2], pose only
+r.keypoints.conf   # optional float [N, K], pose only
 len(r)              # number of detections
 ```
 
@@ -551,6 +555,8 @@ metrics = model.train(
 #   "mAP50": ...,
 #   "mask_mAP50-95": ...,  # segment task
 #   "mask_mAP50": ...,     # segment task
+#   "pose_mAP50-95": ...,  # pose task
+#   "pose_mAP50": ...,     # pose task
 #   "mAP50-95": ...,
 #   "history": [{...}, ...],
 # }
@@ -645,10 +651,9 @@ model.export(format="torchscript") # → dfine_640.torchscript
 model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt installation)
 ```
 
-Semantic ONNX exports have one output named `semantic_logits` with shape
-`[B, C, H, W]`. Apply softmax and argmax in the consuming runtime. Semantic
-export currently supports `format="onnx"`; the other formats remain available
-for detection and instance segmentation.
+Semantic ONNX/OpenVINO exports have one output named `semantic_logits` with
+shape `[B, C, H, W]`. Apply softmax and argmax in the consuming runtime. Pose
+ONNX/OpenVINO exports return `(labels, boxes, scores, keypoints)`.
 
 | Argument    | Default  | Description |
 |-------------|----------|-------------|
@@ -669,7 +674,7 @@ for detection and instance segmentation.
 ```python
 model.names   # {0: "person", 1: "bicycle", ...}  — class index → name
 model.device  # "cpu" or "cuda:0"                 — device the model lives on
-model.task    # "detect", "segment", or "semantic"
+model.task    # "detect", "segment", "semantic", or "pose"
 ```
 
 `names` is the class mapping embedded in the checkpoint.
@@ -702,7 +707,7 @@ the rare case profiling raises an exception.
 | Situation | Exception |
 |-----------|-----------|
 | Checkpoint file not found | `FileNotFoundError` |
-| File exists but has no embedded config (raw D-FINE .pth) | `KeyError` — run `tools/convert_checkpoint.py` first |
+| File exists but has no embedded config | `KeyError`; use a supported model name, a nitid training checkpoint, or the maintainer conversion tool |
 | `export(format=…)` with unsupported format | `ValueError` |
 | `train(optimizer=…)` with unknown name | `ValueError` |
 

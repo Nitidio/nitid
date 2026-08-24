@@ -84,51 +84,48 @@ class HungarianMatcher(nn.Module):
         "use_focal_loss",
     ]
 
-    def __init__(self, weight_dict, use_focal_loss=False, alpha=0.25, gamma=2.0):
-        """Creates the matcher
-
-        Params:
-            cost_class: This is the relative weight of the classification error in the matching cost
-            cost_bbox: This is the relative weight of the L1 error of the bounding box coordinates in the matching cost
-            cost_giou: This is the relative weight of the giou loss of the bounding box in the matching cost
-            cost_mask: (optional) weight for mask dice cost in matching
-        """
+    def __init__(
+        self,
+        weight_dict: Dict[str, float],
+        use_focal_loss: bool = False,
+        alpha: float = 0.25,
+        gamma: float = 2.0,
+        num_body_points: int = 17,
+    ) -> None:
+        """Creates the matcher"""
         super().__init__()
-        self.cost_class = weight_dict["cost_class"]
-        self.cost_bbox = weight_dict["cost_bbox"]
-        self.cost_giou = weight_dict["cost_giou"]
-        self.cost_mask = weight_dict.get("cost_mask", 0)  # Optional mask cost
-        self.cost_mask_dice = weight_dict.get("cost_mask_dice", 0)  # Optional dice cost
+        self.cost_class = weight_dict.get("cost_class", 1.0)
+        self.cost_bbox = weight_dict.get("cost_bbox", 0.0)
+        self.cost_giou = weight_dict.get("cost_giou", 0.0)
+        self.cost_mask = weight_dict.get("cost_mask", 0.0)
+        self.cost_mask_dice = weight_dict.get("cost_mask_dice", 0.0)
+        self.cost_keypoints = weight_dict.get("cost_keypoints", 0.0)
+        self.cost_oks = weight_dict.get("cost_oks", 0.0)
 
         self.use_focal_loss = use_focal_loss
         self.alpha = alpha
         self.gamma = gamma
+        self.num_body_points = num_body_points
 
-        assert self.cost_class != 0 or self.cost_bbox != 0 or self.cost_giou != 0, (
-            "all costs cant be 0"
-        )
+        from .keypoint_loss import COCO_SIGMAS, CROWDPOSE_SIGMAS
+
+        if num_body_points == 17:
+            self.sigmas = COCO_SIGMAS
+        elif num_body_points == 14:
+            self.sigmas = CROWDPOSE_SIGMAS
+        else:
+            self.sigmas = np.ones(num_body_points, dtype=np.float32) * 0.05
+
+        assert (
+            self.cost_class != 0
+            or self.cost_bbox != 0
+            or self.cost_giou != 0
+            or self.cost_keypoints != 0
+            or self.cost_oks != 0
+        ), "all costs cant be 0"
 
     @torch.no_grad()
     def forward(self, outputs: Dict[str, torch.Tensor], targets, return_topk=False):
-        """Performs the matching
-
-        Params:
-            outputs: This is a dict that contains at least these entries:
-                 "pred_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                 "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
-
-            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
-                 "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
-                           objects in the target) containing the class labels
-                 "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
-
-        Returns:
-            A list of size batch_size, containing tuples of (index_i, index_j) where:
-                - index_i is the indices of the selected predictions (in order)
-                - index_j is the indices of the corresponding selected targets (in order)
-            For each batch element, it holds:
-                len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
-        """
         bs, num_queries = outputs["pred_logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
@@ -139,15 +136,9 @@ class HungarianMatcher(nn.Module):
                 outputs["pred_logits"].flatten(0, 1).softmax(-1)
             )  # [batch_size * num_queries, num_classes]
 
-        out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
-
-        # Also concat the target labels and boxes
+        # Concat target labels
         tgt_ids = torch.cat([v["labels"] for v in targets])
-        tgt_bbox = torch.cat([v["boxes"] for v in targets])
 
-        # Compute the classification cost. Contrary to the loss, we don't use the NLL,
-        # but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
         if self.use_focal_loss:
             out_prob = out_prob[:, tgt_ids]
             neg_cost_class = (
@@ -160,14 +151,60 @@ class HungarianMatcher(nn.Module):
         else:
             cost_class = -out_prob[:, tgt_ids]
 
-        # Compute the L1 cost between boxes
-        cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+        cost_bbox: torch.Tensor | float = 0.0
+        cost_giou: torch.Tensor | float = 0.0
+        if "pred_boxes" in outputs and len(tgt_ids) > 0:
+            out_bbox = outputs["pred_boxes"].flatten(0, 1)
+            tgt_bbox = torch.cat([v["boxes"] for v in targets])
+            if len(tgt_bbox) > 0:
+                cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+                cost_giou = -generalized_box_iou(
+                    box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox)
+                )
 
-        # Compute the giou cost betwen boxes
-        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+        cost_keypoints: torch.Tensor | float = 0.0
+        cost_oks: torch.Tensor | float = 0.0
+        if "pred_keypoints" in outputs and len(tgt_ids) > 0:
+            out_kpt = outputs["pred_keypoints"].flatten(0, 1)
+            tgt_kpt_list = [v["keypoints"] for v in targets if "keypoints" in v]
+            tgt_area_list = [
+                v.get("area", torch.ones(len(v["keypoints"]), device=out_kpt.device))
+                for v in targets
+                if "keypoints" in v
+            ]
+            if tgt_kpt_list:
+                tgt_kpt = torch.cat(tgt_kpt_list)
+                tgt_area = torch.cat(tgt_area_list)
+
+                z_pred = out_kpt[:, : self.num_body_points * 2]
+                z_gt = tgt_kpt[:, : self.num_body_points * 2]
+                v_gt = tgt_kpt[:, self.num_body_points * 2 :]
+
+                sigmas_t = z_pred.new_tensor(self.sigmas)
+                variances = (sigmas_t * 2) ** 2
+                kpt_preds = z_pred.reshape(-1, self.num_body_points, 2)
+                kpt_gts = z_gt.reshape(-1, self.num_body_points, 2)
+
+                sq_dist = (kpt_preds[:, None, :, 0] - kpt_gts[None, :, :, 0]) ** 2 + (
+                    kpt_preds[:, None, :, 1] - kpt_gts[None, :, :, 1]
+                ) ** 2
+                sq_dist0 = sq_dist / (tgt_area[:, None] * variances[None, :] * 2).clamp(min=1e-6)
+                sq_dist1 = torch.exp(-sq_dist0) * v_gt[None]
+                oks = sq_dist1.sum(dim=-1) / (v_gt.sum(dim=-1) + 1e-6)
+                cost_oks = 1.0 - oks.clamp(min=1e-6)
+
+                cost_kpt_abs = torch.abs(z_pred[:, None, :] - z_gt[None])
+                cost_kpt_abs = cost_kpt_abs * v_gt.repeat_interleave(2, dim=1)[None]
+                cost_keypoints = cost_kpt_abs.sum(-1)
 
         # Final cost matrix: [bs*num_queries, total_targets]
-        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
+        C = (
+            self.cost_class * cost_class
+            + self.cost_bbox * cost_bbox
+            + self.cost_giou * cost_giou
+            + self.cost_keypoints * cost_keypoints
+            + self.cost_oks * cost_oks
+        )
 
         # Reshape to [bs, num_queries, total_targets] before adding mask cost
         C = C.view(bs, num_queries, -1)
@@ -239,7 +276,7 @@ class HungarianMatcher(nn.Module):
 
         C = C.cpu()
 
-        sizes = [len(v["boxes"]) for v in targets]
+        sizes = [len(v.get("boxes", v.get("keypoints", v.get("labels", [])))) for v in targets]
         C = torch.nan_to_num(C, nan=1.0)
         indices_pre = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
         indices = [

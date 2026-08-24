@@ -49,6 +49,15 @@ def test_semantic_asset_uses_instance_checkpoint_as_initialization():
     assert asset.filename == "dfine_semantic_n_coco_init_wrapped.pth"
 
 
+def test_pose_asset_uses_official_detrpose_checkpoint():
+    asset = downloads.get_model_asset("detrpose_n", task="pose", weights="coco")
+    assert asset.task == "pose"
+    assert asset.weights == "coco"
+    assert asset.url.endswith("/model_weights/detrpose_hgnetv2_n.pth")
+    assert "SebastianJanampa/DETRPose" in asset.url
+    assert asset.filename == "detrpose_n_coco_wrapped.pth"
+
+
 @pytest.mark.parametrize(
     ("name", "expected"),
     [

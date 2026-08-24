@@ -209,6 +209,7 @@ class DFINEExporter:
 
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
         is_segment = task == "segment"
+        is_pose = task == "pose"
         dynamic_axes = (
             {
                 "images": {0: "batch"},
@@ -220,6 +221,7 @@ class DFINEExporter:
                         "boxes": {0: "batch"},
                         "scores": {0: "batch"},
                         **({"masks": {0: "batch"}} if is_segment else {}),
+                        **({"keypoints": {0: "batch"}} if is_pose else {}),
                     }
                 ),
             }
@@ -240,7 +242,11 @@ class DFINEExporter:
                 else (
                     ["labels", "boxes", "scores", "masks"]
                     if is_segment
-                    else ["labels", "boxes", "scores"]
+                    else (
+                        ["labels", "boxes", "scores", "keypoints"]
+                        if is_pose
+                        else ["labels", "boxes", "scores"]
+                    )
                 )
             ),
             dynamic_axes=dynamic_axes,

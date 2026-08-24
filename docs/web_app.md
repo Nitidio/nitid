@@ -55,14 +55,13 @@ On first start the API creates `web/storage/nitid.db` with all tables and the `w
 
 ### Place model checkpoints
 
-Put wrapped `.pth` files in `models/` at the project root. The API lists everything it finds there:
+Put nitid `.pth` checkpoints in `models/` at the project root. The API lists
+everything it finds there:
 
 ```bash
 mkdir -p models
-cp dfine_l_wrapped.pth models/
+uv run dfine download model=dfine_l output=models
 ```
-
-See [Converting a raw D-FINE checkpoint](https://github.com/Vaelsys/nitid/blob/main/README.md#converting-a-raw-d-fine-checkpoint) if you have a raw checkpoint.
 
 ### Environment variables
 

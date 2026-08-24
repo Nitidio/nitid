@@ -6,8 +6,16 @@ artifact filename. Set `exist_ok=True` only when replacing/reusing an explicit
 destination is intentional. Export files are atomically published, and each run
 includes `args.yaml` and `environment.yaml`.
 
-Export a nitid-wrapped checkpoint to ONNX, OpenVINO IR, TorchScript, or TensorRT
-for deployment.
+Export a nitid checkpoint or supported model name to ONNX, OpenVINO IR,
+TorchScript, or TensorRT for deployment. Format availability depends on the
+task.
+
+| Task | ONNX | OpenVINO | TorchScript | TensorRT |
+|---|---:|---:|---:|---:|
+| Detection | yes | yes | yes | yes |
+| Instance segmentation | yes | yes | yes | yes |
+| Semantic segmentation | yes | yes | no | no |
+| Pose | yes | yes | no | no |
 
 ## ONNX
 
@@ -23,11 +31,12 @@ model.export(format="onnx")
 uv run dfine export model=dfine_l format=onnx
 ```
 
-The exported model takes a single input `images [B, 3, H, W]` and returns
+The exported model takes a single input `images [B, 3, H, W]`. Detection returns
 `(labels, boxes, scores)` with the postprocessor in deploy mode baked in.
-Segmentation exports return `(labels, boxes, scores, masks)`; `masks` contains
-the selected low-resolution mask probabilities and is aligned with the first
-three outputs.
+Instance segmentation returns `(labels, boxes, scores, masks)`; `masks`
+contains selected mask probabilities aligned with the first three outputs. Pose
+returns `(labels, boxes, scores, keypoints)`, where boxes are derived from the
+selected keypoints for compatibility with common downstream consumers.
 
 Semantic segmentation exports return one output, `semantic_logits [B, C, H,
 W]`, at model-input resolution. Apply softmax for per-class probabilities and
@@ -39,9 +48,8 @@ semantic = DFINE("semantic_best.pth", task="semantic")
 semantic.export(format="onnx", output="semantic.onnx")
 ```
 
-ONNX is currently the supported semantic export target. Detection and instance
-segmentation retain the OpenVINO, TorchScript, and TensorRT targets documented
-below.
+Semantic ONNX and OpenVINO exports are intended for dense-map deployment. Apply
+the same softmax/argmax post-processing after either backend.
 
 ### Options
 
@@ -104,6 +112,8 @@ outputs = compiled_model([images])
 OpenVINO export uses the ONNX-related `imgsz`, `batch`, `dynamic`, `simplify`,
 and `opset` arguments. Set `half=True` to compress IR weights to FP16; the
 default preserves FP32 weights to make numerical comparison with ONNX easier.
+Detection, instance segmentation, semantic segmentation, and pose all route
+through this ONNX-to-IR path.
 
 ## TorchScript
 
@@ -156,12 +166,12 @@ model.export(format="tensorrt", dynamic=True, batch=4)
 # min=1, opt=4, max=16
 ```
 
-## Constraint: `imgsz` must match `eval_spatial_size`
+## Export spatial size
 
-D-FINE pre-computes positional anchors for a fixed spatial size
-(`eval_spatial_size`, default `[640, 640]`). Exporting at a different
-`imgsz` will raise a shape mismatch error at trace time. Check the value stored in
-the checkpoint config before exporting:
+D-FINE checkpoints are calibrated for a fixed evaluation spatial size
+(`eval_spatial_size`, usually `[640, 640]`). Use the checkpoint's configured
+size unless you have intentionally trained/evaluated another size. Check the
+value stored in the checkpoint config before exporting:
 
 ```python
 print(model._cfg["eval_spatial_size"])  # [640, 640]

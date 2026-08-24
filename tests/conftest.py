@@ -80,6 +80,23 @@ def tiny_semantic_checkpoint(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
+def tiny_pose_checkpoint(tmp_path_factory):
+    """Small wrapped DETRPose checkpoint with random weights."""
+    from dfine.nn.build import build_model
+    from dfine.nn.configs import make_pose_config
+    from dfine.utils.checkpoint import save_checkpoint
+
+    config = make_pose_config("detrpose_n")
+    config["DETRPoseDecoder"]["num_queries"] = 10
+    config["HybridEncoder"]["depth_mult"] = 0.1
+    model = build_model(config).eval()
+    checkpoint_dir = tmp_path_factory.mktemp("pose_checkpoints")
+    checkpoint_path = checkpoint_dir / "tiny_detrpose.pth"
+    save_checkpoint(checkpoint_path, model, config, {0: "person"})
+    return str(checkpoint_path)
+
+
+@pytest.fixture(scope="session")
 def tiny_dataset(tmp_path_factory):
     """
     Returns the path to a data YAML backed by a minimal synthetic COCO dataset:

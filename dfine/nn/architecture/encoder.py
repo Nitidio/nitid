@@ -111,7 +111,7 @@ class VGGBlock(nn.Module):
         self.ch_out = ch_out
         self.conv1 = ConvNormLayer(ch_in, ch_out, 3, 1, padding=1, act=None)
         self.conv2 = ConvNormLayer(ch_in, ch_out, 1, 1, padding=0, act=None)
-        self.act = nn.Identity() if act is None else act
+        self.act = nn.Identity() if act is None else get_activation(act)
 
     def forward(self, x):
         if hasattr(self, "conv"):
@@ -326,6 +326,9 @@ class HybridEncoder(nn.Module):
         use_encoder_idx=[2],
         num_encoder_layers=1,
         pe_temperature=10000,
+        pe_mode="sincos",
+        pe_temperature_h=20.0,
+        pe_temperature_w=20.0,
         expansion=1.0,
         depth_mult=1.0,
         act="silu",
@@ -338,6 +341,9 @@ class HybridEncoder(nn.Module):
         self.use_encoder_idx = use_encoder_idx
         self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
+        self.pe_mode = pe_mode
+        self.pe_temperature_h = pe_temperature_h
+        self.pe_temperature_w = pe_temperature_w
         self.eval_spatial_size = eval_spatial_size
         self.out_channels = [hidden_dim for _ in range(len(in_channels))]
         self.out_strides = feat_strides
@@ -376,7 +382,7 @@ class HybridEncoder(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(in_channels) - 1, 0, -1):
-            self.lateral_convs.append(ConvNormLayer_fuse(hidden_dim, hidden_dim, 1, 1))
+            self.lateral_convs.append(ConvNormLayer(hidden_dim, hidden_dim, 1, 1, act=act))
             self.fpn_blocks.append(
                 RepNCSPELAN4(
                     hidden_dim * 2,
@@ -385,7 +391,6 @@ class HybridEncoder(nn.Module):
                     round(expansion * hidden_dim // 2),
                     round(3 * depth_mult),
                 )
-                # CSPLayer(hidden_dim * 2, hidden_dim, round(3 * depth_mult), act=act, expansion=expansion, bottletype=VGGBlock)
             )
 
         # bottom-up pan
@@ -414,14 +419,17 @@ class HybridEncoder(nn.Module):
         if self.eval_spatial_size:
             for idx in self.use_encoder_idx:
                 stride = self.feat_strides[idx]
-                pos_embed = self.build_2d_sincos_position_embedding(
-                    self.eval_spatial_size[1] // stride,
-                    self.eval_spatial_size[0] // stride,
-                    self.hidden_dim,
-                    self.pe_temperature,
-                )
+                h_val = self.eval_spatial_size[0] // stride
+                w_val = self.eval_spatial_size[1] // stride
+                if self.pe_mode == "sinehw":
+                    pos_embed = self.create_sinehw_position_embedding(
+                        w_val, h_val, self.hidden_dim // 2
+                    )
+                else:
+                    pos_embed = self.build_2d_sincos_position_embedding(
+                        w_val, h_val, self.hidden_dim, self.pe_temperature
+                    )
                 setattr(self, f"pos_embed{idx}", pos_embed)
-                # self.register_buffer(f'pos_embed{idx}', pos_embed)
 
     @staticmethod
     def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.0):
@@ -441,6 +449,35 @@ class HybridEncoder(nn.Module):
 
         return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
 
+    def create_sinehw_position_embedding(self, w, h, hidden_dim, scale=None, device="cpu"):
+        grid_w = torch.arange(1, int(w) + 1, dtype=torch.float32, device=device)
+        grid_h = torch.arange(1, int(h) + 1, dtype=torch.float32, device=device)
+
+        grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")
+
+        if scale is None:
+            scale = 2 * torch.pi
+
+        eps = 1e-6
+        grid_w = grid_w / (int(w) + eps) * scale
+        grid_h = grid_h / (int(h) + eps) * scale
+
+        dim_tx = torch.arange(hidden_dim, dtype=torch.float32, device=device)
+        dim_tx = self.pe_temperature_w ** (2 * (dim_tx // 2) / hidden_dim)
+        pos_x = grid_w[..., None] / dim_tx
+
+        dim_ty = torch.arange(hidden_dim, dtype=torch.float32, device=device)
+        dim_ty = self.pe_temperature_h ** (2 * (dim_ty // 2) / hidden_dim)
+        pos_y = grid_h[..., None] / dim_ty
+
+        pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
+        pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
+
+        pos = torch.cat((pos_y, pos_x), dim=2).permute(2, 0, 1)
+        pos = pos[None].flatten(2).permute(0, 2, 1).contiguous()
+
+        return pos
+
     def forward(self, feats):
         assert len(feats) == len(self.in_channels)
         proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
@@ -451,12 +488,27 @@ class HybridEncoder(nn.Module):
                 h, w = proj_feats[enc_ind].shape[2:]
                 # flatten [B, C, H, W] to [B, HxW, C]
                 src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
-                if self.training or self.eval_spatial_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(
-                        w, h, self.hidden_dim, self.pe_temperature
-                    ).to(src_flatten.device)
-                else:
-                    pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
+                cached_pos_embed = None
+                if not self.training and self.eval_spatial_size is not None:
+                    cached_pos_embed = getattr(self, f"pos_embed{enc_ind}", None)
+                    if cached_pos_embed is not None:
+                        cached_pos_embed = cached_pos_embed.to(src_flatten.device)
+                    if (
+                        cached_pos_embed is not None
+                        and cached_pos_embed.shape[1] == src_flatten.shape[1]
+                    ):
+                        pos_embed = cached_pos_embed
+                    else:
+                        cached_pos_embed = None
+                if self.training or self.eval_spatial_size is None or cached_pos_embed is None:
+                    if self.pe_mode == "sinehw":
+                        pos_embed = self.create_sinehw_position_embedding(
+                            w, h, self.hidden_dim // 2, device=src_flatten.device
+                        )
+                    else:
+                        pos_embed = self.build_2d_sincos_position_embedding(
+                            w, h, self.hidden_dim, self.pe_temperature
+                        ).to(src_flatten.device)
 
                 memory: torch.Tensor = self.encoder[i](src_flatten, pos_embed=pos_embed)
                 proj_feats[enc_ind] = (

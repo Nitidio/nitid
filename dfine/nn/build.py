@@ -9,7 +9,7 @@ from typing import Any
 import torch.nn as nn
 
 from dfine.nn.native_build import build_native_model_from_config
-from dfine.nn.postprocessor import DFINEPostProcessor, SemanticPostProcessor
+from dfine.nn.postprocessor import DETRPosePostProcessor, DFINEPostProcessor, SemanticPostProcessor
 from dfine.tasks import normalize_task
 
 
@@ -22,8 +22,25 @@ def _positive_int(config: Mapping[str, Any], key: str) -> int:
 
 def build_postprocessor(cfg: Mapping[str, Any]) -> nn.Module:
     """Build the native detection postprocessor from checkpoint configuration."""
-    if normalize_task(str(cfg.get("task", "detect"))) == "semantic":
+    task = normalize_task(str(cfg.get("task", "detect")))
+    if task == "semantic":
         return SemanticPostProcessor().eval()
+
+    decoder_value = cfg.get("DFINETransformer") or cfg.get("DETRPoseDecoder")
+    if not isinstance(decoder_value, Mapping):
+        raise ValueError("D-FINE config must contain DFINETransformer or DETRPoseDecoder mapping")
+    num_queries = _positive_int(decoder_value, "num_queries")
+
+    if task == "pose":
+        num_classes = _positive_int(decoder_value, "num_classes")
+        num_body_points = int(decoder_value.get("num_body_points", 17))
+        return DETRPosePostProcessor(
+            num_classes=num_classes,
+            num_top_queries=min(60, num_queries),
+            num_body_points=num_body_points,
+        ).eval()
+
+    num_classes = _positive_int(cfg, "num_classes")
     postprocessor_value = cfg.get("DFINEPostProcessor", {})
     if not isinstance(postprocessor_value, Mapping):
         raise ValueError("D-FINE config DFINEPostProcessor must be a mapping")
@@ -33,11 +50,6 @@ def build_postprocessor(cfg: Mapping[str, Any]) -> nn.Module:
     postprocessor_config.setdefault("num_top_queries", 300)
     num_top_queries = _positive_int(postprocessor_config, "num_top_queries")
 
-    decoder_value = cfg.get("DFINETransformer")
-    if not isinstance(decoder_value, Mapping):
-        raise ValueError("D-FINE config DFINETransformer must be a mapping")
-    num_queries = _positive_int(decoder_value, "num_queries")
-    num_classes = _positive_int(cfg, "num_classes")
     if bool(cfg.get("use_focal_loss", True)):
         postprocessor_config["num_top_queries"] = min(num_top_queries, num_queries * num_classes)
 

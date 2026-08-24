@@ -37,6 +37,7 @@ class Results:
         names: dict[int, str],
         boxes=None,
         masks=None,
+        keypoints: Keypoints | None = None,
         semantic_mask: SemanticMask | None = None,
         save_path: str | None = None,
         speed: dict[str, float] | None = None,
@@ -47,13 +48,23 @@ class Results:
         self.names = names
         self.boxes = boxes
         self.masks = masks
+        self.keypoints = keypoints
         self.semantic_mask = semantic_mask
-        if semantic_mask is not None and (boxes is not None or masks is not None):
-            raise ValueError("semantic_mask cannot be combined with boxes or instance masks")
+        if semantic_mask is not None and (
+            boxes is not None or masks is not None or keypoints is not None
+        ):
+            raise ValueError(
+                "semantic_mask cannot be combined with boxes, instance masks, or keypoints"
+            )
         if semantic_mask is not None and semantic_mask.orig_shape != orig_img.shape[:2]:
             raise ValueError(
                 "semantic_mask shape must match the original image, "
                 f"got {semantic_mask.orig_shape} and {orig_img.shape[:2]}"
+            )
+        if keypoints is not None and keypoints.orig_shape != orig_img.shape[:2]:
+            raise ValueError(
+                "keypoints orig_shape must match the original image, "
+                f"got {keypoints.orig_shape} and {orig_img.shape[:2]}"
             )
         self.save_path = save_path
         self.speed = speed or {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
@@ -231,6 +242,15 @@ class Results:
                     "x": polygon[:, 0].tolist(),
                     "y": polygon[:, 1].tolist(),
                 }
+            if self.keypoints is not None and i < len(self.keypoints):
+                kpts_xy = self.keypoints.xy[i].tolist()
+                kpts_dict: dict[str, object] = {
+                    "x": [k[0] for k in kpts_xy],
+                    "y": [k[1] for k in kpts_xy],
+                }
+                if self.keypoints.conf is not None:
+                    kpts_dict["visible"] = self.keypoints.conf[i].tolist()
+                item["keypoints"] = kpts_dict
             out.append(item)
         return out
 
@@ -260,7 +280,7 @@ class Results:
         for i in range(len(self)):
             xyxy = self.boxes.xyxy[i].tolist()
             cls_id = int(self.boxes.cls[i])
-            row = {
+            row: dict[str, object] = {
                 "x1": xyxy[0],
                 "y1": xyxy[1],
                 "x2": xyxy[2],
@@ -280,7 +300,10 @@ class Results:
     def __repr__(self) -> str:
         if self.semantic_mask is not None:
             return f"Results(path={self.path!r}, semantic_shape={self.semantic_mask.orig_shape})"
-        return f"Results(path={self.path!r}, detections={len(self)}, masks={len(self.masks or [])})"
+        return (
+            f"Results(path={self.path!r}, detections={len(self)}, "
+            f"masks={len(self.masks or [])}, keypoints={len(self.keypoints or [])})"
+        )
 
 
 class SemanticMask:
@@ -409,6 +432,59 @@ class Masks:
 
     def __repr__(self) -> str:
         return f"Masks(n={len(self)}, shape={self.orig_shape}, device={self._data.device})"
+
+
+class Keypoints:
+    """
+    Per-instance keypoints container for one image.
+
+    Args:
+        data: Tensor [N, K, 2] (XY pixel coords) or [N, K, 3] (XY coords + confidence).
+        orig_shape: (H, W) of the original image (for normalised coords).
+    """
+
+    def __init__(self, data: torch.Tensor, orig_shape: tuple[int, int]) -> None:
+        if not isinstance(data, torch.Tensor):
+            raise TypeError(f"keypoints data must be a torch.Tensor, got {type(data).__name__}")
+        if data.ndim != 3 or data.shape[2] not in (2, 3):
+            raise ValueError(
+                f"keypoints data must have shape [N, K, 2] or [N, K, 3], got {tuple(data.shape)}"
+            )
+        self._data = data
+        self.orig_shape = orig_shape
+
+    @property
+    def data(self) -> torch.Tensor:
+        """Raw keypoint tensor with shape ``[N, K, 2]`` or ``[N, K, 3]``."""
+        return self._data
+
+    @property
+    def xy(self) -> torch.Tensor:
+        """Absolute pixel coords ``[N, K, 2]``."""
+        return self._data[..., :2]
+
+    @property
+    def xyn(self) -> torch.Tensor:
+        """Normalised 0-1 coords ``[N, K, 2]``."""
+        height, width = self.orig_shape
+        norm = self._data[..., :2].clone()
+        norm[..., 0] /= width
+        norm[..., 1] /= height
+        return norm
+
+    @property
+    def conf(self) -> torch.Tensor | None:
+        """Keypoint confidence scores ``[N, K]`` if present."""
+        return self._data[..., 2] if self._data.shape[2] == 3 else None
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __bool__(self) -> bool:
+        return len(self) > 0
+
+    def __repr__(self) -> str:
+        return f"Keypoints(n={len(self)}, shape={self.orig_shape}, device={self._data.device})"
 
 
 class Boxes:

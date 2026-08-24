@@ -10,7 +10,8 @@ from urllib.request import urlretrieve
 
 import torch
 
-from dfine.nn.configs import make_model_config
+from dfine.nn.configs import make_model_config, make_pose_config
+from dfine.pose_contract import get_pose_checkpoint
 from dfine.tasks import normalize_task
 from tools.convert_checkpoint import convert as convert_checkpoint
 
@@ -57,6 +58,17 @@ def _asset(
                 else f"{model}_{weights}_wrapped.pth"
             )
         ),
+    )
+
+
+def _pose_asset(model: str, weights: str) -> ModelAsset:
+    checkpoint = get_pose_checkpoint(model, "coco")
+    return ModelAsset(
+        model=model,
+        task="pose",
+        weights=weights,
+        url=checkpoint.url,
+        filename=f"{model}_coco_wrapped.pth",
     )
 
 
@@ -120,6 +132,14 @@ SEMANTIC_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
     for model in ("dfine_n", "dfine_s", "dfine_m", "dfine_l", "dfine_x")
 }
 
+POSE_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
+    model: {
+        "coco": _pose_asset(model, "coco"),
+        "default": _pose_asset(model, "default"),
+    }
+    for model in ("detrpose_n", "detrpose_s", "detrpose_m", "detrpose_l", "detrpose_x")
+}
+
 DEFAULT_WEIGHTS = "obj2coco"
 _MODEL_ALIASES = {
     "n": "dfine_n",
@@ -132,6 +152,16 @@ _MODEL_ALIASES = {
     "d_fine_m": "dfine_m",
     "d_fine_l": "dfine_l",
     "d_fine_x": "dfine_x",
+    "detrpose_n": "detrpose_n",
+    "detrpose_s": "detrpose_s",
+    "detrpose_m": "detrpose_m",
+    "detrpose_l": "detrpose_l",
+    "detrpose_x": "detrpose_x",
+    "pose_n": "detrpose_n",
+    "pose_s": "detrpose_s",
+    "pose_m": "detrpose_m",
+    "pose_l": "detrpose_l",
+    "pose_x": "detrpose_x",
 }
 _WEIGHT_ALIASES = {
     "default": DEFAULT_WEIGHTS,
@@ -159,6 +189,8 @@ def _registry(task: str) -> dict[str, dict[str, ModelAsset]]:
         return MODEL_REGISTRY
     if resolved_task == "segment":
         return SEGMENT_MODEL_REGISTRY
+    if resolved_task == "pose":
+        return POSE_MODEL_REGISTRY
     return SEMANTIC_MODEL_REGISTRY
 
 
@@ -194,6 +226,8 @@ def get_model_asset(
     weights_key = _normalize_weights(weights)
     if resolved_task in {"segment", "semantic"} and weights_key == DEFAULT_WEIGHTS:
         weights_key = "coco"
+    if resolved_task == "pose" and weights_key == DEFAULT_WEIGHTS:
+        weights_key = "default"
     variants = registry[model_key]
     if weights_key not in variants:
         choices = ", ".join(sorted(variants))
@@ -244,6 +278,13 @@ def download_model(
         print(f"Converting to nitid checkpoint: {out_path}")
         if asset.task == "semantic":
             _wrap_semantic_initialization(raw_path, asset, names, out_path)
+        elif asset.task == "pose":
+            convert_checkpoint(
+                weights=str(raw_path),
+                config=make_pose_config(asset.model),
+                names_file=str(names),
+                output=str(out_path),
+            )
         else:
             convert_checkpoint(
                 weights=str(raw_path),

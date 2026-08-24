@@ -26,7 +26,7 @@ class DFINE:
 
     Args:
         model:   D-FINE architecture name or path to a wrapped .pth checkpoint.
-        task:    ``"detect"``, ``"segment"``, or ``"semantic"`` (alias ``"sem_seg"``).
+        task:    ``"detect"``, ``"segment"``, ``"semantic"`` (alias ``"sem_seg"``), or ``"pose"``.
         weights: Official weight variant: ``default``, ``obj2coco``, or ``coco``.
         device:  "cuda", "cpu", "cuda:N", or None for auto-select.
         verbose: Print model info on load.
@@ -494,8 +494,10 @@ class DFINE:
         exist_ok: bool = False,
     ) -> Path:
         """Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path."""
-        if self.task == "semantic" and format.lower() != "onnx":
-            raise ValueError("Semantic segmentation currently supports format='onnx' only")
+        if self.task == "semantic" and format.lower() not in {"onnx", "openvino"}:
+            raise ValueError(
+                "Semantic segmentation currently supports format='onnx' or 'openvino' only"
+            )
         from dfine.exporter import DFINEExporter
 
         exporter = DFINEExporter(
