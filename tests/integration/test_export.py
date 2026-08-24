@@ -3,6 +3,39 @@
 import pytest
 
 
+def _onnxruntime_outputs(path, images):
+    import onnxruntime as ort
+
+    session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    return session.run(None, {"images": images.numpy()})
+
+
+def _torch_deploy_outputs(model, images):
+    import torch
+
+    from dfine.exporter import DeployModel
+    from dfine.nn.build import build_postprocessor
+
+    postprocessor = build_postprocessor(model._cfg)
+    postprocessor.deploy()
+    wrapped = DeployModel(
+        model._model,
+        postprocessor,
+        semantic=str(model._cfg.get("task", "detect")).lower() == "semantic",
+    ).eval()
+    with torch.inference_mode():
+        outputs = wrapped(images)
+    return outputs if isinstance(outputs, tuple) else (outputs,)
+
+
+def _sort_instances(*arrays):
+    import numpy as np
+
+    boxes = arrays[1]
+    order = np.lexsort((boxes[0, :, 3], boxes[0, :, 2], boxes[0, :, 1], boxes[0, :, 0]))
+    return tuple(array[:, order] for array in arrays)
+
+
 def test_export_onnx(tiny_checkpoint, tmp_path):
     import onnx
 
@@ -61,6 +94,40 @@ def test_export_segment_onnx_includes_masks(tiny_segment_checkpoint, tmp_path):
     assert [value.name for value in graph.output] == ["labels", "boxes", "scores", "masks"]
 
 
+def test_export_segment_onnxruntime_matches_torch_deploy(tiny_segment_checkpoint, tmp_path):
+    import numpy as np
+    import torch
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    output = tmp_path / "segment_parity.onnx"
+    inputs = torch.rand(1, 3, 640, 640, generator=torch.Generator().manual_seed(7))
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        output=output,
+        verbose=False,
+    )
+
+    expected = _torch_deploy_outputs(model, inputs)
+    actual = _onnxruntime_outputs(out, inputs)
+
+    assert len(actual) == 4
+    actual = _sort_instances(*actual)
+    expected_np = tuple(value.detach().cpu().numpy() for value in expected)
+    expected_np = _sort_instances(*expected_np)
+    assert sorted(actual[0].reshape(-1).tolist()) == sorted(expected_np[0].reshape(-1).tolist())
+    for actual_value, expected_value in zip(actual[1:], expected_np[1:]):
+        np.testing.assert_allclose(
+            actual_value,
+            expected_value,
+            rtol=1e-3,
+            atol=1e-4,
+        )
+
+
 def test_export_semantic_onnx_returns_dense_logits(tiny_semantic_checkpoint, tmp_path):
     import numpy as np
     import onnx
@@ -88,6 +155,52 @@ def test_export_semantic_onnx_returns_dense_logits(tiny_semantic_checkpoint, tmp
     actual = session.run(None, {"images": inputs.numpy()})[0]
     assert actual.shape == (1, 3, 64, 64)
     np.testing.assert_allclose(actual, expected, rtol=1e-3, atol=1e-4)
+
+
+def test_export_pose_onnx_returns_keypoints(tiny_pose_checkpoint, tmp_path):
+    import onnx
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_pose_checkpoint, task="pose", device="cpu", verbose=False)
+    output = tmp_path / "pose.onnx"
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        output=output,
+        verbose=False,
+    )
+
+    graph = onnx.load(str(out)).graph
+    assert [value.name for value in graph.output] == ["labels", "boxes", "scores", "keypoints"]
+
+
+def test_export_pose_onnxruntime_outputs_keypoint_contract(tiny_pose_checkpoint, tmp_path):
+    import torch
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_pose_checkpoint, task="pose", device="cpu", verbose=False)
+    output = tmp_path / "pose_parity.onnx"
+    inputs = torch.rand(1, 3, 640, 640, generator=torch.Generator().manual_seed(11))
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        output=output,
+        verbose=False,
+    )
+
+    actual = _onnxruntime_outputs(out, inputs)
+
+    assert len(actual) == 4
+    assert actual[0].shape == (1, 10)
+    assert actual[1].shape == (1, 10, 4)
+    assert actual[2].shape == (1, 10)
+    assert actual[3].shape == (1, 10, 17, 2)
+    assert set(actual[0].reshape(-1).tolist()) <= {0}
+    assert all(torch.isfinite(torch.from_numpy(value)).all() for value in actual)
 
 
 def test_semantic_export_rejects_unvalidated_formats(tiny_semantic_checkpoint):
