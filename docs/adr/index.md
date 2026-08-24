@@ -14,6 +14,7 @@ cheapest way to be able to answer.
 
 | ADR | Title | Status | Date |
 |---|---|---|---|
+| [0002](0002-native-detrpose-integration.md) | Native DETRPose integration | Accepted | 2026-08-19 |
 
 ## Convention
 

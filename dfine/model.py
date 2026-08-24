@@ -494,8 +494,10 @@ class DFINE:
         exist_ok: bool = False,
     ) -> Path:
         """Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path."""
-        if self.task == "semantic" and format.lower() != "onnx":
-            raise ValueError("Semantic segmentation currently supports format='onnx' only")
+        if self.task == "semantic" and format.lower() not in {"onnx", "openvino"}:
+            raise ValueError(
+                "Semantic segmentation currently supports format='onnx' or 'openvino' only"
+            )
         from dfine.exporter import DFINEExporter
 
         exporter = DFINEExporter(

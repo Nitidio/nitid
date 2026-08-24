@@ -192,6 +192,7 @@ def test_export_pose_onnxruntime_outputs_keypoint_contract(tiny_pose_checkpoint,
         verbose=False,
     )
 
+    expected = _torch_deploy_outputs(model, inputs)
     actual = _onnxruntime_outputs(out, inputs)
 
     assert len(actual) == 4
@@ -201,13 +202,23 @@ def test_export_pose_onnxruntime_outputs_keypoint_contract(tiny_pose_checkpoint,
     assert actual[3].shape == (1, 10, 17, 2)
     assert set(actual[0].reshape(-1).tolist()) <= {0}
     assert all(torch.isfinite(torch.from_numpy(value)).all() for value in actual)
+    assert actual[0].tolist() == expected[0].detach().cpu().numpy().tolist()
+
+    import numpy as np
+
+    np.testing.assert_allclose(
+        actual[2],
+        expected[2].detach().cpu().numpy(),
+        rtol=1e-2,
+        atol=1e-2,
+    )
 
 
 def test_semantic_export_rejects_unvalidated_formats(tiny_semantic_checkpoint):
     from dfine import DFINE
 
     model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
-    with pytest.raises(ValueError, match="format='onnx' only"):
+    with pytest.raises(ValueError, match="format='onnx' or 'openvino' only"):
         model.export(format="torchscript", imgsz=64, verbose=False)
 
 
@@ -253,6 +264,56 @@ def test_export_segment_openvino_includes_masks(tiny_segment_checkpoint, tmp_pat
     compiled = ov.Core().compile_model(out, "CPU")
     results = compiled([np.zeros((1, 3, 640, 640), dtype=np.float32)])
     assert len(results) == 4
+
+
+def test_export_semantic_openvino_returns_dense_logits(tiny_semantic_checkpoint, tmp_path):
+    ov = pytest.importorskip("openvino", reason="openvino not installed")
+    import numpy as np
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    out = model.export(
+        format="openvino",
+        imgsz=64,
+        simplify=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    compiled = ov.Core().compile_model(out, "CPU")
+    results = compiled([np.zeros((1, 3, 64, 64), dtype=np.float32)])
+    values = list(results.values())
+    assert len(values) == 1
+    assert values[0].shape == (1, 3, 64, 64)
+    assert np.isfinite(values[0]).all()
+
+
+def test_export_pose_openvino_returns_keypoints(tiny_pose_checkpoint, tmp_path):
+    ov = pytest.importorskip("openvino", reason="openvino not installed")
+    import numpy as np
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_pose_checkpoint, task="pose", device="cpu", verbose=False)
+    out = model.export(
+        format="openvino",
+        imgsz=640,
+        simplify=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    compiled = ov.Core().compile_model(out, "CPU")
+    results = compiled([np.zeros((1, 3, 640, 640), dtype=np.float32)])
+    values = list(results.values())
+    assert len(values) == 4
+    assert values[0].shape == (1, 10)
+    assert values[1].shape == (1, 10, 4)
+    assert values[2].shape == (1, 10)
+    assert values[3].shape == (1, 10, 17, 2)
+    assert set(values[0].reshape(-1).tolist()) <= {0}
+    assert all(np.isfinite(value).all() for value in values)
 
 
 def test_export_openvino_missing_package(tiny_checkpoint, monkeypatch):
