@@ -1,5 +1,5 @@
 site_name: nitid
-site_description: Ultralytics-style wrapper for D-FINE
+site_description: Ultralytics-style D-FINE-family vision library
 repo_url: https://github.com/Vaelsys/nitid
 
 theme:
@@ -28,5 +28,6 @@ nav:
           - "ADR-0002: Native DETRPose integration": adr/0002-native-detrpose-integration.md
   - Contributing:
       - Onboarding: onboarding.md
+      - Project Recap: project_recap.md
       - macOS Docker Setup: macos_docker_setup.md
       - Public Release Checklist: public_release_checklist.md

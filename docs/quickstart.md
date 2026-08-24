@@ -2,7 +2,7 @@
 
 This page is the canonical quickstart for nitid. It covers the shortest path to
 first inference, the common train/val/export workflow, and the main differences
-for users coming from raw D-FINE or Ultralytics YOLO.
+for users coming from Ultralytics YOLO.
 
 ## Installation
 
@@ -51,6 +51,16 @@ result.save("segmented.jpg")
 
 Segmentation defaults to the official COCO-pretrained mask weights. Detection
 defaults to Objects365→COCO for S/M/L/X and supports `weights="coco"` as well.
+
+For pose estimation, use a DETRPose model name and `task="pose"`:
+
+```python
+pose = DFINE("detrpose_n", task="pose")
+result = pose.predict("person.jpg", conf=0.25)[0]
+
+keypoints = result.keypoints.xy  # [N, 17, 2] in pixel coordinates
+result.save("pose.jpg")
+```
 
 For dense semantic segmentation, load a trained semantic checkpoint and read
 the original-resolution class map from `result.semantic.mask`:
@@ -164,41 +174,19 @@ for result in model.track(source, stream=True, conf=0.5):
 See [ONVIF cameras](onvif.md) for CLI credential handling, network discovery,
 profile selection, and clock troubleshooting.
 
-## Converting a raw checkpoint
+## Working with checkpoints
 
-If you already have a raw D-FINE checkpoint, nitid wraps it in a self-contained
-`.pth` that embeds the model config and class names, so you only ever deal with
-one file.
-
-### Convert a checkpoint
-
-```bash
-uv run python tools/convert_checkpoint.py \
-    --weights dfine_l.pth \
-    --model   dfine_l \
-    --task    detect \
-    --names   configs/datasets/coco.yml \
-    --output  dfine_l_wrapped.pth
-```
-
-- `--model` selects the integrated N/S/M/L/X architecture.
-- `--task` selects detection or instance segmentation.
-- `--names` must point to a YAML file with a `names:` mapping.
-- EMA weights are used automatically when present, matching D-FINE's own inference scripts.
-
-Load the wrapped checkpoint directly afterward:
+Official model names such as `dfine_s`, `dfine_s` with `task="segment"`, and
+`detrpose_n` download the matching supported checkpoint automatically. Training
+runs save self-contained `.pth` files with the architecture config and class
+names embedded, so a saved checkpoint can be moved and loaded directly:
 
 ```python
-from dfine import DFINE
-
-model = DFINE("dfine_l_wrapped.pth", task="detect")
-results = model.predict("image.jpg", conf=0.5)
-results[0].save("out.jpg")
+model = DFINE("runs/train/exp/best.pth")
 ```
 
-The interface is intentionally close to D-FINE's own inference scripts, but with
-pre/post-processing handled for you. `results[0].boxes.xyxy` is in absolute pixel
-coordinates; no manual rescaling needed.
+Low-level raw checkpoint conversion still exists for maintainers and unusual
+research workflows, but it is not part of the normal quickstart path.
 
 You can also export detections directly into tabular data for analysis:
 
@@ -312,11 +300,11 @@ re-raised.
 | Feature | Ultralytics YOLO | nitid DFINE |
 |---------|-----------------|-------------|
 | Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
-| Raw weights | Download directly | Downloaded and wrapped automatically |
+| Official weights | Download directly | Downloaded and prepared automatically |
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
 | TensorRT export | Supported | Supported (see [export.md](export.md)) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, ... | `"detect"` or `"segment"` |
+| `model.task` | `"detect"`, `"segment"`, ... | `"detect"`, `"segment"`, `"semantic"`, or `"pose"` |
 
 ## CLI
 
@@ -371,7 +359,7 @@ uv run dfine export model=dfine_l format=onnx
 
 - `train`: fine-tune a model on a COCO-format dataset YAML.
 - `val`: run COCO-style evaluation on the validation or test split.
-- `export`: convert a wrapped checkpoint to ONNX, OpenVINO IR, TorchScript, or TensorRT.
+- `export`: create an ONNX, OpenVINO IR, TorchScript, or TensorRT deployment artifact where supported by the selected task.
 
 By default, `train` writes wrapped epoch checkpoints to `runs/train/exp/`, while `val` prints metrics to the terminal without creating a run directory.
 

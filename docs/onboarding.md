@@ -32,12 +32,12 @@ dfine/              Public Python package — the only thing users import
   trainer.py        Fine-tuning worker
   validator.py      COCO evaluation worker
   exporter.py       ONNX / OpenVINO / TorchScript / TensorRT export worker
-  results.py        Results + Boxes + Masks return types
-  nn/               Integrated detection/segmentation architecture and losses
+  results.py        Results + Boxes + Masks + Keypoints return types
+  nn/               Integrated detection, segmentation, semantic, and pose architectures/losses
   utils/            sources.py (LoadSource), plotting, misc helpers
 tools/
   dfine_cli.py      `dfine` CLI entry point
-  convert_checkpoint.py   Wraps raw D-FINE .pth into nitid format
+  convert_checkpoint.py   Maintainer utility for raw upstream checkpoints
 configs/
   datasets/         coco.yml and example_custom.yml
 tests/
@@ -54,21 +54,34 @@ docs/               All documentation lives here
 
 ## 3. The architecture in one paragraph
 
-`DFINE` in `dfine/model.py` is the only class users touch. It loads a self-contained `.pth` checkpoint and delegates `predict`, `train`, `val`, and `export` to internal workers. Model construction, detection losses, mask losses, and postprocessing live under `dfine/nn/`. The checkpoint's embedded `task` selects either detection or instance segmentation, and an explicitly requested task must match it.
+`DFINE` in `dfine/model.py` is the only class users touch. It accepts supported
+model names or self-contained `.pth` checkpoints and delegates `predict`,
+`track`, `train`, `val`, and `export` to internal workers. Model construction,
+losses, and postprocessing live under `dfine/nn/`. The checkpoint's embedded
+`task` selects detection, instance segmentation, semantic segmentation, or pose;
+an explicitly requested task must match it.
 
 ---
 
 ## 4. Model core
 
-`dfine/nn/native_build.py` is the construction boundary for both tasks. Keep architecture settings in `dfine/nn/configs.py`, route checkpoint construction through `build_model`, and route losses through `build_criterion`. Do not add import-path mutation or runtime source discovery: the installed package must contain everything required to construct a model.
+`dfine/nn/native_build.py` is the construction boundary for supported tasks.
+Keep architecture settings in `dfine/nn/configs.py`, route checkpoint
+construction through `build_model`, and route losses through `build_criterion`.
+Do not add import-path mutation or runtime source discovery: the installed
+package must contain everything required to construct a model.
 
-Detection and segmentation share the backbone, encoder, transformer decoder, boxes, and class logits. `task="segment"` enables the mask head and mask losses. New code must preserve strict state-dict compatibility with published checkpoints.
+Detection and instance segmentation share the backbone, encoder, transformer
+decoder, boxes, and class logits. `task="segment"` enables the mask head and
+mask losses. Semantic segmentation adds a dense decoder on shared features.
+`task="pose"` routes to the DETRPose family. New code must preserve strict
+state-dict compatibility with published checkpoints.
 
 ---
 
 ## 5. Wrapped checkpoint format
 
-nitid does not support raw D-FINE `.pth` files. Every checkpoint must be "wrapped" — a dict with these keys:
+Runtime checkpoints are self-contained dicts with these keys:
 
 | Key | Content |
 |---|---|
@@ -78,7 +91,9 @@ nitid does not support raw D-FINE `.pth` files. Every checkpoint must be "wrappe
 | `epoch` | Last saved epoch |
 | `metrics` | Metrics dict from the epoch |
 
-If you ever load a raw checkpoint and get a `KeyError`, run `tools/convert_checkpoint.py` first. The converter resolves configs and picks EMA weights automatically.
+Official model names perform the download/preparation step automatically. The
+raw-checkpoint conversion tool exists for maintainers and unusual research
+workflows; it should not be part of the normal user path.
 
 **Why self-contained files?** So users never have to track a separate config file. One file = one model. This also means `build_model` forces `HGNetv2.pretrained=False` (weights come from the checkpoint, not ImageNet) and `build_postprocessor` forces `remap_mscoco_category=False` (names come from `checkpoint["names"]`, not a hardcoded COCO mapping).
 
@@ -168,7 +183,17 @@ Full REST API reference is at `http://localhost:8000/docs` once the server is ru
 
 ## 10. Getting a real checkpoint (for manual testing)
 
-The integration tests use a synthetic tiny model — they never touch a real checkpoint. For manual testing you need a wrapped `.pth`. If you have a raw D-FINE checkpoint:
+The integration tests use synthetic tiny models — they never need to download a
+real checkpoint. For manual testing, prefer official model names:
+
+```bash
+uv run dfine predict model=dfine_s source=image.jpg conf=0.5
+uv run dfine predict model=dfine_s task=segment source=image.jpg conf=0.5
+uv run dfine predict model=detrpose_n task=pose source=image.jpg conf=0.25
+```
+
+If you are maintaining support for a new upstream checkpoint, use the conversion
+tool explicitly:
 
 ```bash
 uv run python tools/convert_checkpoint.py \
@@ -179,22 +204,16 @@ uv run python tools/convert_checkpoint.py \
     --output  dfine_l_wrapped.pth
 ```
 
-You can then run a quick smoke test:
-
-```bash
-uv run dfine predict model=dfine_l source=image.jpg conf=0.5
-```
-
 ---
 
 ## 11. Where things can go wrong
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `KeyError: 'config'` loading a `.pth` | Raw D-FINE checkpoint | Run `convert_checkpoint.py` |
-| `RuntimeError: shape mismatch` during export | `imgsz` ≠ `eval_spatial_size` | Match `imgsz` to `cfg["eval_spatial_size"]` (default 640) |
+| `KeyError: 'config'` loading a `.pth` | File is not a nitid runtime checkpoint | Use a supported model name, a training checkpoint, or the maintainer conversion tool |
+| Unexpectedly low pose AP in a tiny smoke run | Too few keypoint examples or low image size | Validate on a larger split and prefer the official 640 image size |
 | `AMP has no effect` warning | Running on CPU with `amp=True` | Expected — silently degrades to FP32 |
-| Explicit task does not match checkpoint | Detection checkpoint opened as segmentation, or conversely | Select a matching model/task pair |
+| Explicit task does not match checkpoint | Checkpoint opened with the wrong task | Select a matching model/task pair |
 
 ---
 

@@ -41,7 +41,7 @@ nor a runtime dependency on the reference repository will be shipped.
 - The public model family is named `detrpose_n`, `detrpose_s`, `detrpose_m`, `detrpose_l`, and
   `detrpose_x`, and is paired exclusively with `task="pose"`.
 - The intended public construction is `DFINE("detrpose_n", task="pose")`. The operational task registry
-  must not advertise pose until native inference is complete.
+  advertises pose only for the DETRPose model family.
 - Shared HGNetV2 and encoder machinery may be reused only where state and numerical compatibility are
   demonstrated. Pose-specific positional encoding must not change detection or segmentation behavior.
 - COCO-17 and CrowdPose-14 keypoint order, horizontal-flip mapping, skeleton, and OKS constants are

@@ -11,7 +11,7 @@ uv sync --extra train
 ## Dataset format
 
 nitid accepts either **COCO JSON** annotations or **YOLO `.txt`** labels for
-detection and instance segmentation.
+detection and instance segmentation. Pose training uses COCO keypoint JSON.
 
 Semantic segmentation instead uses one dense class-ID PNG mask per image.
 
@@ -36,6 +36,11 @@ my_dataset/
 Annotation files follow the standard [COCO detection format](https://cocodataset.org/#format-data).
 For `task="segment"`, every object must also contain a COCO polygon or RLE
 `segmentation` field.
+
+For `task="pose"`, annotations must follow the COCO keypoints convention:
+`bbox`, `area`, `num_keypoints`, and flattened `keypoints` values
+`[x1, y1, v1, ..., xK, yK, vK]`. The built-in DETRPose models expose the
+single public class `person` and use the COCO-17 keypoint order.
 
 ### YOLO `.txt`
 
@@ -118,6 +123,40 @@ ignore_index: 255
 When image and mask directories do not follow the mirrored `images`/`labels`
 layout, set `train_masks:` and `val_masks:` explicitly. Semantic training does
 not accept instance-only `mosaic`, `mixup`, `classes`, or `single_cls` options.
+
+### Pose keypoints
+
+A compact COCO-keypoints dataset can use the same image split layout:
+
+```text
+my_pose_dataset/
+  images/
+    train/
+    val/
+  annotations/
+    person_keypoints_train.json
+    person_keypoints_val.json
+```
+
+```yaml
+path: /data/my_pose_dataset
+train: images/train
+val: images/val
+train_ann: annotations/person_keypoints_train.json
+val_ann: annotations/person_keypoints_val.json
+
+nc: 1
+names:
+  0: person
+cat_ids:
+  1: 0
+
+kpt_shape: [17, 3]
+flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
+```
+
+Validation reports both the compatibility box metrics and keypoint metrics:
+`pose_mAP50` and `pose_mAP50-95`.
 
 ### Data YAML
 
@@ -224,6 +263,14 @@ semantic_metrics = semantic.train(
     epochs=50,
 )
 # semantic_metrics["mIoU"], semantic_metrics["pixel_accuracy"]
+
+# Pose models use DETRPose checkpoints and COCO-keypoint annotations.
+pose = DFINE("detrpose_n", task="pose")
+pose_metrics = pose.train(
+    data="configs/datasets/my_pose_dataset.yml",
+    epochs=50,
+)
+# pose_metrics["pose_mAP50"], pose_metrics["pose_mAP50-95"]
 
 def print_epoch_end(trainer):
     row = trainer.current_row

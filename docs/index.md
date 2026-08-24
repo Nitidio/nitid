@@ -1,6 +1,6 @@
 # Welcome to nitid
 
-**nitid** is an Ultralytics-style library for D-FINE object detection and instance segmentation.
+**nitid** is an Ultralytics-style library for D-FINE detection, segmentation, and pose estimation.
 
 It provides a familiar API for inference, training, validation, export, and deployment while preserving D-FINE's performance.
 
@@ -8,9 +8,9 @@ It provides a familiar API for inference, training, validation, export, and depl
 
 - Ultralytics-style Python API
 - Simple command-line interface
-- Detection and instance segmentation inference
-- Fine-tuning and COCO box/mask validation
-- ONNX, OpenVINO IR, TorchScript, and TensorRT export
+- Detection, instance segmentation, semantic segmentation, and DETRPose inference
+- Fine-tuning and validation for boxes, masks, dense semantic maps, and COCO keypoints
+- ONNX, OpenVINO IR, TorchScript, and TensorRT export where supported by task
 - FastAPI web application
 - Self-contained wrapped checkpoints
 

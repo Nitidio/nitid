@@ -95,16 +95,18 @@ form.
 
 ## Download a model
 
-Download an official D-FINE model and convert it to nitid's wrapped checkpoint
-format:
+Download an official model checkpoint for local reuse:
 
 ```bash
 uv run dfine download model=dfine_s
 ```
 
-Supported model names are `dfine_s`, `dfine_m`, `dfine_l`, and `dfine_x`.
-The default weight variant is `obj2coco` (Objects365→COCO). Select a variant
-explicitly with `weights=obj2coco` or `weights=coco`:
+Supported detection model names are `dfine_s`, `dfine_m`, `dfine_l`, and
+`dfine_x`; `dfine_n` is available with COCO weights. Instance segmentation uses
+the same D-FINE names with `task=segment`, and pose uses `detrpose_n` through
+`detrpose_x` with `task=pose`. Detection defaults to `obj2coco`
+(Objects365→COCO) where available. Select a variant explicitly with
+`weights=obj2coco` or `weights=coco`:
 
 ```bash
 uv run dfine download model=dfine_s weights=coco
