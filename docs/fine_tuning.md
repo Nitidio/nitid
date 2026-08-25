@@ -824,9 +824,9 @@ uv run dfine val \
 
 ## Notes
 
-- The model is **not** put into deploy mode during training (BN fusion would
-  prevent further training). Deploy happens automatically on the first
-  `predict()` call after training.
+- The trainable model is **not** put into deploy mode during training or
+  inference. `predict()` and `export()` use a separate deployed copy, and that
+  cache is rebuilt automatically after training or weight loading.
 - Loss weighting (`weight_dict`) comes from the checkpoint's embedded D-FINE
   config so it stays consistent with the original pre-training setup.
 - When `ema=True` the saved checkpoint contains EMA weights. Loading it with

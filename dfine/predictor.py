@@ -22,16 +22,19 @@ class DFINEPredictor:
     """
     Runs inference for a single source (image, video, directory, stream, …).
 
-    On first use the model is put into deploy mode (BN fusion + weighting
-    function materialisation). The ``_deployed`` flag prevents a second
-    deploy() call if the same DFINE instance is used for multiple predict()
-    calls, since BN fusion is a one-way operation.
+    The public ``DFINE`` wrapper passes a deployed inference copy here. The
+    predictor must not deploy or otherwise structurally mutate the authoritative
+    training model.
     """
 
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
-        if not getattr(model, "_deployed", False):
-            model.deploy()  # fuses BN, materialises weighting fn as static tensor
-            model._deployed = True
+        deploy_fn = getattr(model, "deploy", None)
+        if callable(deploy_fn) and not bool(getattr(model, "_deployed", False)):
+            raise RuntimeError(
+                "DFINEPredictor expects a deployed inference model. "
+                "Use DFINE.predict() or DFINE.predictor so the trainable model "
+                "is preserved."
+            )
         self.model = model
         self.device = device
         self.names = names

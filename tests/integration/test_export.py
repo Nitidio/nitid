@@ -18,8 +18,9 @@ def _torch_deploy_outputs(model, images):
 
     postprocessor = build_postprocessor(model._cfg)
     postprocessor.deploy()
+    deployed_model = model._get_deployed_model()
     wrapped = DeployModel(
-        model._model,
+        deployed_model,
         postprocessor,
         semantic=str(model._cfg.get("task", "detect")).lower() == "semantic",
     ).eval()

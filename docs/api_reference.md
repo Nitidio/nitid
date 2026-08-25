@@ -111,6 +111,10 @@ results = model.predict(
 
 Returns `list[Results]` (or a generator when `stream=True`).
 
+`predict()` preserves the trainable model. Internally, nitid creates and caches
+a separate deployed inference copy, so workflows such as `predict()` → `train()`
+continue training the original full architecture.
+
 Semantic prediction uses per-pixel argmax, so `conf` and `mask_threshold` do
 not alter its output. `classes` filtering is rejected because removing dense
 classes would leave undefined pixels.
@@ -650,6 +654,10 @@ model.export(format="openvino")    # → dfine_640.xml + dfine_640.bin
 model.export(format="torchscript") # → dfine_640.torchscript
 model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt installation)
 ```
+
+`export()` uses the same deployed-copy path as inference and does not mutate the
+trainable model. Repeated exports reuse the valid deployed copy when possible;
+training or loading different weights invalidates that cache automatically.
 
 Semantic ONNX/OpenVINO exports have one output named `semantic_logits` with
 shape `[B, C, H, W]`. Apply softmax and argmax in the consuming runtime. Pose
