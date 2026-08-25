@@ -4,6 +4,7 @@ DFINE — public entry point. Mirrors the ultralytics.YOLO interface.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Union
 
@@ -54,6 +55,8 @@ class DFINE:
         self._names: dict[int, str]
         self._path: str
         self._weights: str | None = None
+        self._deployed_model: nn.Module | None = None
+        self._deployed_model_device: str | None = None
         from dfine.tasks import normalize_task
 
         self._task = normalize_task(task)
@@ -308,6 +311,7 @@ class DFINE:
         self._model = transfer.model
         self._cfg = transfer.config
         self._names = dataset_names
+        self._invalidate_deployed_cache()
         if transfer.changed and self.verbose:
             mapped = list(transfer.mapped_proposal_scorer) or "unavailable"
             print(
@@ -325,7 +329,7 @@ class DFINE:
             callbacks=self._callbacks,
         )
         try:
-            return trainer.train(
+            metrics = trainer.train(
                 data=data,
                 epochs=epochs,
                 imgsz=imgsz,
@@ -382,7 +386,10 @@ class DFINE:
                 wandb=wandb,
                 mlflow=mlflow,
             )
+            self._invalidate_deployed_cache()
+            return metrics
         except BaseException as error:
+            self._invalidate_deployed_cache()
             trainer._handle_train_error(error)
             raise
 
@@ -501,7 +508,7 @@ class DFINE:
         from dfine.exporter import DFINEExporter
 
         exporter = DFINEExporter(
-            self._model,
+            self._get_deployed_model(device or self._device_str),
             self._cfg,
             device=device or self._device_str,
         )
@@ -606,9 +613,34 @@ class DFINE:
     def predictor(self):
         from dfine.predictor import DFINEPredictor
 
-        return DFINEPredictor(self._model, self._cfg, self._device_str, self._names)
+        return DFINEPredictor(
+            self._get_deployed_model(),
+            self._cfg,
+            self._device_str,
+            self._names,
+        )
 
     # ── Internal ────────────────────────────────────────────────────────────
+
+    def _invalidate_deployed_cache(self) -> None:
+        """Discard the cached deployed inference copy after model changes."""
+        self._deployed_model = None
+        self._deployed_model_device = None
+
+    def _get_deployed_model(self, device: str | None = None) -> nn.Module:
+        """Return a cached deployed copy without mutating the trainable model."""
+        target_device = device or self._device_str
+        if self._deployed_model is None or self._deployed_model_device != target_device:
+            deployed = copy.deepcopy(self._model)
+            deployed.to(target_device)
+            deployed.eval()
+            deploy_fn = getattr(deployed, "deploy", None)
+            if callable(deploy_fn) and not bool(getattr(deployed, "_deployed", False)):
+                deploy_fn()
+                setattr(deployed, "_deployed", True)
+            self._deployed_model = deployed
+            self._deployed_model_device = target_device
+        return self._deployed_model
 
     def _load(self, path: str, *, task: str, weights: str = "default") -> None:
         """Load checkpoint, deserialise config, build model."""
@@ -674,6 +706,7 @@ class DFINE:
             )
         self._task = resolved_task
         self._model.eval()
+        self._invalidate_deployed_cache()
         if self.verbose:
             n_params = sum(p.numel() for p in self._model.parameters())
             print(f"[D-FINE] Loaded '{path}' — {n_params / 1e6:.1f}M params on {self._device_str}")

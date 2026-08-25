@@ -192,11 +192,6 @@ class DFINEExporter:
 
         from dfine.nn.build import build_postprocessor
 
-        # Deploy raw model if available
-        if hasattr(self.model, "deploy") and not getattr(self.model, "_deployed", False):
-            self.model.deploy()
-            self.model._deployed = True
-
         postprocessor: Any = build_postprocessor(self.cfg)
         if hasattr(postprocessor, "deploy"):
             postprocessor.deploy()
