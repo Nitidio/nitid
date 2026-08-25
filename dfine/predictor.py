@@ -28,6 +28,13 @@ class DFINEPredictor:
     """
 
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
+        deploy_fn = getattr(model, "deploy", None)
+        if callable(deploy_fn) and not bool(getattr(model, "_deployed", False)):
+            raise RuntimeError(
+                "DFINEPredictor expects a deployed inference model. "
+                "Use DFINE.predict() or DFINE.predictor so the trainable model "
+                "is preserved."
+            )
         self.model = model
         self.device = device
         self.names = names
