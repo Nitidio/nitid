@@ -211,7 +211,7 @@ The model is not thread-safe for concurrent inference. Always start uvicorn with
 
 ### Model cache
 
-`get_model(model_name)` in `services/inference.py` returns a cached `DFINE` instance keyed by absolute checkpoint path. The first call per model loads weights (~100–200 MB) and fuses BatchNorm layers (one-way, but idempotent). All subsequent calls for the same model return the already-deployed instance with no overhead.
+`get_model(model_name)` in `services/inference.py` returns a cached `DFINE` instance keyed by absolute checkpoint path. The first call per model loads weights (~100–200 MB). The `DFINE` instance keeps its trainable architecture intact and creates a separate cached deployed inference copy on first prediction, so later predictions avoid repeated deployment work without mutating the authoritative model.
 
 ### Background inference
 
