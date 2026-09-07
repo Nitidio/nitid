@@ -12,7 +12,7 @@ from typing import Callable, Generator
 import torch
 
 from dfine.media import Frame, FrameMetadata, FrameSink, OpenCVVideoSink
-from dfine.results import Boxes, Keypoints, Masks, Results, SemanticMask
+from dfine.results import OBB, Boxes, Keypoints, Masks, Results, SemanticMask
 from dfine.tasks import normalize_task
 from dfine.utils.ops import clip_boxes, crop_masks_to_boxes
 from dfine.utils.sources import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, LoadSource
@@ -194,6 +194,8 @@ class DFINEPredictor:
                 orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
                 inference_start = time.perf_counter()
                 with torch.no_grad():
+                    if self.task == "obb":
+                        self._prepare_obb_decoder_for_input(tensor)
                     raw = self.model(tensor)
                     detections = self._postprocessor(raw, orig_size)
                     if not isinstance(detections, list):
@@ -205,6 +207,8 @@ class DFINEPredictor:
                     if augment:
                         # Run prediction on horizontally flipped image
                         tensor_flipped = torch.flip(tensor, dims=[3])
+                        if self.task == "obb":
+                            self._prepare_obb_decoder_for_input(tensor_flipped)
                         raw_flipped = self.model(tensor_flipped)
                         detections_flipped = self._postprocessor(raw_flipped, orig_size)
                         if not isinstance(detections_flipped, list):
@@ -283,6 +287,21 @@ class DFINEPredictor:
                 frame_sink.close()
             loader.close()
 
+    def _prepare_obb_decoder_for_input(self, tensor: torch.Tensor) -> None:
+        """Refresh RiO-DETR static eval anchors when prediction uses a new image size."""
+        decoder = getattr(self.model, "decoder", None)
+        if decoder is None or not hasattr(decoder, "_generate_anchors"):
+            return
+
+        input_shape = [int(tensor.shape[-2]), int(tensor.shape[-1])]
+        if getattr(decoder, "eval_spatial_size", None) == input_shape:
+            return
+
+        decoder.eval_spatial_size = input_shape
+        anchors, valid_mask = decoder._generate_anchors(device=tensor.device)
+        decoder.anchors = anchors
+        decoder.valid_mask = valid_mask
+
     def _save_result(
         self,
         result: Results,
@@ -328,10 +347,14 @@ class DFINEPredictor:
             masks_flipped_back = torch.flip(masks_flipped_back, dims=[2])
         boxes_flipped_back = det_flipped["boxes"].clone()
         if len(boxes_flipped_back) > 0:
-            x1 = width - boxes_flipped_back[:, 2]
-            x2 = width - boxes_flipped_back[:, 0]
-            boxes_flipped_back[:, 0] = x1
-            boxes_flipped_back[:, 2] = x2
+            if boxes_flipped_back.shape[1] == 5:
+                boxes_flipped_back[:, 0] = width - boxes_flipped_back[:, 0]
+                boxes_flipped_back[:, 4] = torch.pi - boxes_flipped_back[:, 4]
+            else:
+                x1 = width - boxes_flipped_back[:, 2]
+                x2 = width - boxes_flipped_back[:, 0]
+                boxes_flipped_back[:, 0] = x1
+                boxes_flipped_back[:, 2] = x2
         merged_det["labels"] = torch.cat([merged_det["labels"], det_flipped["labels"]], dim=0)
         merged_det["boxes"] = torch.cat([merged_det["boxes"], boxes_flipped_back], dim=0)
         merged_det["scores"] = torch.cat([merged_det["scores"], det_flipped["scores"]], dim=0)
@@ -451,6 +474,27 @@ class DFINEPredictor:
             if keypoints is not None:
                 keypoints = keypoints[class_mask]
 
+        h, w = orig_img.shape[:2]
+        if self.task == "obb":
+            if masks is not None or keypoints is not None:
+                raise RuntimeError("OBB prediction cannot include masks or keypoints")
+            if len(boxes):
+                boxes = boxes.clone()
+                boxes[:, 0].clamp_(0, w)
+                boxes[:, 1].clamp_(0, h)
+                boxes[:, 2].clamp_(min=0, max=w)
+                boxes[:, 3].clamp_(min=0, max=h)
+                data = torch.cat([boxes, scores.unsqueeze(1), labels.unsqueeze(1).float()], dim=1)
+            else:
+                data = torch.zeros((0, 7), device=boxes.device)
+            return Results(
+                orig_img=orig_img,
+                path=path,
+                names=self.names,
+                obb=OBB(data, orig_shape=(h, w)),
+                frame_metadata=frame_metadata,
+            )
+
         if augment and len(boxes) > 0:
             import torchvision
 
@@ -479,7 +523,6 @@ class DFINEPredictor:
             if keypoints is not None:
                 keypoints = keypoints[keep_indices]
 
-        h, w = orig_img.shape[:2]
         boxes = clip_boxes(boxes, (h, w))
         result_masks = None
         if masks is not None:

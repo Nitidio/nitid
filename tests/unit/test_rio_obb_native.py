@@ -55,6 +55,24 @@ def test_native_rio_obb_criterion_and_postprocessor_construction() -> None:
     assert isinstance(postprocessor, PostProcessorOBB)
 
 
+def test_rio_obb_postprocessor_scales_width_height_in_predictor_order() -> None:
+    from dfine.nn.rio import PostProcessorOBB
+
+    postprocessor = PostProcessorOBB(num_classes=2, num_top_queries=1)
+    outputs = {
+        "pred_logits": torch.tensor([[[8.0, -8.0]]]),
+        "pred_boxes": torch.tensor([[[0.5, 0.25, 0.25, 0.5, 0.25]]]),
+    }
+
+    result = postprocessor(outputs, torch.tensor([[200.0, 100.0]]))[0]
+
+    torch.testing.assert_close(
+        result["boxes"][0], torch.tensor([100.0, 25.0, 50.0, 50.0, torch.pi / 4])
+    )
+    assert int(result["labels"][0]) == 0
+    assert float(result["scores"][0]) == pytest.approx(float(torch.sigmoid(torch.tensor(8.0))))
+
+
 def test_native_rio_obb_rejects_invalid_size() -> None:
     from dfine.nn.native_build import build_native_model
 

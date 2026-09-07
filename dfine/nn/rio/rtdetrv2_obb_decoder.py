@@ -615,8 +615,9 @@ class RTDETRTransformerv2OBB(nn.Module):
         enc_outputs_coord_unact = torch.clamp(enc_outputs_coord_unact, min=-20.0, max=20.0)
 
         enc_topk_bboxes_list, enc_topk_logits_list = [], []
+        topk = min(self.num_queries, output_memory.shape[1])
         enc_topk_memory, enc_topk_logits, enc_topk_bbox_unact = self._select_topk(
-            output_memory, enc_outputs_logits, enc_outputs_coord_unact, self.num_queries
+            output_memory, enc_outputs_logits, enc_outputs_coord_unact, topk
         )
 
         if self.training:

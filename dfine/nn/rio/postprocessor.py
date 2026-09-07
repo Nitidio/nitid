@@ -99,8 +99,8 @@ class PostProcessorOBB(nn.Module):
         logits, boxes = outputs["pred_logits"], outputs["pred_boxes"]
         if self.input_shape is not None:
             target_h, target_w = self.input_shape
-            h = orig_target_sizes[:, 0]
-            w = orig_target_sizes[:, 1]
+            w = orig_target_sizes[:, 0]
+            h = orig_target_sizes[:, 1]
             scale_w = target_w / w
             scale_h = target_h / h
             scale = torch.min(scale_w, scale_h).unsqueeze(1).unsqueeze(1)
@@ -113,15 +113,16 @@ class PostProcessorOBB(nn.Module):
             bbox_pred = torch.cat([boxes_xywh, boxes_angle], dim=-1)
 
         else:
-            h = orig_target_sizes[:, 0]
-            w = orig_target_sizes[:, 1]
+            w = orig_target_sizes[:, 0]
+            h = orig_target_sizes[:, 1]
             scale_fct = torch.stack([w, h, w, h], dim=1).unsqueeze(1)
             boxes_xywh = boxes[..., :4] * scale_fct
             boxes_angle = boxes[..., 4:] * 3.141592653589793
             bbox_pred = torch.cat([boxes_xywh, boxes_angle], dim=-1)
 
         scores = F.sigmoid(logits)
-        scores, index = torch.topk(scores.flatten(1), self.num_top_queries, dim=-1)
+        topk = min(self.num_top_queries, scores.flatten(1).shape[1])
+        scores, index = torch.topk(scores.flatten(1), topk, dim=-1)
 
         labels = mod(index, self.num_classes)
         index = index // self.num_classes
