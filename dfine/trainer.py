@@ -426,11 +426,6 @@ class DFINETrainer:
                 raise ValueError("OBB training requires imgsz >= 256 for the RiO-DETR decoder")
             if mosaic > 0 or mixup > 0:
                 raise ValueError("OBB training does not support mosaic or mixup augmentations")
-            if val:
-                LOGGER.warning(
-                    "OBB rotated mAP validation is not implemented yet; training will run with val=False"
-                )
-                val = False
         semantic_config = self.cfg.get("SemanticSegmentation", {})
         ignore_index = (
             int(semantic_config.get("ignore_index", 255))

@@ -12,6 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Protocol, TypedDict, cast
 
+import cv2
 import numpy as np
 import torch
 from torchvision.ops import box_iou
@@ -119,6 +120,40 @@ def _cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
     return torch.stack((cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), dim=-1)
 
 
+def _xywhr_to_corners(boxes: torch.Tensor) -> torch.Tensor:
+    """Convert ``cx, cy, w, h, angle_radians`` to four polygon corners."""
+    if boxes.numel() == 0:
+        return torch.zeros((0, 4, 2), dtype=boxes.dtype, device=boxes.device)
+    centers = boxes[:, :2]
+    widths = boxes[:, 2:3]
+    heights = boxes[:, 3:4]
+    angles = boxes[:, 4]
+    x_offsets = torch.cat((-widths, widths, widths, -widths), dim=1) / 2
+    y_offsets = torch.cat((-heights, -heights, heights, heights), dim=1) / 2
+    cos = torch.cos(angles).unsqueeze(1)
+    sin = torch.sin(angles).unsqueeze(1)
+    x = x_offsets * cos - y_offsets * sin + centers[:, 0:1]
+    y = x_offsets * sin + y_offsets * cos + centers[:, 1:2]
+    return torch.stack((x, y), dim=2)
+
+
+def rotated_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+    """Pairwise IoU for rotated rectangles in ``cx, cy, w, h, angle_radians`` format."""
+    if boxes1.numel() == 0 or boxes2.numel() == 0:
+        return torch.zeros((len(boxes1), len(boxes2)), dtype=torch.float32)
+    polys1 = _xywhr_to_corners(boxes1.float()).detach().cpu().numpy().astype(np.float32)
+    polys2 = _xywhr_to_corners(boxes2.float()).detach().cpu().numpy().astype(np.float32)
+    out = np.zeros((len(polys1), len(polys2)), dtype=np.float32)
+    areas1 = [abs(float(cv2.contourArea(poly))) for poly in polys1]
+    areas2 = [abs(float(cv2.contourArea(poly))) for poly in polys2]
+    for i, poly1 in enumerate(polys1):
+        for j, poly2 in enumerate(polys2):
+            inter_area, _ = cv2.intersectConvexConvex(poly1, poly2)
+            union = areas1[i] + areas2[j] - float(inter_area)
+            out[i, j] = float(inter_area) / union if union > 0 else 0.0
+    return torch.from_numpy(out)
+
+
 def _restore_original_coordinates(
     boxes: torch.Tensor, original_width: int, original_height: int, imgsz: int
 ) -> torch.Tensor:
@@ -223,7 +258,11 @@ class DFINEValidator:
         """
         from dfine.nn.build import build_postprocessor
         from dfine.tasks import normalize_task
-        from dfine.utils.data import build_detection_dataloader, resolve_detection_split
+        from dfine.utils.data import (
+            build_detection_dataloader,
+            build_obb_dataloader,
+            resolve_detection_split,
+        )
 
         task = normalize_task(str(self.cfg.get("task", "detect")))
         if task == "semantic":
@@ -240,8 +279,19 @@ class DFINEValidator:
                 show_progress=show_progress,
             )
         if task == "obb":
-            raise NotImplementedError(
-                "OBB validation will be added with the native RiO-DETR OBB integration"
+            return self._run_obb(
+                data=data,
+                imgsz=imgsz,
+                batch=batch,
+                conf=conf,
+                split=split,
+                verbose=verbose,
+                save_dir=save_dir,
+                plots=plots,
+                classes=classes,
+                single_cls=single_cls,
+                show_progress=show_progress,
+                build_obb_dataloader=build_obb_dataloader,
             )
 
         COCO = importlib.import_module("pycocotools.coco").COCO
@@ -500,6 +550,104 @@ class DFINEValidator:
 
         return metrics
 
+    def _run_obb(
+        self,
+        *,
+        data: str,
+        imgsz: int,
+        batch: int,
+        conf: float,
+        split: str,
+        verbose: bool,
+        save_dir: str | Path | None,
+        plots: bool,
+        classes: list[int] | None,
+        single_cls: bool,
+        show_progress: bool | None,
+        build_obb_dataloader,
+    ) -> dict[str, object]:
+        """Evaluate oriented boxes with class-aware rotated-IoU matching."""
+        from dfine.nn.build import build_postprocessor
+
+        del save_dir, plots
+        dataloader = build_obb_dataloader(
+            data,
+            split=split,
+            imgsz=imgsz,
+            batch_size=batch,
+            classes=classes,
+            single_cls=single_cls,
+        )
+        postprocessor = build_postprocessor(self.cfg)
+        postprocessor.to(self.device)
+        postprocessor.eval()
+
+        gt_records: list[GTRecord] = []
+        pred_records: list[PredRecord] = []
+        self.model.eval()
+        progress = tqdm(
+            dataloader,
+            total=len(dataloader),
+            desc=f"val:{split}",
+            leave=False,
+            unit="batch",
+            disable=not (verbose if show_progress is None else show_progress),
+        )
+        with _dynamic_eval_geometry(self.model, imgsz), torch.no_grad():
+            for images, targets in progress:
+                images = images.to(self.device)
+                orig_sizes = torch.tensor(
+                    [[imgsz, imgsz]] * len(images), dtype=torch.float32, device=self.device
+                )
+                detections = postprocessor(self.model(images), orig_sizes)
+                for det, target in zip(detections, targets):
+                    gt_boxes = target["boxes"].float().clone()
+                    if gt_boxes.numel():
+                        scale = torch.tensor([imgsz, imgsz, imgsz, imgsz, torch.pi])
+                        gt_boxes *= scale
+                    gt_records.append(
+                        {
+                            "boxes": gt_boxes.cpu(),
+                            "labels": target["labels"].cpu(),
+                            "image_id": int(target["image_id"][0]),
+                        }
+                    )
+                    pred_records.append(
+                        {
+                            "boxes": det["boxes"].detach().cpu(),
+                            "scores": det["scores"].detach().cpu(),
+                            "labels": det["labels"].detach().cpu(),
+                        }
+                    )
+
+        map50, map5095, per_class_rows = self._obb_map(gt_records, pred_records)
+        thresholds, precisions, recalls, f1_scores = self._obb_precision_recall_curve(
+            gt_records, pred_records
+        )
+        best_idx = int(np.argmax(f1_scores)) if len(f1_scores) else 0
+        best_conf = float(thresholds[best_idx]) if len(thresholds) else float(conf)
+        precision = float(precisions[best_idx]) if len(precisions) else 0.0
+        recall = float(recalls[best_idx]) if len(recalls) else 0.0
+        f1 = float(f1_scores[best_idx]) if len(f1_scores) else 0.0
+        metrics: dict[str, object] = {
+            "mAP50-95": map5095,
+            "mAP50": map50,
+            "AR1": recall,
+            "AR100": recall,
+            "AR300": recall,
+            "images": len(gt_records),
+            "instances": int(sum(gt["labels"].numel() for gt in gt_records)),
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "fitness": self._fitness(precision, recall, map50, map5095),
+            "best_conf": best_conf,
+            "per_class": per_class_rows,
+        }
+        if verbose:
+            self._print_summary(metrics, per_class_rows)
+        return metrics
+
     def _run_semantic(
         self,
         *,
@@ -705,6 +853,194 @@ class DFINEValidator:
             f1_scores[i] = f1
 
         return thresholds, precisions, recalls, f1_scores
+
+    def _obb_map(
+        self,
+        gt_records: list[GTRecord],
+        pred_records: list[PredRecord],
+    ) -> tuple[float, float, list[PerClassRow]]:
+        iou_thresholds = np.arange(0.5, 0.96, 0.05)
+        class_ids = sorted(
+            {
+                int(label)
+                for record in [*gt_records, *pred_records]
+                for label in record["labels"].tolist()
+            }
+        )
+        per_class_rows: list[PerClassRow] = []
+        ap50_values: list[float] = []
+        ap5095_values: list[float] = []
+
+        for class_id in class_ids:
+            instances = sum(
+                int((record["labels"] == class_id).sum().item()) for record in gt_records
+            )
+            if instances == 0:
+                continue
+            class_ap = [
+                self._obb_average_precision(gt_records, pred_records, class_id, float(iou_thr))
+                for iou_thr in iou_thresholds
+            ]
+            ap50 = float(class_ap[0])
+            ap5095 = float(np.mean(class_ap))
+            ap50_values.append(ap50)
+            ap5095_values.append(ap5095)
+            per_class_rows.append(
+                {
+                    "class_id": class_id,
+                    "name": self.names.get(class_id, str(class_id)),
+                    "instances": instances,
+                    "ap50": ap50,
+                    "ap50-95": ap5095,
+                }
+            )
+
+        map50 = float(np.mean(ap50_values)) if ap50_values else 0.0
+        map5095 = float(np.mean(ap5095_values)) if ap5095_values else 0.0
+        return map50, map5095, per_class_rows
+
+    def _obb_average_precision(
+        self,
+        gt_records: list[GTRecord],
+        pred_records: list[PredRecord],
+        class_id: int,
+        iou_thresh: float,
+    ) -> float:
+        predictions: list[tuple[float, int, int]] = []
+        total_gt = 0
+        for image_index, (gt, pred) in enumerate(zip(gt_records, pred_records)):
+            total_gt += int((gt["labels"] == class_id).sum().item())
+            pred_indices = torch.where(pred["labels"] == class_id)[0]
+            for pred_idx in pred_indices.tolist():
+                predictions.append((float(pred["scores"][pred_idx]), image_index, pred_idx))
+        if total_gt == 0:
+            return 0.0
+        if not predictions:
+            return 0.0
+
+        predictions.sort(key=lambda item: item[0], reverse=True)
+        matched: dict[int, set[int]] = defaultdict(set)
+        tp = np.zeros(len(predictions), dtype=np.float32)
+        fp = np.zeros(len(predictions), dtype=np.float32)
+
+        for pred_rank, (_, image_index, pred_idx) in enumerate(predictions):
+            gt = gt_records[image_index]
+            pred = pred_records[image_index]
+            gt_indices = torch.where(gt["labels"] == class_id)[0]
+            if gt_indices.numel() == 0:
+                fp[pred_rank] = 1.0
+                continue
+            ious = rotated_box_iou(
+                pred["boxes"][pred_idx : pred_idx + 1],
+                gt["boxes"][gt_indices],
+            ).squeeze(0)
+            best_iou, best_relative_idx = torch.max(ious, dim=0)
+            gt_idx = int(gt_indices[int(best_relative_idx)])
+            if float(best_iou) >= iou_thresh and gt_idx not in matched[image_index]:
+                matched[image_index].add(gt_idx)
+                tp[pred_rank] = 1.0
+            else:
+                fp[pred_rank] = 1.0
+
+        tp_cum = np.cumsum(tp)
+        fp_cum = np.cumsum(fp)
+        recalls = tp_cum / max(total_gt, 1)
+        precisions = tp_cum / np.maximum(tp_cum + fp_cum, 1e-12)
+        return self._compute_ap(recalls, precisions)
+
+    @staticmethod
+    def _compute_ap(recalls: np.ndarray, precisions: np.ndarray) -> float:
+        recall_curve = np.concatenate(([0.0], recalls, [1.0]))
+        precision_curve = np.concatenate(([1.0], precisions, [0.0]))
+        for index in range(len(precision_curve) - 1, 0, -1):
+            precision_curve[index - 1] = max(precision_curve[index - 1], precision_curve[index])
+        indices = np.where(recall_curve[1:] != recall_curve[:-1])[0]
+        return float(
+            np.sum(
+                (recall_curve[indices + 1] - recall_curve[indices]) * precision_curve[indices + 1]
+            )
+        )
+
+    def _obb_precision_recall_curve(
+        self,
+        gt_records: list[GTRecord],
+        pred_records: list[PredRecord],
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        thresholds = np.linspace(0.0, 0.99, 100)
+        precisions = np.zeros_like(thresholds)
+        recalls = np.zeros_like(thresholds)
+        f1_scores = np.zeros_like(thresholds)
+        for i, threshold in enumerate(thresholds):
+            tp, fp, fn = self._obb_count_matches(
+                gt_records, pred_records, conf_thresh=float(threshold)
+            )
+            precision = tp / (tp + fp) if (tp + fp) else 0.0
+            recall = tp / (tp + fn) if (tp + fn) else 0.0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+            precisions[i] = precision
+            recalls[i] = recall
+            f1_scores[i] = f1
+        return thresholds, precisions, recalls, f1_scores
+
+    def _obb_count_matches(
+        self,
+        gt_records: list[GTRecord],
+        pred_records: list[PredRecord],
+        conf_thresh: float,
+        iou_thresh: float = 0.5,
+    ) -> tuple[int, int, int]:
+        tp = fp = fn = 0
+        for gt, pred in zip(gt_records, pred_records):
+            pred_mask = pred["scores"] >= conf_thresh
+            img_tp, img_fp, img_fn = self._match_obb_class_aware(
+                pred_boxes=pred["boxes"][pred_mask],
+                pred_labels=pred["labels"][pred_mask],
+                pred_scores=pred["scores"][pred_mask],
+                gt_boxes=gt["boxes"],
+                gt_labels=gt["labels"],
+                iou_thresh=iou_thresh,
+            )
+            tp += img_tp
+            fp += img_fp
+            fn += img_fn
+        return tp, fp, fn
+
+    def _match_obb_class_aware(
+        self,
+        pred_boxes: torch.Tensor,
+        pred_labels: torch.Tensor,
+        pred_scores: torch.Tensor,
+        gt_boxes: torch.Tensor,
+        gt_labels: torch.Tensor,
+        iou_thresh: float = 0.5,
+    ) -> tuple[int, int, int]:
+        if len(pred_boxes) == 0 and len(gt_boxes) == 0:
+            return 0, 0, 0
+        if len(pred_boxes) == 0:
+            return 0, 0, int(len(gt_boxes))
+        if len(gt_boxes) == 0:
+            return 0, int(len(pred_boxes)), 0
+        tp = fp = 0
+        matched_gt: set[int] = set()
+        pred_order = torch.argsort(pred_scores, descending=True)
+        for pred_idx in pred_order.tolist():
+            pred_label = int(pred_labels[pred_idx])
+            candidate_indices = [
+                gt_idx
+                for gt_idx, gt_label in enumerate(gt_labels.tolist())
+                if int(gt_label) == pred_label and gt_idx not in matched_gt
+            ]
+            if not candidate_indices:
+                fp += 1
+                continue
+            ious = rotated_box_iou(pred_boxes[pred_idx : pred_idx + 1], gt_boxes[candidate_indices])
+            best_iou, best_rel_idx = torch.max(ious.squeeze(0), dim=0)
+            if float(best_iou) >= iou_thresh:
+                matched_gt.add(candidate_indices[int(best_rel_idx)])
+                tp += 1
+            else:
+                fp += 1
+        return tp, fp, len(gt_boxes) - len(matched_gt)
 
     def _count_matches(
         self,
