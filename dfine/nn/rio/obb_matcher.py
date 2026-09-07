@@ -9,7 +9,6 @@ Copyright (c) 2024 The D-FINE Authors All Rights Reserved.
 import os
 from typing import Dict
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -168,6 +167,8 @@ class HungarianMatcherOBB(nn.Module):
 
         if self.vis_output_dir is None:
             return
+
+        import matplotlib.pyplot as plt
 
         if not os.path.exists(self.vis_output_dir):
             os.makedirs(self.vis_output_dir, exist_ok=True)

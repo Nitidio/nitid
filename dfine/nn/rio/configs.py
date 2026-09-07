@@ -192,6 +192,23 @@ _SIZE_CONFIGS: dict[str, dict[str, Any]] = {
 }
 
 RIO_OBB_MODEL_SIZES = tuple(_SIZE_CONFIGS)
+DOTA_OBB_NAMES: tuple[str, ...] = (
+    "plane",
+    "baseball-diamond",
+    "bridge",
+    "ground-track-field",
+    "small-vehicle",
+    "large-vehicle",
+    "ship",
+    "tennis-court",
+    "basketball-court",
+    "storage-tank",
+    "soccer-ball-field",
+    "roundabout",
+    "harbor",
+    "swimming-pool",
+    "helicopter",
+)
 
 
 def _merge(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:

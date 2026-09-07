@@ -124,12 +124,25 @@ def test_nitid_detect_n_rejected_until_detection_weights_exist() -> None:
         NITID("nitid1n", task="detect", device="cpu", verbose=False)
 
 
-def test_nitid_obb_task_is_reserved_until_rio_detr_port_lands() -> None:
+def test_nitid_obb_task_builds_random_rio_model() -> None:
     from dfine import NITID
+    from dfine.nn.rio import RioOBBModel
     from dfine.tasks import get_task_contract, normalize_task
 
     assert normalize_task("oriented_detection") == "obb"
     assert get_task_contract("obb").result_fields == ("obb",)
 
-    with pytest.raises(NotImplementedError, match="RiO-DETR OBB"):
+    model = NITID("nitid1s", task="obb", weights=None, device="cpu", verbose=False)
+
+    assert model.task == "obb"
+    assert model.nitid_model == "nitid1s"
+    assert model.weights is None
+    assert isinstance(model._model, RioOBBModel)
+    assert len(model.names) == 15
+
+
+def test_nitid_obb_pretrained_weights_are_gated_until_weight_phase() -> None:
+    from dfine import NITID
+
+    with pytest.raises(NotImplementedError, match="Pretrained OBB weights"):
         NITID("nitid1s", task="obb", device="cpu", verbose=False)
