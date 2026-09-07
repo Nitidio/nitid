@@ -24,6 +24,7 @@ from dfine.media import (
     build_gstreamer_output_pipeline,
 )
 from dfine.model import DFINE
+from dfine.nitid import NITID
 from dfine.onvif import (
     ONVIFCamera,
     ONVIFDevice,
@@ -39,6 +40,7 @@ __version__ = "0.1.0"
 __all__ = [
     "BugReport",
     "DFINE",
+    "NITID",
     "Frame",
     "FrameMetadata",
     "FrameSink",

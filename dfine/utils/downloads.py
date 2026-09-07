@@ -191,7 +191,11 @@ def _registry(task: str) -> dict[str, dict[str, ModelAsset]]:
         return SEGMENT_MODEL_REGISTRY
     if resolved_task == "pose":
         return POSE_MODEL_REGISTRY
-    return SEMANTIC_MODEL_REGISTRY
+    if resolved_task == "semantic":
+        return SEMANTIC_MODEL_REGISTRY
+    raise NotImplementedError(
+        "task='obb' pretrained weights will be added with the native RiO-DETR OBB integration"
+    )
 
 
 def list_models(task: str = "detect") -> list[str]:

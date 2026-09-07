@@ -421,6 +421,10 @@ class DFINETrainer:
         from dfine.tasks import normalize_task
 
         task = normalize_task(str(self.cfg.get("task", "detect")))
+        if task == "obb":
+            raise NotImplementedError(
+                "OBB training will be added with the native RiO-DETR OBB integration"
+            )
         semantic_config = self.cfg.get("SemanticSegmentation", {})
         ignore_index = (
             int(semantic_config.get("ignore_index", 255))
@@ -1000,6 +1004,10 @@ class DFINETrainer:
                 deterministic=deterministic,
                 fraction=fraction,
                 augment=augment,
+            )
+        if task == "obb":
+            raise NotImplementedError(
+                "OBB dataloading will be added with the native RiO-DETR OBB integration"
             )
         return build_detection_dataloader(
             data,

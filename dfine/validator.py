@@ -239,6 +239,10 @@ class DFINEValidator:
                 single_cls=single_cls,
                 show_progress=show_progress,
             )
+        if task == "obb":
+            raise NotImplementedError(
+                "OBB validation will be added with the native RiO-DETR OBB integration"
+            )
 
         COCO = importlib.import_module("pycocotools.coco").COCO
         COCOeval = importlib.import_module("pycocotools.cocoeval").COCOeval

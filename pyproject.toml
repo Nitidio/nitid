@@ -3,7 +3,7 @@ requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["dfine*", "tools*", "web*"]
+include = ["dfine*", "nitid*", "tools*", "web*"]
 
 [project]
 name = "nitid"
