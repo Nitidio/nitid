@@ -32,7 +32,7 @@ from dfine.onvif import (
     ONVIFMediaProfile,
     discover_onvif_devices,
 )
-from dfine.results import SemanticMask
+from dfine.results import OBB, SemanticMask
 from dfine.utils.reporting import BugReport, bugreport
 from dfine.utils.sources import GStreamerFrameSource
 
@@ -50,6 +50,7 @@ __all__ = [
     "ONVIFDevice",
     "ONVIFError",
     "ONVIFMediaProfile",
+    "OBB",
     "SemanticMask",
     "GStreamerFrameSource",
     "GStreamerHardwareProfile",
