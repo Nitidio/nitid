@@ -25,6 +25,14 @@ from .architecture import (
 )
 from .configs import get_model_config, make_pose_config
 from .losses import DFINECriterion, HungarianMatcher, SemSegCriterion
+from .rio import (
+    HungarianMatcherOBB,
+    RioOBBModel,
+    RTDETRTransformerv2OBB,
+    RTv4OBBCriterion,
+    get_rio_obb_config,
+    make_rio_obb_config,
+)
 
 
 def _checkpoint_task(config: Mapping[str, Any]) -> Task:
@@ -108,7 +116,7 @@ def build_native_model(
     image_size: tuple[int, int] | None = None,
     in_channels: int = 3,
     device: str | torch.device | None = None,
-) -> DFINEModel:
+) -> nn.Module:
     """Build a native D-FINE model without loading pretrained weights."""
     if num_classes < 1:
         raise ValueError(f"num_classes must be positive, got {num_classes}")
@@ -116,6 +124,21 @@ def build_native_model(
         raise ValueError(f"in_channels must be 3 or 4, got {in_channels}")
 
     resolved_task = normalize_task(task)
+    if resolved_task == "obb":
+        config = make_rio_obb_config(
+            model,
+            num_classes=num_classes,
+            image_size=image_size or (1024, 1024),
+        )
+        backbone = HGNetv2(in_channels=in_channels, **config["HGNetv2"])
+        encoder = HybridEncoder(**config["HybridEncoder"])
+        decoder = RTDETRTransformerv2OBB(
+            num_classes=num_classes,
+            **config["RTDETRTransformerv2OBB"],
+        )
+        native_model = RioOBBModel(backbone=backbone, encoder=encoder, decoder=decoder)
+        return native_model.to(device) if device is not None else native_model
+
     if resolved_task == "pose":
         config = make_pose_config(model, image_size=image_size or (640, 640))
         return _compose_native_model(
@@ -153,7 +176,7 @@ def build_native_model_from_config(
     config: Mapping[str, Any],
     *,
     device: str | torch.device | None = None,
-) -> DFINEModel:
+) -> nn.Module:
     """Build from a current or legacy self-contained checkpoint configuration."""
     num_classes = config.get("num_classes")
     if not isinstance(num_classes, int) or num_classes < 1:
@@ -163,6 +186,15 @@ def build_native_model_from_config(
         raise ValueError("D-FINE config in_channels must be 3 or 4")
 
     task = _checkpoint_task(config)
+    if task == "obb":
+        backbone = HGNetv2(in_channels=in_channels, **_component_config(config, "HGNetv2"))
+        encoder = HybridEncoder(**_component_config(config, "HybridEncoder"))
+        decoder = RTDETRTransformerv2OBB(
+            num_classes=num_classes,
+            **_component_config(config, "RTDETRTransformerv2OBB"),
+        )
+        native_model = RioOBBModel(backbone=backbone, encoder=encoder, decoder=decoder)
+        return native_model.to(device) if device is not None else native_model
     if task == "pose":
         decoder_config = _component_config(config, "DETRPoseDecoder")
     elif task == "semantic":
@@ -202,6 +234,21 @@ def build_native_criterion(
     if num_classes < 1:
         raise ValueError(f"num_classes must be positive, got {num_classes}")
     resolved_task = normalize_task(task)
+    if resolved_task == "obb":
+        config = get_rio_obb_config(model)
+        criterion_config = copy.deepcopy(config["RTv4OBBCriterion"])
+        matcher_config = copy.deepcopy(criterion_config.pop("matcher"))
+        matcher_config.pop("type", None)
+        matcher = HungarianMatcherOBB(
+            use_focal_loss=bool(config.get("use_focal_loss", True)),
+            **matcher_config,
+        )
+        return RTv4OBBCriterion(
+            matcher=matcher,
+            num_classes=num_classes,
+            **criterion_config,
+        )
+
     config = get_model_config(model)
 
     if resolved_task == "semantic":
@@ -217,9 +264,9 @@ def build_native_criterion(
     if resolved_task == "segment" and "masks" not in criterion_config["losses"]:
         criterion_config["losses"].append("masks")
 
-    matcher = HungarianMatcher(**config["matcher"])
+    dfine_matcher = HungarianMatcher(**config["matcher"])
     return DFINECriterion(
-        matcher=matcher,
+        matcher=dfine_matcher,
         num_classes=num_classes,
         label_smoothing=label_smoothing,
         **criterion_config,
@@ -233,6 +280,23 @@ def build_native_criterion_from_config(config: Mapping[str, Any]) -> nn.Module:
         raise ValueError("D-FINE config num_classes must be a positive integer")
 
     task = _checkpoint_task(config)
+    if task == "obb":
+        criterion_config = _component_config(config, "RTv4OBBCriterion")
+        matcher_config = criterion_config.pop("matcher", None)
+        if not isinstance(matcher_config, Mapping):
+            raise ValueError("RiO-DETR OBB criterion config is missing its matcher mapping")
+        matcher_kwargs = copy.deepcopy(dict(matcher_config))
+        matcher_kwargs.pop("type", None)
+        matcher = HungarianMatcherOBB(
+            use_focal_loss=bool(config.get("use_focal_loss", True)),
+            **matcher_kwargs,
+        )
+        return RTv4OBBCriterion(
+            matcher=matcher,
+            num_classes=num_classes,
+            **criterion_config,
+        )
+
     if task == "semantic":
         criterion_config = _component_config(config, "SemSegCriterion")
         return SemSegCriterion(num_classes=num_classes, **criterion_config)

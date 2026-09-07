@@ -10,6 +10,7 @@ import torch.nn as nn
 
 from dfine.nn.native_build import build_native_model_from_config
 from dfine.nn.postprocessor import DETRPosePostProcessor, DFINEPostProcessor, SemanticPostProcessor
+from dfine.nn.rio import PostProcessorOBB
 from dfine.tasks import normalize_task
 
 
@@ -25,6 +26,17 @@ def build_postprocessor(cfg: Mapping[str, Any]) -> nn.Module:
     task = normalize_task(str(cfg.get("task", "detect")))
     if task == "semantic":
         return SemanticPostProcessor().eval()
+    if task == "obb":
+        postprocessor_value = cfg.get("PostProcessorOBB", {})
+        if not isinstance(postprocessor_value, Mapping):
+            raise ValueError("RiO-DETR OBB config PostProcessorOBB must be a mapping")
+        postprocessor_config = copy.deepcopy(dict(postprocessor_value))
+        postprocessor_config.pop("type", None)
+        postprocessor_config.setdefault("num_top_queries", 300)
+        return PostProcessorOBB(
+            num_classes=_positive_int(cfg, "num_classes"),
+            **postprocessor_config,
+        ).eval()
 
     decoder_value = cfg.get("DFINETransformer") or cfg.get("DETRPoseDecoder")
     if not isinstance(decoder_value, Mapping):
