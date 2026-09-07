@@ -91,13 +91,25 @@ class NITID(DFINE):
     ) -> None:
         backend_model = resolve_nitid_backend_model(model, task=task)
         if normalize_task(task) == "obb":
-            self._init_random_obb(
-                model=model,
-                backend_model=backend_model,
-                weights=weights,
-                device=device,
-                verbose=verbose,
-            )
+            if weights is None or (
+                isinstance(weights, str) and weights.lower().replace("-", "_") in {"none", "random"}
+            ):
+                self._init_random_obb(
+                    model=model,
+                    backend_model=backend_model,
+                    weights=weights,
+                    device=device,
+                    verbose=verbose,
+                )
+            else:
+                super().__init__(
+                    backend_model,
+                    task=task,
+                    weights=weights,
+                    device=device,
+                    verbose=verbose,
+                )
+                self._nitid_model = parse_nitid_model_name(model)
             return
         if weights is None:
             raise ValueError("weights=None is currently only supported for task='obb'")
@@ -119,12 +131,6 @@ class NITID(DFINE):
         device: str | int | None,
         verbose: bool,
     ) -> None:
-        if weights is not None and weights.lower().replace("-", "_") not in {"none", "random"}:
-            raise NotImplementedError(
-                "Pretrained OBB weights will be added with the native RiO-DETR OBB "
-                "weight registry. Use weights=None for a randomly initialized OBB model."
-            )
-
         from dfine.nn.native_build import build_native_model
         from dfine.nn.rio import DOTA_OBB_NAMES, make_rio_obb_config
 

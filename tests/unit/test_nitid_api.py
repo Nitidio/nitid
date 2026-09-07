@@ -47,6 +47,8 @@ def _patch_checkpoint_loading(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str
             task = "semantic"
         if "detrpose_" in path_text:
             task = "pose"
+        if "nitid1" in path_text:
+            task = "obb"
         return _DummyModel(), {"task": task}, {}
 
     monkeypatch.setattr(downloads, "download_model", fake_download_model)
@@ -141,8 +143,35 @@ def test_nitid_obb_task_builds_random_rio_model() -> None:
     assert len(model.names) == 15
 
 
-def test_nitid_obb_pretrained_weights_are_gated_until_weight_phase() -> None:
+def test_nitid_obb_default_weights_resolve_through_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from dfine import NITID
 
-    with pytest.raises(NotImplementedError, match="Pretrained OBB weights"):
-        NITID("nitid1s", task="obb", device="cpu", verbose=False)
+    download_calls = _patch_checkpoint_loading(monkeypatch)
+
+    model = NITID("nitid1s", task="obb", device="cpu", verbose=False)
+
+    assert model.nitid_model == "nitid1s"
+    assert model.task == "obb"
+    assert model.weights == "dota_1_ss"
+    assert download_calls[0][0] == "nitid1s"
+    assert download_calls[0][1] == "obb"
+    assert download_calls[0][2] == "dota_1_ss"
+
+
+def test_nitid_obb_weight_aliases_resolve() -> None:
+    from dfine.utils.downloads import get_model_asset, list_models, list_weights
+
+    assert "nitid1s" in list_models(task="obb")
+    assert list_weights("nitid1m", task="obb") == ["diorr", "dota_1_ms", "dota_1_ss"]
+
+    default = get_model_asset("nitid1s", task="obb")
+    dota = get_model_asset("rio_s", weights="dota", task="obb")
+    diorr = get_model_asset("rtdetrv2_obb_s", weights="dior-r", task="obb")
+
+    assert default.weights == "dota_1_ss"
+    assert dota.weights == "dota_1_ss"
+    assert diorr.weights == "diorr"
+    assert default.url.endswith("/dota_1_ss/rtdetrv2_obb_hgnetv2_s_dota_1_ss.pth")
+    assert default.sha256 is not None
