@@ -53,10 +53,11 @@ import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 import torch
 import yaml
 from PIL import Image
@@ -879,7 +880,10 @@ def _polygons_to_xywhr(polygons: torch.Tensor) -> torch.Tensor:
     if polygons.numel() == 0:
         return torch.zeros((0, 5), dtype=torch.float32)
     boxes: list[list[float]] = []
-    for polygon in polygons.detach().cpu().numpy().astype(np.float32):
+    polygon_array = cast(
+        npt.NDArray[np.float32], polygons.detach().cpu().numpy().astype(np.float32)
+    )
+    for polygon in polygon_array:
         (cx, cy), (w, h), angle_degrees = cv2.minAreaRect(polygon)
         if w < h:
             w, h = h, w

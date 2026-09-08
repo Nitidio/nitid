@@ -141,8 +141,14 @@ def rotated_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
     """Pairwise IoU for rotated rectangles in ``cx, cy, w, h, angle_radians`` format."""
     if boxes1.numel() == 0 or boxes2.numel() == 0:
         return torch.zeros((len(boxes1), len(boxes2)), dtype=torch.float32)
-    polys1 = _xywhr_to_corners(boxes1.float()).detach().cpu().numpy().astype(np.float32)
-    polys2 = _xywhr_to_corners(boxes2.float()).detach().cpu().numpy().astype(np.float32)
+    polys1 = cast(
+        np.ndarray[Any, np.dtype[np.float32]],
+        _xywhr_to_corners(boxes1.float()).detach().cpu().numpy().astype(np.float32),
+    )
+    polys2 = cast(
+        np.ndarray[Any, np.dtype[np.float32]],
+        _xywhr_to_corners(boxes2.float()).detach().cpu().numpy().astype(np.float32),
+    )
     out = np.zeros((len(polys1), len(polys2)), dtype=np.float32)
     areas1 = [abs(float(cv2.contourArea(poly))) for poly in polys1]
     areas2 = [abs(float(cv2.contourArea(poly))) for poly in polys2]
