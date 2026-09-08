@@ -150,11 +150,11 @@ def rotated_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
         _xywhr_to_corners(boxes2.float()).detach().cpu().numpy().astype(np.float32),
     )
     out = np.zeros((len(polys1), len(polys2)), dtype=np.float32)
-    areas1 = [abs(float(cv2.contourArea(poly))) for poly in polys1]
-    areas2 = [abs(float(cv2.contourArea(poly))) for poly in polys2]
+    areas1 = [abs(float(cv2.contourArea(cast(Any, poly)))) for poly in polys1]
+    areas2 = [abs(float(cv2.contourArea(cast(Any, poly)))) for poly in polys2]
     for i, poly1 in enumerate(polys1):
         for j, poly2 in enumerate(polys2):
-            inter_area, _ = cv2.intersectConvexConvex(poly1, poly2)
+            inter_area, _ = cv2.intersectConvexConvex(cast(Any, poly1), cast(Any, poly2))
             union = areas1[i] + areas2[j] - float(inter_area)
             out[i, j] = float(inter_area) / union if union > 0 else 0.0
     return torch.from_numpy(out)
