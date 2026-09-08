@@ -12,6 +12,8 @@ uv sync --extra train
 
 nitid accepts either **COCO JSON** annotations or **YOLO `.txt`** labels for
 detection and instance segmentation. Pose training uses COCO keypoint JSON.
+Oriented bounding box training supports YOLO-OBB, DOTA text labels, and COCO
+polygon JSON.
 
 Semantic segmentation instead uses one dense class-ID PNG mask per image.
 
@@ -158,6 +160,54 @@ flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
 Validation reports both the compatibility box metrics and keypoint metrics:
 `pose_mAP50` and `pose_mAP50-95`.
 
+### Oriented bounding boxes
+
+For `task="obb"`, targets are rotated rectangles. The model returns and
+evaluates boxes as `cx, cy, w, h, angle`.
+
+YOLO-OBB labels use normalized polygon corners:
+
+```text
+my_obb_dataset/
+  images/
+    train/
+    val/
+  labels/
+    train/
+    val/
+```
+
+```text
+class x1 y1 x2 y2 x3 y3 x4 y4
+```
+
+DOTA labels use absolute pixel corners and class names:
+
+```text
+x1 y1 x2 y2 x3 y3 x4 y4 class_name [difficulty]
+```
+
+Use `obb_format: dota` in the YAML for DOTA text labels:
+
+```yaml
+path: /data/my_obb_dataset
+train: images/train
+val: images/val
+obb_format: dota
+names:
+  0: plane
+  1: ship
+```
+
+COCO polygon JSON is also supported. nitid reads the first four polygon points
+from `segmentation`; if a polygon is absent, it falls back to the annotation
+`bbox` as an axis-aligned rotated box.
+
+Current OBB training constraints:
+
+- `imgsz` must be at least `256`.
+- `mosaic` and `mixup` are not supported for OBB yet.
+
 ### Data YAML
 
 Point to your dataset with an ultralytics-style YAML:
@@ -243,12 +293,12 @@ needed when you want a *different* ordering than sorted order.
 ### Python API
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_l", task="detect")
+model = NITID("nitid1l", task="detect")
 
 # Instance segmentation uses the same training API and mask-aware annotations.
-segmenter = DFINE("dfine_s", task="segment")
+segmenter = NITID("nitid1s", task="segment")
 segment_metrics = segmenter.train(
     data="configs/datasets/my_segment_dataset.yml",
     epochs=50,
@@ -257,20 +307,29 @@ segment_metrics = segmenter.train(
 
 # Semantic models initialize shared features from the matching COCO
 # instance-segmentation checkpoint. The dense classifiers train on your taxonomy.
-semantic = DFINE("dfine_s", task="semantic")
+semantic = NITID("nitid1s", task="semantic")
 semantic_metrics = semantic.train(
     data="configs/datasets/my_semantic_dataset.yml",
     epochs=50,
 )
 # semantic_metrics["mIoU"], semantic_metrics["pixel_accuracy"]
 
-# Pose models use DETRPose checkpoints and COCO-keypoint annotations.
-pose = DFINE("detrpose_n", task="pose")
+# Pose models use COCO-keypoint annotations.
+pose = NITID("nitid1s", task="pose")
 pose_metrics = pose.train(
     data="configs/datasets/my_pose_dataset.yml",
     epochs=50,
 )
 # pose_metrics["pose_mAP50"], pose_metrics["pose_mAP50-95"]
+
+# OBB models use YOLO-OBB, DOTA text, or COCO polygon annotations.
+obb = NITID("nitid1s", task="obb")
+obb_metrics = obb.train(
+    data="configs/datasets/my_obb_dataset.yml",
+    epochs=50,
+    imgsz=640,
+)
+# obb_metrics["mAP50"], obb_metrics["mAP50-95"]
 
 def print_epoch_end(trainer):
     row = trainer.current_row
@@ -325,7 +384,7 @@ With the default `save_period=1`, checkpoints are saved after every epoch to
 periodic checkpoint files; `last.pth` and `best.pth` remain available when
 `save=True`.
 Each checkpoint is a full nitid-wrapped `.pth` (config + names embedded) and can
-be loaded directly with `DFINE("epoch50.pth")`.
+be loaded directly with `NITID("epoch50.pth", task="detect")`.
 
 The top-level values are the final epoch summary for backward compatibility.
 Use `metrics["history"]` to inspect per-epoch training and validation metrics,
@@ -400,9 +459,9 @@ uv sync --extra wandb
 Enable logging directly from `train()`, in the same style as Ultralytics:
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_s.pth")
+model = NITID("nitid1s", task="detect")
 model.train(
     data="data.yaml",
     epochs=50,
@@ -485,9 +544,9 @@ uv sync --extra mlflow
 Enable MLflow directly on training:
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_s.pth")
+model = NITID("nitid1s", task="detect")
 model.train(
     data="data.yaml",
     epochs=50,
@@ -580,7 +639,7 @@ this flag at safe lifecycle boundaries and finalizes the run cleanly.
 
 ```bash
 uv run dfine train \
-    model=dfine_l \
+    model=nitid1l task=detect \
     data=configs/datasets/my_dataset.yml \
     epochs=50 \
     batch=16
@@ -589,14 +648,14 @@ uv run dfine train \
 ### Hyperparameter reference
 
 The table below documents the full public `model.train(...)` surface as it
-exists today. Defaults match [`DFINE.train()`](https://github.com/Vaelsys/nitid/blob/develop/dfine/model.py).
+exists today.
 Use this table as the authoritative reference for train-time arguments.
 
 | Parameter | Type | Default | Valid range / values | Description |
 |-----------|------|---------|----------------------|-------------|
 | `data` | `str` | required | path to a dataset YAML | Ultralytics-style dataset config describing `path`, split locations, class count, and names. |
 | `epochs` | `int` | `50` | `>= 1` | Number of full passes over the training set. |
-| `imgsz` | `int` | `640` | `>= 1` | Square training resolution applied during preprocessing. |
+| `imgsz` | `int` | `640` | `>= 1` (`>= 256` for OBB) | Square training resolution applied during preprocessing. |
 | `batch` | `int` | `16` | positive integer | Images per batch. Choose this explicitly for the available device memory. |
 | `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
 | `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier. Both linear decay and cosine decay end at `lr0 * lrf`. |
@@ -641,8 +700,8 @@ Use this table as the authoritative reference for train-time arguments.
 | `hsv_h` | `float` | `0.015` | `[0, 0.5]` | Hue jitter gain. |
 | `hsv_s` | `float` | `0.7` | `[0, 1]` | Saturation jitter gain. |
 | `hsv_v` | `float` | `0.4` | `[0, 1]` | Brightness/value jitter gain. |
-| `mosaic` | `float` | `0.0` | `[0, 1]` | Mosaic probability. Experimental and disabled until a D-FINE benchmark demonstrates a gain. |
-| `mixup` | `float` | `0.0` | `[0, 1]` | MixUp probability. Experimental and disabled until benchmarked. |
+| `mosaic` | `float` | `0.0` | `[0, 1]` | Mosaic probability. Not supported for semantic, pose, or OBB. |
+| `mixup` | `float` | `0.0` | `[0, 1]` | MixUp probability. Not supported for semantic, pose, or OBB. |
 | `close_mosaic` | `int` | `10` | `>= 0` | Disable mosaic for the final N epochs; zero keeps it active. |
 | `time` | `float \| None` | `None` | positive hours or `None` | Training duration in hours. When supplied, this overrides `epochs` as the loop's stopping limit. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
@@ -726,7 +785,7 @@ reduces the learning rate down to `lr0 * lrf`.
 - `ema_decay` only matters when `ema=True`.
 - `warmup_epochs=0` disables warmup entirely.
 - `warmup_momentum` affects SGD momentum and Adam/AdamW beta1 during warmup.
-- `device` in `train()` overrides the device selected in `DFINE(...)` for that
+- `device` in `train()` overrides the device selected in `NITID(...)` for that
   training run only.
 - `momentum`, `weight_decay`, and `clip_grad` explicitly control optimizer
   momentum/beta1, non-bias regularization, and maximum gradient norm.
@@ -759,7 +818,7 @@ ema_weight = decay × ema_weight + (1 − decay) × model_weight
 ```
 
 The EMA weights are what gets saved to the epoch checkpoint, so loading
-`DFINE("epoch50.pth")` gives you the more stable EMA model directly.
+`NITID("epoch50.pth", task="detect")` gives you the more stable EMA model directly.
 Integer parameters (e.g. anchor indices) are copied verbatim rather than
 blended.
 
@@ -817,7 +876,7 @@ print(metrics)
 
 ```bash
 uv run dfine val \
-    model=dfine_l \
+    model=nitid1l task=detect \
     data=configs/datasets/my_dataset.yml \
     conf=0.001
 ```
@@ -830,5 +889,5 @@ uv run dfine val \
 - Loss weighting (`weight_dict`) comes from the checkpoint's embedded D-FINE
   config so it stays consistent with the original pre-training setup.
 - When `ema=True` the saved checkpoint contains EMA weights. Loading it with
-  `DFINE(path)` gives you the EMA model directly — no extra step needed.
+  `NITID(path, task="detect")` gives you the EMA model directly — no extra step needed.
 - AMP is only active on CUDA; on CPU it degrades gracefully to full precision.

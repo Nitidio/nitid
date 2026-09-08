@@ -16,19 +16,20 @@ task.
 | Instance segmentation | yes | yes | yes | yes |
 | Semantic segmentation | yes | yes | no | no |
 | Pose | yes | yes | no | no |
+| Oriented bounding boxes | yes | yes | no | no |
 
 ## ONNX
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_l")
+model = NITID("nitid1l", task="detect")
 model.export(format="onnx")
 # → dfine_640.onnx
 ```
 
 ```bash
-uv run dfine export model=dfine_l format=onnx
+uv run dfine export model=nitid1l task=detect format=onnx
 ```
 
 The exported model takes a single input `images [B, 3, H, W]`. Detection returns
@@ -38,13 +39,16 @@ contains selected mask probabilities aligned with the first three outputs. Pose
 returns `(labels, boxes, scores, keypoints)`, where boxes are derived from the
 selected keypoints for compatibility with common downstream consumers.
 
+OBB exports return `(labels, boxes, scores)`. OBB `boxes` have shape
+`[B, topk, 5]` and use `cx, cy, w, h, angle` in input-image pixels.
+
 Semantic segmentation exports return one output, `semantic_logits [B, C, H,
 W]`, at model-input resolution. Apply softmax for per-class probabilities and
 argmax over axis 1 for the class-ID map. The integration test executes this
 graph with ONNX Runtime and checks numerical parity with PyTorch.
 
 ```python
-semantic = DFINE("semantic_best.pth", task="semantic")
+semantic = NITID("semantic_best.pth", task="semantic")
 semantic.export(format="onnx", output="semantic.onnx")
 ```
 
@@ -55,7 +59,7 @@ the same softmax/argmax post-processing after either backend.
 
 | Argument   | Default | Description |
 |------------|---------|-------------|
-| `imgsz`    | 640     | Input spatial size — **must match** the model's `eval_spatial_size` |
+| `imgsz`    | 640     | Input spatial size. Use the checkpoint's trained/eval size unless you intentionally trained another size. |
 | `batch`    | 1       | Static batch size (use `dynamic=True` for variable batch) |
 | `dynamic`  | `False` | Export with dynamic batch and spatial axes |
 | `simplify` | `True`  | Run `onnxsim` to fold constants and simplify the graph |
@@ -81,16 +85,16 @@ Export through the corrected ONNX graph to OpenVINO Intermediate Representation
 (IR):
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_l")
+model = NITID("nitid1l", task="detect")
 xml_path = model.export(format="openvino")
 # → runs/export/exp/dfine_640.xml
 # → runs/export/exp/dfine_640.bin
 ```
 
 ```bash
-uv run dfine export model=dfine_l format=openvino
+uv run dfine export model=nitid1l task=detect format=openvino
 ```
 
 The `.xml` file stores the graph and the matching `.bin` file stores its weights.
@@ -112,8 +116,8 @@ outputs = compiled_model([images])
 OpenVINO export uses the ONNX-related `imgsz`, `batch`, `dynamic`, `simplify`,
 and `opset` arguments. Set `half=True` to compress IR weights to FP16; the
 default preserves FP32 weights to make numerical comparison with ONNX easier.
-Detection, instance segmentation, semantic segmentation, and pose all route
-through this ONNX-to-IR path.
+Detection, instance segmentation, semantic segmentation, pose, and OBB all
+route through this ONNX-to-IR path.
 
 ## TorchScript
 
@@ -137,7 +141,7 @@ model.export(format="tensorrt")
 ```
 
 ```bash
-uv run dfine export model=dfine_l format=tensorrt
+uv run dfine export model=nitid1l task=detect format=tensorrt
 ```
 
 The workflow is: trace model → temporary ONNX → TensorRT engine (the intermediate ONNX is removed automatically). Requires a CUDA-capable GPU.
@@ -146,7 +150,7 @@ The workflow is: trace model → temporary ONNX → TensorRT engine (the interme
 
 | Argument   | Default | Description |
 |------------|---------|-------------|
-| `imgsz`    | 640     | Input spatial size — **must match** `eval_spatial_size` |
+| `imgsz`    | 640     | Input spatial size |
 | `batch`    | 1       | Static batch size (use `dynamic=True` for variable batch) |
 | `dynamic`  | `False` | Build engine with dynamic batch axis (min=1, opt=batch, max=batch×4) |
 | `half`     | `False` | Enable FP16 precision |
@@ -168,12 +172,12 @@ model.export(format="tensorrt", dynamic=True, batch=4)
 
 ## Export spatial size
 
-D-FINE checkpoints are calibrated for a fixed evaluation spatial size
+Most checkpoints are calibrated for a fixed evaluation spatial size
 (`eval_spatial_size`, usually `[640, 640]`). Use the checkpoint's configured
-size unless you have intentionally trained/evaluated another size. Check the
-value stored in the checkpoint config before exporting:
+size unless you have intentionally trained/evaluated another size. OBB export
+aligns its internal RiO-DETR anchors to the requested export size.
 
 ```python
 print(model._cfg["eval_spatial_size"])  # [640, 640]
-model.export(format="onnx", imgsz=640)  # must match
+model.export(format="onnx", imgsz=640)
 ```

@@ -5,14 +5,14 @@ This is Jorge's primary use case — feed cv2/GStreamer frames directly.
 
 import cv2
 
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_l.pth")
+model = NITID("nitid1s", task="detect")
 
 # Option A: RTSP stream
 for result in model("rtsp://camera_ip/stream", stream=True, conf=0.4):
     annotated = result.plot()
-    cv2.imshow("D-FINE", annotated)
+    cv2.imshow("nitid", annotated)
     if cv2.waitKey(1) == ord("q"):
         break
 

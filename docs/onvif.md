@@ -76,7 +76,7 @@ Use a separate password environment variable with the normal tracking command:
 export CAMERA_RTSP_PASSWORD='camera password'
 
 dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://192.0.2.10/Streaming/Channels/101 \
     backend=gstreamer \
     rtsp_username=operator \
@@ -93,7 +93,7 @@ inserted into the source URL or written to run metadata. Direct
 ## Python API
 
 ```python
-from dfine import DFINE, ONVIFCamera, discover_onvif_devices
+from dfine import NITID, ONVIFCamera, discover_onvif_devices
 
 devices = discover_onvif_devices(timeout=3, interface="192.0.2.20")
 device = devices[0]
@@ -115,7 +115,7 @@ source = camera.gstreamer_source(
     reconnect=True,
 )
 
-model = DFINE("dfine_s")
+model = NITID("nitid1s", task="detect")
 for result in model.track(source, stream=True, conf=0.5):
     ...
 ```

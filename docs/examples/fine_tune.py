@@ -1,8 +1,8 @@
-"""Fine-tune D-FINE on a custom dataset."""
+"""Fine-tune a nitid model on a custom dataset."""
 
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_l.pth")
+model = NITID("nitid1s", task="detect")
 
 metrics = model.train(
     data="my_dataset.yaml",

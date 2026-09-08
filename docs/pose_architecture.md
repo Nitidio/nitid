@@ -7,12 +7,12 @@ D-FINE detection checkpoint.
 The reserved public API is:
 
 ```python
-DFINE("detrpose_n", task="pose")
+NITID("nitid1s", task="pose")
 ```
 
-This API is operational for native inference with wrapped DETRPose checkpoints and official DETRPose
-checkpoint conversion. Pose training and validation use COCO keypoint annotations and keep the public
-task surface constrained to single-class person pose estimation.
+This API is operational for native inference and training with pose checkpoints. Pose training and
+validation use COCO keypoint annotations and keep the public task surface constrained to single-class
+person pose estimation.
 
 ## Model family
 
@@ -21,14 +21,14 @@ configuration rather than inferring pose settings from similarly named D-FINE mo
 
 | Model | Backbone | Encoder width | Decoder layers | Queries | Input contract |
 |---|---:|---:|---:|---:|---:|
-| `detrpose_n` | HGNetV2-B0 | 128 | 3 | 60 | 640 × 640 |
-| `detrpose_s` | HGNetV2-B0 | 256 | 3 | 60 | 640 × 640 |
-| `detrpose_m` | HGNetV2-B2 | 256 | 4 | 60 | 640 × 640 |
-| `detrpose_l` | HGNetV2-B4 | 256 | 6 | 60 | 640 × 640 |
-| `detrpose_x` | HGNetV2-B5 | 384 | 6 | 60 | 640 × 640 |
+| `nitid1n` | HGNetV2-B0 | 128 | 3 | 60 | 640 × 640 |
+| `nitid1s` | HGNetV2-B0 | 256 | 3 | 60 | 640 × 640 |
+| `nitid1m` | HGNetV2-B2 | 256 | 4 | 60 | 640 × 640 |
+| `nitid1l` | HGNetV2-B4 | 256 | 6 | 60 | 640 × 640 |
+| `nitid1x` | HGNetV2-B5 | 384 | 6 | 60 | 640 × 640 |
 
-Size-only names such as `n` and D-FINE names such as `dfine_n` are deliberately rejected for pose.
-This prevents a checkpoint from silently selecting the wrong architecture family.
+Size-only names such as `n` are deliberately rejected for pose. This prevents a checkpoint from
+silently selecting the wrong architecture family.
 
 ## Dataset schemas
 

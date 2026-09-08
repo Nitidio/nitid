@@ -54,12 +54,12 @@ docs/               All documentation lives here
 
 ## 3. The architecture in one paragraph
 
-`DFINE` in `dfine/model.py` is the only class users touch. It accepts supported
-model names or self-contained `.pth` checkpoints and delegates `predict`,
+`NITID` is the recommended class users touch. It accepts supported model names
+or self-contained `.pth` checkpoints and delegates `predict`,
 `track`, `train`, `val`, and `export` to internal workers. Model construction,
 losses, and postprocessing live under `dfine/nn/`. The checkpoint's embedded
-`task` selects detection, instance segmentation, semantic segmentation, or pose;
-an explicitly requested task must match it.
+`task` selects detection, instance segmentation, semantic segmentation, pose, or
+OBB; an explicitly requested task must match it.
 
 ---
 
@@ -74,8 +74,9 @@ package must contain everything required to construct a model.
 Detection and instance segmentation share the backbone, encoder, transformer
 decoder, boxes, and class logits. `task="segment"` enables the mask head and
 mask losses. Semantic segmentation adds a dense decoder on shared features.
-`task="pose"` routes to the DETRPose family. New code must preserve strict
-state-dict compatibility with published checkpoints.
+`task="pose"` routes to the DETRPose family. `task="obb"` routes to the
+RiO-DETR OBB family. New code must preserve strict state-dict compatibility
+with published checkpoints.
 
 ---
 
@@ -187,9 +188,10 @@ The integration tests use synthetic tiny models — they never need to download 
 real checkpoint. For manual testing, prefer official model names:
 
 ```bash
-uv run dfine predict model=dfine_s source=image.jpg conf=0.5
-uv run dfine predict model=dfine_s task=segment source=image.jpg conf=0.5
-uv run dfine predict model=detrpose_n task=pose source=image.jpg conf=0.25
+uv run dfine predict model=nitid1s task=detect source=image.jpg conf=0.5
+uv run dfine predict model=nitid1s task=segment source=image.jpg conf=0.5
+uv run dfine predict model=nitid1s task=pose source=image.jpg conf=0.25
+uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 If you are maintaining support for a new upstream checkpoint, use the conversion
@@ -197,11 +199,11 @@ tool explicitly:
 
 ```bash
 uv run python tools/convert_checkpoint.py \
-    --weights dfine_l.pth \
-    --model   dfine_l \
+    --weights upstream_checkpoint.pth \
+    --model   nitid1l \
     --task    detect \
     --names   configs/datasets/coco.yml \
-    --output  dfine_l_wrapped.pth
+    --output  nitid1l_detect.pth
 ```
 
 ---

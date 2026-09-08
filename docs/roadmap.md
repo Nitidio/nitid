@@ -1,8 +1,8 @@
 # nitid Roadmap
 
-*Last reviewed: 2026-08-24.*
+*Last reviewed: 2026-09-08.*
 
-nitid is an Ultralytics-style library for D-FINE-family models. The project is
+nitid is an Ultralytics-style library for focused DETR-style vision models. The project is
 focused on a small number of well-supported workflows: load a model by name,
 predict, track, train, validate, export, inspect results, and deploy against
 real video sources.
@@ -12,12 +12,13 @@ real video sources.
 The public API should stay compact:
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-detector = DFINE("dfine_s", task="detect")
-segmenter = DFINE("dfine_s", task="segment")
-semantic = DFINE("dfine_s", task="semantic")
-pose = DFINE("detrpose_n", task="pose")
+detector = NITID("nitid1s", task="detect")
+segmenter = NITID("nitid1s", task="segment")
+semantic = NITID("nitid1s", task="semantic")
+pose = NITID("nitid1s", task="pose")
+obb = NITID("nitid1s", task="obb")
 ```
 
 Supported tasks are:
@@ -26,9 +27,10 @@ Supported tasks are:
 - `segment` — D-FINE instance segmentation.
 - `semantic` — dense semantic segmentation on D-FINE features.
 - `pose` — DETRPose single-class person keypoints.
+- `obb` — RiO-DETR oriented bounding boxes.
 
 The guiding principle is depth over breadth. A task belongs in nitid when it
-has a clear D-FINE-family implementation, a normal user API, dataset support,
+has a clear implementation, a normal user API, dataset support,
 validation metrics, export coverage where realistic, tests, and documentation.
 
 ## In scope
@@ -41,7 +43,7 @@ validation metrics, export coverage where realistic, tests, and documentation.
 - Result helpers for annotated outputs, masks, semantic maps, keypoints, JSON,
   YOLO TXT, CSV, pandas DataFrames, timings, and crops.
 - Fine-tuning and validation for detection, instance segmentation, semantic
-  segmentation, and COCO keypoints.
+  segmentation, COCO keypoints, and oriented bounding boxes.
 - Training features: AMP, EMA, resume, per-epoch metrics, callbacks, W&B, and
   MLflow.
 - Export to ONNX/OpenVINO for all supported tasks, and TorchScript/TensorRT for
@@ -69,6 +71,8 @@ Available today:
   export.
 - DETRPose model loading, training, validation, inference, visualization, and
   ONNX/OpenVINO export.
+- RiO-DETR OBB model loading, training, validation, inference, visualization,
+  and ONNX/OpenVINO export.
 - Tracking with optional tracker dependencies.
 - GStreamer/RTSP and ONVIF camera helpers.
 - Web application for browser-based inference workflows.
@@ -78,15 +82,15 @@ Available today:
 Known gaps:
 
 - Pose and semantic benchmark parity still need larger public benchmark runs.
-- TensorRT coverage has not been completed for semantic segmentation or pose.
+- TensorRT coverage has not been completed for semantic segmentation, pose, or OBB.
 - Distributed training and automatic batch sizing are not implemented.
 - Quantized deployment is not implemented.
 - Public PyPI release workflow and hosted model registry remain release tasks.
 
 ## Near-term priorities
 
-1. Stabilize the new task surface: detection, instance segmentation, semantic
-   segmentation, and pose.
+1. Stabilize the task surface: detection, instance segmentation, semantic
+   segmentation, pose, and OBB.
 2. Keep README/API/fine-tuning/export docs aligned with the actual public API.
 3. Add benchmark-grade validation runs for segmentation and pose on datasets
    larger than smoke tests.

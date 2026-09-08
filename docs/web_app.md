@@ -60,7 +60,7 @@ everything it finds there:
 
 ```bash
 mkdir -p models
-uv run dfine download model=dfine_l output=models
+uv run dfine download model=nitid1l task=detect output=models
 ```
 
 ### Environment variables
@@ -151,7 +151,7 @@ All endpoints except `/auth/register` and `/auth/login` require a JWT in the `Au
 
 ```json
 {
-  "model_name": "dfine_l_wrapped.pth",
+  "model_name": "nitid1l_detect.pth",
   "conf": 0.5,
   "imgsz": 640,
   "classes": null,

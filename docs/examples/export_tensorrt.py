@@ -1,8 +1,8 @@
 """Export to TensorRT for deployment in GStreamer pipeline."""
 
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_l.pth")
+model = NITID("nitid1s", task="detect")
 
 # Step 1: ONNX
 onnx_path = model.export(format="onnx", imgsz=640, simplify=True, opset=17)

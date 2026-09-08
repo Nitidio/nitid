@@ -1,8 +1,8 @@
 """Predict on a single image — the simplest possible usage."""
 
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_l.pth")
+model = NITID("nitid1s", task="detect")
 results = model("image.jpg", conf=0.5)
 
 for r in results:
