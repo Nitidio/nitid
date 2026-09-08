@@ -4,9 +4,10 @@ nitid's terminal command is named `dfine`. Commands use `key=value`
 arguments:
 
 ```bash
-uv run dfine predict model=dfine_s source=image.jpg conf=0.5
-uv run dfine predict model=dfine_s task=segment source=image.jpg conf=0.5
+uv run dfine predict model=nitid1s task=detect source=image.jpg conf=0.5
+uv run dfine predict model=nitid1s task=segment source=image.jpg conf=0.5
 uv run dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
+uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 ## Before using the command
@@ -98,36 +99,34 @@ form.
 Download an official model checkpoint for local reuse:
 
 ```bash
-uv run dfine download model=dfine_s
+uv run dfine download model=nitid1s task=detect
 ```
 
-Supported detection model names are `dfine_s`, `dfine_m`, `dfine_l`, and
-`dfine_x`; `dfine_n` is available with COCO weights. Instance segmentation uses
-the same D-FINE names with `task=segment`, and pose uses `detrpose_n` through
-`detrpose_x` with `task=pose`. Detection defaults to `obj2coco`
-(Objects365→COCO) where available. Select a variant explicitly with
-`weights=obj2coco` or `weights=coco`:
+Supported nitid model names are `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`,
+and `nitid1x`. Select the task explicitly with `task=detect`, `task=segment`,
+`task=semantic`, `task=pose`, or `task=obb`. Select a weight variant explicitly
+when needed:
 
 ```bash
-uv run dfine download model=dfine_s weights=coco
+uv run dfine download model=nitid1s task=detect weights=coco
 ```
 
 Without `output=`, the wrapped checkpoint is saved in the current directory:
 
 ```text
-dfine_s_obj2coco_wrapped.pth
+nitid1s_detect_wrapped.pth
 ```
 
 Save it in a model directory:
 
 ```bash
-uv run dfine download model=dfine_s output=models
+uv run dfine download model=nitid1s task=detect output=models
 ```
 
 Download again and replace an existing checkpoint:
 
 ```bash
-uv run dfine download model=dfine_s output=models force=true
+uv run dfine download model=nitid1s task=detect output=models force=true
 ```
 
 ## Common commands
@@ -135,7 +134,7 @@ uv run dfine download model=dfine_s output=models force=true
 Run prediction:
 
 ```bash
-uv run dfine predict model=dfine_s source=image.jpg conf=0.5
+uv run dfine predict model=nitid1s task=detect source=image.jpg conf=0.5
 ```
 
 ## Track objects in video
@@ -149,28 +148,28 @@ uv sync --extra track
 Track a video with ByteTrack, the default tracker:
 
 ```bash
-uv run dfine track model=dfine_s source=video.mp4 conf=0.5
+uv run dfine track model=nitid1s task=detect source=video.mp4 conf=0.5
 ```
 
 Select BoT-SORT for motion-only tracking with camera-motion compensation. This
 is useful for moving, handheld, vehicle-mounted, or PTZ cameras:
 
 ```bash
-uv run dfine track model=dfine_s source=video.mp4 tracker=botsort conf=0.5
+uv run dfine track model=nitid1s task=detect source=video.mp4 tracker=botsort conf=0.5
 ```
 
 Select OC-SORT when occlusions or non-linear motion make direction-aware
 association useful:
 
 ```bash
-uv run dfine track model=dfine_s source=video.mp4 tracker=ocsort conf=0.5
+uv run dfine track model=nitid1s task=detect source=video.mp4 tracker=ocsort conf=0.5
 ```
 
 Save an annotated video containing class labels, confidence scores, and
 persistent track IDs:
 
 ```bash
-uv run dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
+uv run dfine track model=nitid1s task=detect source=video.mp4 conf=0.5 save=true
 ```
 
 The default output is `runs/track/exp/video.mp4`. The CLI processes tracking
@@ -180,14 +179,14 @@ memory. Pass `stream=false` only when a caller specifically needs a list.
 Filter classes or sample every second frame:
 
 ```bash
-uv run dfine track model=dfine_s source=video.mp4 classes=[0,2] vid_stride=2 save=true
+uv run dfine track model=nitid1s task=detect source=video.mp4 classes=[0,2] vid_stride=2 save=true
 ```
 
 Tracker settings are passed as flat `key=value` arguments. For ByteTrack:
 
 ```bash
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=video.mp4 \
     conf=0.5 \
     track_activation_threshold=0.4 \
@@ -200,7 +199,7 @@ downscale factor can be changed without affecting the other trackers:
 
 ```bash
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=video.mp4 \
     tracker=botsort \
     conf=0.5 \
@@ -216,7 +215,7 @@ For OC-SORT:
 
 ```bash
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=video.mp4 \
     tracker=ocsort \
     conf=0.5 \
@@ -233,7 +232,7 @@ Use the GStreamer backend for a reconnecting RTSP source:
 
 ```bash
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
     reconnect=true \
@@ -251,7 +250,7 @@ Publish annotated tracking to an RTSP server that supports client publishing:
 
 ```bash
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://camera/input \
     backend=gstreamer \
     reconnect=true \
@@ -263,7 +262,7 @@ Record annotated MP4 segments instead:
 
 ```bash
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://camera/input \
     backend=gstreamer \
     reconnect=true \
@@ -310,7 +309,7 @@ password environment variable:
 ```bash
 export CAMERA_RTSP_PASSWORD='camera password'
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://192.0.2.10/Streaming/Channels/101 \
     backend=gstreamer \
     rtsp_username=operator \
@@ -324,27 +323,27 @@ process arguments may be visible to other users. See [ONVIF cameras](onvif.md).
 Fine-tune a model:
 
 ```bash
-uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
+uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50
 ```
 
 By default, training saves wrapped epoch checkpoints under `runs/train/exp/`.
 Add `wandb=true` to log the run to the default `nitid` WandB project:
 
 ```bash
-uv run dfine train model=dfine_s data=my_dataset.yml epochs=50 wandb=true
+uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50 wandb=true
 ```
 
 Add `mlflow=true` for Ultralytics-style local MLflow tracking. Logs default to
 `runs/mlflow`:
 
 ```bash
-uv run dfine train model=dfine_s data=my_dataset.yml epochs=50 mlflow=true
+uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50 mlflow=true
 ```
 
 Validate a model:
 
 ```bash
-uv run dfine val model=dfine_s data=my_dataset.yml
+uv run dfine val model=nitid1s task=detect data=my_dataset.yml
 ```
 
 Validation reports COCO metrics to the terminal and does not create a run directory by default.
@@ -352,13 +351,13 @@ Validation reports COCO metrics to the terminal and does not create a run direct
 Export a model:
 
 ```bash
-uv run dfine export model=dfine_s format=onnx
+uv run dfine export model=nitid1s task=detect format=onnx
 ```
 
 Display model information:
 
 ```bash
-uv run dfine info model=dfine_s
+uv run dfine info model=nitid1s task=detect
 ```
 
 ## Create a bug-report log
@@ -366,11 +365,11 @@ uv run dfine info model=dfine_s
 Add `--report` to a training, prediction, tracking, validation, or export command:
 
 ```bash
-uv run dfine predict model=dfine_s source=image.jpg --report
-uv run dfine track model=dfine_s source=video.mp4 --report
-uv run dfine train model=dfine_s data=my_dataset.yml epochs=50 --report
-uv run dfine val model=dfine_s data=my_dataset.yml --report
-uv run dfine export model=dfine_s format=onnx --report
+uv run dfine predict model=nitid1s task=detect source=image.jpg --report
+uv run dfine track model=nitid1s task=detect source=video.mp4 --report
+uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50 --report
+uv run dfine val model=nitid1s task=detect data=my_dataset.yml --report
+uv run dfine export model=nitid1s task=detect format=onnx --report
 ```
 
 The command continues printing normally while stdout and stderr are copied to a

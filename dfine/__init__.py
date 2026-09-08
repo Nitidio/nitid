@@ -24,6 +24,7 @@ from dfine.media import (
     build_gstreamer_output_pipeline,
 )
 from dfine.model import DFINE
+from dfine.nitid import NITID
 from dfine.onvif import (
     ONVIFCamera,
     ONVIFDevice,
@@ -31,7 +32,7 @@ from dfine.onvif import (
     ONVIFMediaProfile,
     discover_onvif_devices,
 )
-from dfine.results import SemanticMask
+from dfine.results import OBB, SemanticMask
 from dfine.utils.reporting import BugReport, bugreport
 from dfine.utils.sources import GStreamerFrameSource
 
@@ -39,6 +40,7 @@ __version__ = "0.1.0"
 __all__ = [
     "BugReport",
     "DFINE",
+    "NITID",
     "Frame",
     "FrameMetadata",
     "FrameSink",
@@ -48,6 +50,7 @@ __all__ = [
     "ONVIFDevice",
     "ONVIFError",
     "ONVIFMediaProfile",
+    "OBB",
     "SemanticMask",
     "GStreamerFrameSource",
     "GStreamerHardwareProfile",

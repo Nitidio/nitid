@@ -15,6 +15,7 @@ cheapest way to be able to answer.
 | ADR | Title | Status | Date |
 |---|---|---|---|
 | [0002](0002-native-detrpose-integration.md) | Native DETRPose integration | Accepted | 2026-08-19 |
+| [0003](0003-native-rio-detr-obb-integration.md) | Native RiO-DETR OBB integration | Proposed | 2026-09-07 |
 
 ## Convention
 

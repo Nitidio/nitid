@@ -5,9 +5,9 @@ nitid can decode video through a GStreamer pipeline while preserving the same
 The backend is opt-in:
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_s")
+model = NITID("nitid1s", task="detect")
 for result in model.track(
     "rtsp://camera/live",
     backend="gstreamer",
@@ -20,7 +20,7 @@ for result in model.track(
 
 ```bash
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
     reconnect=true \
@@ -191,7 +191,7 @@ The equivalent CLI command is:
 
 ```bash
 uv run dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://camera/input \
     backend=gstreamer \
     reconnect=true \
@@ -219,7 +219,7 @@ publishing server.
 CLI:
 
 ```bash
-uv run dfine track model=dfine_s source=video.mp4 \
+uv run dfine track model=nitid1s task=detect source=video.mp4 \
     output=rtsp://media-server/nitid output_rtsp_transport=tcp
 ```
 
@@ -278,7 +278,7 @@ Apply a profile to automatic H.264 RTSP ingest:
 
 ```bash
 dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
     hardware_profile=vaapi \
@@ -289,7 +289,7 @@ Apply a potentially different profile to output:
 
 ```bash
 dfine track \
-    model=dfine_s \
+    model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
     hardware_profile=vaapi \

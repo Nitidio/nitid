@@ -1,6 +1,6 @@
 # nitid
 
-**Ultralytics-style D-FINE detection, segmentation, and pose estimation.**
+**Ultralytics-style detection, segmentation, pose, and oriented-box models.**
 
 [![CI](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml/badge.svg)](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Vaelsys.github.io/nitid/)
@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
 
-nitid gives D-FINE a single-entry-point API that mirrors `ultralytics.YOLO`. Swap one import and keep all the patterns you already know: predict, track, train, val, export, stream, CLI.
+nitid gives modern DETR-style vision models a single-entry-point API that mirrors `ultralytics.YOLO`: predict, track, train, validate, export, stream, and CLI.
 
 ![nitid detection demo](docs/assets/nitid-demo.png)
 
@@ -23,8 +23,8 @@ Example prediction using D-FINE-S on a street image.
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated video output
 - Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented recording
 - ONVIF camera discovery, profile selection, and secure RTSP resolution
-- Detection, instance segmentation, semantic segmentation, and DETRPose
-- Fine-tuning and validation for boxes, masks, dense semantic maps, and COCO keypoints
+- Detection, instance segmentation, semantic segmentation, pose, and oriented bounding boxes
+- Fine-tuning and validation for boxes, masks, dense semantic maps, COCO keypoints, and rotated boxes
 - ONNX, OpenVINO, TorchScript, and TensorRT export where supported by task
 
 ## Installation
@@ -67,10 +67,9 @@ The canonical quickstart lives in [docs/quickstart.md](docs/quickstart.md); use 
 ### Inference
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_s")
-# Equivalent explicit selection: DFINE("dfine_s", weights="obj2coco")
+model = NITID("nitid1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -78,59 +77,48 @@ results[0].save("out.jpg")
 Instance segmentation uses the same API and downloads the matching COCO mask checkpoint:
 
 ```python
-model = DFINE("dfine_s", task="segment")
+model = NITID("nitid1s", task="segment")
 result = model.predict("image.jpg", conf=0.5)[0]
 print(result.masks.data.shape)  # [N, H, W]
 result.save("segmented.jpg")
 ```
 
-Pose estimation uses DETRPose model names and returns COCO-style person keypoints:
+Semantic segmentation returns one class ID per pixel:
 
 ```python
-pose = DFINE("detrpose_n", task="pose")
+model = NITID("nitid1s", task="semantic")
+result = model.predict("image.jpg", return_probs=True)[0]
+print(result.semantic.mask.shape)  # [H, W]
+result.save_semantic("class_ids.png")
+```
+
+Pose estimation returns COCO-style person keypoints:
+
+```python
+pose = NITID("nitid1s", task="pose")
 result = pose.predict("person.jpg", conf=0.25)[0]
 print(result.keypoints.xy.shape)  # [N, 17, 2]
 result.save("pose.jpg")
 ```
 
+Oriented bounding box detection returns rotated boxes:
+
+```python
+obb = NITID("nitid1s", task="obb")
+result = obb.predict("aerial.jpg", conf=0.25)[0]
+print(result.obb.xywhr.shape)      # [N, 5]: cx, cy, w, h, angle
+print(result.obb.xyxyxyxy.shape)   # [N, 8]: four polygon corners
+result.save("obb.jpg")
+```
+
 ### Training
 
 ```python
-model.train(
-    data="configs/datasets/my_dataset.yml",
-    epochs=50,
-)
-# returns final metrics plus per-epoch history in metrics["history"]
+metrics = model.train(data="configs/datasets/my_dataset.yml", epochs=50)
+print(metrics["mAP50"], metrics["mAP50-95"])
 ```
 
-Semantic training and mIoU validation use dense class-ID PNG masks:
-
-```python
-semantic = DFINE("dfine_s", task="semantic")
-metrics = semantic.train(data="semantic_dataset.yml", epochs=50)
-print(metrics["mIoU"], metrics["pixel_accuracy"])
-```
-
-Semantic inference returns an original-resolution class map. With `save=True`,
-nitid writes both the overlay and a lossless class-ID PNG under `masks/`:
-
-```python
-result = semantic.predict("image.jpg", save=True, return_probs=True)[0]
-class_map = result.semantic.mask       # int64 [H, W]
-probabilities = result.semantic.probs  # float [C, H, W]
-result.save_semantic("class_ids.png")
-```
-
-See the [fine-tuning guide](docs/fine_tuning.md#dense-semantic-masks) for the
-dataset layout and `ignore_index` contract.
-
-Pose training uses COCO-keypoints JSON annotations:
-
-```python
-pose = DFINE("detrpose_n", task="pose")
-metrics = pose.train(data="pose_dataset.yml", epochs=50)
-print(metrics["pose_mAP50"], metrics["pose_mAP50-95"])
-```
+See [fine-tuning](docs/fine_tuning.md) for COCO, YOLO, semantic-mask, pose, and OBB dataset formats.
 
 ### Tracking
 
@@ -179,7 +167,7 @@ Annotated tracking can also be published or segmented without buffering
 results in Python:
 
 ```bash
-dfine track model=dfine_s source=video.mp4 \
+dfine track model=nitid1s task=detect source=video.mp4 \
   output=runs/segments segment_duration=60
 ```
 
@@ -207,10 +195,10 @@ Capture Python API output, environment details, and failure tracebacks in one
 attachable log:
 
 ```python
-from dfine import DFINE, bugreport
+from dfine import NITID, bugreport
 
 with bugreport("prediction") as report:
-    model = DFINE("dfine_s")
+    model = NITID("nitid1s", task="detect")
     model.predict("image.jpg")
 
 print(report.path)
@@ -220,13 +208,14 @@ print(report.path)
 ### Command Line Interface
 
 ```bash
-uv run dfine predict model=dfine_s source=image.jpg
+uv run dfine predict model=nitid1s task=detect source=image.jpg
 uv run dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
-uv run dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
-uv run dfine train model=dfine_s data=my_dataset.yml epochs=50
-uv run dfine val model=dfine_s data=my_dataset.yml
-uv run dfine export model=dfine_s format=onnx
-uv run dfine predict model=dfine_s source=image.jpg --report
+uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
+uv run dfine track model=nitid1s source=video.mp4 conf=0.5 save=true
+uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50
+uv run dfine val model=nitid1s task=detect data=my_dataset.yml
+uv run dfine export model=nitid1s task=detect format=onnx
+uv run dfine predict model=nitid1s source=image.jpg --report
 uv run dfine bugreport
 ```
 
@@ -242,7 +231,7 @@ For the full guide:
 
 ## Official Models
 
-> 💡 Detection defaults to Objects365→COCO weights for S/M/L/X. `task="segment"` selects COCO-pretrained instance-segmentation weights for N/S/M/L/X. `task="semantic"` initializes shared features from the matching segmentation checkpoint while its dense classifier starts fresh. `task="pose"` uses DETRPose N/S/M/L/X checkpoints for single-class person keypoints.
+> 💡 `NITID("nitid1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `nitid1` identifies the model generation. Supported tasks are `detect`, `segment`, `semantic`, `pose`, and `obb`.
 
 Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 
@@ -266,7 +255,7 @@ nitid includes a browser-based UI for running detection without writing code. Up
 uv sync --extra web
 
 # Download the recommended checkpoint into models/
-uv run dfine download model=dfine_l output=models
+uv run dfine download model=nitid1l task=detect output=models
 
 # Start the API (single worker — inference is not thread-safe)
 uv run uvicorn web.api.main:app --workers 1
@@ -286,10 +275,10 @@ See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables
 | Doc | Description |
 |-----|-------------|
 | [docs/onboarding.md](docs/onboarding.md) | **Start here if you're a new developer** — architecture, conventions, gotchas |
-| [docs/quickstart.md](docs/quickstart.md) | Full quickstart for D-FINE users and Ultralytics users |
-| [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset format |
-| [docs/export.md](docs/export.md) | ONNX, TorchScript, TensorRT export |
-| [docs/api_reference.md](docs/api_reference.md) | Full `DFINE` class API reference |
+| [docs/quickstart.md](docs/quickstart.md) | Full quickstart |
+| [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset formats |
+| [docs/export.md](docs/export.md) | ONNX, OpenVINO, TorchScript, and TensorRT export |
+| [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
 | [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 
@@ -322,7 +311,7 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that build
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, disk size |
 | TensorRT export | Supported | Supported (see Installation) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, … | `"detect"`, `"segment"`, `"semantic"`, or `"pose"` |
+| `model.task` | `"detect"`, `"segment"`, … | `"detect"`, `"segment"`, `"semantic"`, `"pose"`, or `"obb"` |
 
 ## Contributing
 
@@ -330,7 +319,7 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup inst
 
 ## Acknowledgements
 
-nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), and [DETRPose](https://github.com/SebastianJanampa/DETRPose). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
+nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), [DETRPose](https://github.com/SebastianJanampa/DETRPose), and RiO-DETR OBB. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
 
 ```bibtex
 @article{peng2024dfine,

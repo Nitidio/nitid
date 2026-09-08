@@ -88,19 +88,55 @@ def plot_results(result, conf: bool, labels: bool, line_width, font_size) -> np.
     if result.semantic_mask is not None:
         colorized = result.semantic_mask.colorize()
         return cv2.addWeighted(colorized, 0.45, img, 0.55, 0)
-    if result.boxes is None or len(result.boxes) == 0:
+    has_boxes = result.boxes is not None and len(result.boxes) > 0
+    has_obb = result.obb is not None and len(result.obb) > 0
+    if not has_boxes and not has_obb:
         return img
 
     lw = line_width or max(round(sum(img.shape[:2]) / 2 * 0.003), 2)
     fs = font_size or max(lw - 1, 1)
 
-    if result.masks is not None:
+    if has_boxes and result.masks is not None:
         overlay = img.copy()
         for index, mask in enumerate(result.masks.data.detach().cpu().numpy()):
             cls_id = int(result.boxes.cls[index])
             color = PALETTE[cls_id % len(PALETTE)]
             overlay[mask.astype(bool)] = color
         img = cv2.addWeighted(overlay, 0.45, img, 0.55, 0)
+
+    if has_obb:
+        corners = result.obb.xyxyxyxy.detach().cpu().numpy().reshape(-1, 4, 2)
+        for i, points in enumerate(corners):
+            cls_id = int(result.obb.cls[i])
+            score = float(result.obb.conf[i])
+            color = PALETTE[cls_id % len(PALETTE)]
+            polygon = np.rint(points).astype(np.int32)
+            cv2.polylines(img, [polygon], isClosed=True, color=color, thickness=lw)
+
+            if labels or conf:
+                name = result.names.get(cls_id, str(cls_id))
+                text = f"{name} {score:.2f}" if conf else name
+                anchor_x, anchor_y = polygon[:, 0].min(), polygon[:, 1].min()
+                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, fs * 0.5, 1)
+                cv2.rectangle(
+                    img,
+                    (int(anchor_x), int(anchor_y) - th - 4),
+                    (int(anchor_x) + tw, int(anchor_y)),
+                    color,
+                    -1,
+                )
+                cv2.putText(
+                    img,
+                    text,
+                    (int(anchor_x), int(anchor_y) - 2),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    fs * 0.5,
+                    (255, 255, 255),
+                    1,
+                )
+
+    if not has_boxes:
+        return img
 
     for i in range(len(result.boxes)):
         x1, y1, x2, y2 = result.boxes.xyxy[i].int().tolist()

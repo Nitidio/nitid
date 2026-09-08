@@ -79,14 +79,14 @@ See the [macOS Docker setup](macos_docker_setup.md) for details.
 
 ### What it means
 
-When you use a supported model name like `dfine_s` or `detrpose_n`, nitid
+When you use a supported model name like `nitid1s`, nitid
 resolves the selected task, downloads the matching checkpoint when needed, and
 prepares it for the integrated runtime.
 
 The workflow is:
 
 ```text
-DFINE("dfine_s")
+NITID("nitid1s", task="detect")
 -> nitid checks the model registry
 -> resolves weights for the selected task
 -> downloads the official checkpoint when needed
@@ -101,26 +101,24 @@ If the internet connection or class names file is missing, the download or wrapp
 Try a direct download command:
 
 ```bash
-uv run dfine download model=dfine_s
+uv run dfine download model=nitid1s task=detect
 ```
 
 To save the model in a folder:
 
 ```bash
-uv run dfine download model=dfine_s output=models
+uv run dfine download model=nitid1s task=detect output=models
 ```
 
 To replace an existing wrapped checkpoint:
 
 ```bash
-uv run dfine download model=dfine_s output=models force=true
+uv run dfine download model=nitid1s task=detect output=models force=true
 ```
 
-Detection supports pretrained S/M/L/X models and the `obj2coco` (default) and
-`coco` variants. Instance segmentation supports pretrained N/S/M/L/X models
-with `task=segment` and COCO weights. Semantic models initialize from the
-matching segmentation checkpoint. Pose uses `detrpose_n` through `detrpose_x`
-with `task=pose`.
+Detection, instance segmentation, semantic segmentation, pose, and OBB all use
+the same public model names (`nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`,
+`nitid1x`) with an explicit `task=...`.
 
 ## Checkpoint gives `KeyError: 'config'`
 
@@ -137,31 +135,20 @@ cannot find `config`.
 If you are using an official model, use the model name and let nitid prepare it:
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_s")
+model = NITID("nitid1s", task="detect")
 ```
 
 Or use the CLI:
 
 ```bash
-uv run dfine download model=dfine_s
+uv run dfine download model=nitid1s task=detect
 ```
 
-If you are maintaining support for a new upstream checkpoint, use the conversion
-tool explicitly:
-
-```bash
-uv run python tools/convert_checkpoint.py \
-    --weights dfine_l.pth \
-    --model dfine_l \
-    --task detect \
-    --names configs/datasets/coco.yml \
-    --output dfine_l_wrapped.pth
-```
-
-Most users should not need this path; use supported model names or checkpoints
-created by `model.train(...)`.
+If you are maintaining support for a new upstream checkpoint, see the maintainer
+tools in this repository. Most users should use supported model names or
+checkpoints created by `model.train(...)`.
 
 ## CUDA is not available
 
@@ -176,15 +163,15 @@ If you are on a Mac or a CPU-only machine, `torch.cuda.is_available()` returns `
 For CPU testing, let nitid choose the device automatically or use CPU:
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 
-model = DFINE("dfine_s", device="cpu")
+model = NITID("nitid1s", task="detect", device="cpu")
 ```
 
 For CLI usage:
 
 ```bash
-uv run dfine predict model=dfine_s source=image.jpg
+uv run dfine predict model=nitid1s task=detect source=image.jpg
 ```
 
 For GPU usage, run on a Linux or Windows machine with an NVIDIA GPU and working drivers.
@@ -206,13 +193,13 @@ pip install --extra-index-url https://pypi.nvidia.com tensorrt>=8.6
 Then export:
 
 ```bash
-uv run dfine export model=dfine_s format=tensorrt
+uv run dfine export model=nitid1s task=detect format=tensorrt
 ```
 
 If you do not need TensorRT, export to ONNX instead:
 
 ```bash
-uv run dfine export model=dfine_s format=onnx
+uv run dfine export model=nitid1s task=detect format=onnx
 ```
 
 See the [export guide](export.md) for export options and constraints.
@@ -260,7 +247,7 @@ Create the folder and download a model into it:
 
 ```bash
 mkdir -p models
-uv run dfine download model=dfine_s output=models
+uv run dfine download model=nitid1s task=detect output=models
 ```
 
 Then start the backend:

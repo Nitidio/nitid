@@ -19,10 +19,10 @@ Use the public `bugreport()` context manager to capture Python API operations in
 the same single-file format as the CLI's `--report` flag:
 
 ```python
-from dfine import DFINE, bugreport
+from dfine import NITID, bugreport
 
 with bugreport("training") as report:
-    model = DFINE("dfine_s")
+    model = NITID("nitid1s", task="detect")
     model.train(data="data.yaml")
 
 print(report.path)
@@ -38,7 +38,7 @@ One report can cover multiple operations:
 
 ```python
 with bugreport("full-experiment") as report:
-    model = DFINE("dfine_s")
+    model = NITID("nitid1s", task="detect")
     model.train(data="data.yaml")
     model.val(data="data.yaml")
     model.export(format="onnx")
@@ -47,31 +47,35 @@ with bugreport("full-experiment") as report:
 By default reports are written to `runs/bugreports`. Choose another directory
 with `bugreport("training", report_dir="reports")`.
 
-## `DFINE`
+## `NITID`
 
 ```python
-from dfine import DFINE
+from dfine import NITID
 ```
 
-The single public class. Instantiate with a path to a nitid-wrapped `.pth` checkpoint, or use a registry architecture name and select its official pretrained weights.
+The recommended public class. Instantiate with a path to a nitid-wrapped `.pth`
+checkpoint, or use a registry model name and task.
 
 ```python
-model = DFINE("dfine_s", device="cuda:0")
-model_coco = DFINE("dfine_s", weights="coco", device="cuda:0")
-segmenter = DFINE("dfine_s", task="segment", device="cuda:0")
-semantic = DFINE("semantic_best.pth", task="semantic", device="cuda:0")
-pose = DFINE("detrpose_n", task="pose", device="cuda:0")
+detector = NITID("nitid1s", task="detect", device="cuda:0")
+segmenter = NITID("nitid1s", task="segment", device="cuda:0")
+semantic = NITID("nitid1s", task="semantic", device="cuda:0")
+pose = NITID("nitid1s", task="pose", device="cuda:0")
+obb = NITID("nitid1s", task="obb", device="cuda:0")
 ```
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str \| Path` | `"dfine_l"` | Checkpoint path or architecture name (`dfine_n` through `dfine_x`; `detrpose_n` through `detrpose_x` for pose) |
-| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, `"semantic"` (`"sem_seg"` alias), or `"pose"`. Must match an explicit checkpoint's embedded task. |
-| `weights` | `str` | `"default"` | Detection: `"default"`/`"obj2coco"` or `"coco"`. Segmentation and pose: `"default"`/`"coco"`. Do not combine a non-default value with a checkpoint path. |
+| `model`   | `str \| Path` | `"nitid1l"` | Checkpoint path or registry model name such as `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`, or `nitid1x` |
+| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, `"semantic"` (`"sem_seg"` alias), `"pose"`, or `"obb"`. Must match an explicit checkpoint's embedded task. |
+| `weights` | `str` | `"default"` | Official weight variant for the selected model/task. Do not combine a non-default value with a checkpoint path. |
 | `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
 | `verbose` | `bool`| `True`  | Print load summary |
 
 If you pass an explicit device string, it is used as-is after normalization. Omitting `device` gives the Ultralytics-style smart default.
+
+`DFINE(...)` remains available for existing code and D-FINE-family model names,
+but new code should prefer `NITID(...)`.
 
 ---
 
@@ -148,6 +152,7 @@ playback stays close to the original duration.
 | `path`     | `str`           | Source path or descriptor |
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
+| `obb`      | `OBB \| None` | Oriented boxes for `task="obb"` |
 | `masks`    | `Masks \| None` | Full-resolution instance masks for `task="segment"` |
 | `keypoints` | `Keypoints \| None` | Per-instance keypoints for `task="pose"` |
 | `semantic` | `SemanticMask \| None` | Original-resolution class map for `task="semantic"`; alias of `semantic_mask` |
@@ -175,6 +180,10 @@ r.masks.xy         # absolute polygon coordinates
 r.masks.xyn        # normalized polygon coordinates
 r.keypoints.xy     # float [N, K, 2], pose only
 r.keypoints.conf   # optional float [N, K], pose only
+r.obb.xywhr        # float [N, 5], OBB only: cx, cy, w, h, angle
+r.obb.xyxyxyxy     # float [N, 8], OBB only: four polygon corners
+r.obb.conf         # float [N], OBB confidence
+r.obb.cls          # int [N], OBB class IDs
 len(r)              # number of detections
 ```
 
@@ -220,7 +229,8 @@ class_id x_center y_center width height
 
 For detection, box values are normalized from `0` to `1`. For instance
 segmentation, each line contains the class followed by normalized polygon
-coordinates. Use `save_conf=True` to append the confidence score:
+coordinates. For OBB, each line contains class plus normalized four-corner
+YOLO-OBB coordinates. Use `save_conf=True` to append the confidence score:
 
 ```python
 r.save_txt("predictions.txt", save_conf=True)
@@ -531,7 +541,7 @@ URI. See [ONVIF cameras](onvif.md) for networking and authentication details.
 
 ### `train()`
 
-Fine-tune on a custom COCO-format dataset. See [fine_tuning.md](fine_tuning.md).
+Fine-tune on a custom dataset. See [fine_tuning.md](fine_tuning.md).
 
 ```python
 metrics = model.train(
@@ -600,7 +610,7 @@ Training controls added to the public API:
 | `translate` | `float = 0.1` | Random translation gain. |
 | `crop` | `float = 0.0` | Crop probability and maximum edge fraction. |
 | `hsv_h`, `hsv_s`, `hsv_v` | `0.015`, `0.7`, `0.4` | Hue, saturation, and brightness jitter gains. |
-| `mosaic`, `mixup` | `float = 0.0` | Experimental probabilities; disabled pending positive D-FINE benchmarks. |
+| `mosaic`, `mixup` | `float = 0.0` | Experimental probabilities. Not supported for semantic, pose, or OBB. |
 | `close_mosaic` | `int = 10` | Turn mosaic off for the final N epochs. |
 | `time` | `float \| None = None` | Training duration in hours; when set, it overrides `epochs`. |
 | `save_dir` | `str \| Path \| None = None` | Exact requested run directory. |
@@ -661,7 +671,9 @@ training or loading different weights invalidates that cache automatically.
 
 Semantic ONNX/OpenVINO exports have one output named `semantic_logits` with
 shape `[B, C, H, W]`. Apply softmax and argmax in the consuming runtime. Pose
-ONNX/OpenVINO exports return `(labels, boxes, scores, keypoints)`.
+ONNX/OpenVINO exports return `(labels, boxes, scores, keypoints)`. OBB exports
+return `(labels, boxes, scores)`, with OBB boxes shaped `[B, topk, 5]` in
+`cx, cy, w, h, angle` format.
 
 | Argument    | Default  | Description |
 |-------------|----------|-------------|
@@ -682,7 +694,7 @@ ONNX/OpenVINO exports return `(labels, boxes, scores, keypoints)`.
 ```python
 model.names   # {0: "person", 1: "bicycle", ...}  — class index → name
 model.device  # "cpu" or "cuda:0"                 — device the model lives on
-model.task    # "detect", "segment", "semantic", or "pose"
+model.task    # "detect", "segment", "semantic", "pose", or "obb"
 ```
 
 `names` is the class mapping embedded in the checkpoint.
@@ -721,7 +733,7 @@ the rare case profiling raises an exception.
 
 ```python
 try:
-    model = DFINE("my_model.pth")
+    model = NITID("my_model.pth", task="detect")
 except FileNotFoundError:
     print("Checkpoint not found — check the path")
 ```

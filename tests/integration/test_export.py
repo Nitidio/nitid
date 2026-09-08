@@ -215,6 +215,76 @@ def test_export_pose_onnxruntime_outputs_keypoint_contract(tiny_pose_checkpoint,
     )
 
 
+def test_export_obb_onnx_returns_rotated_boxes(tmp_path):
+    import onnx
+
+    from dfine import NITID
+
+    model = NITID("nitid1n", task="obb", weights=None, device="cpu", verbose=False)
+    output = tmp_path / "obb.onnx"
+
+    out = model.export(
+        format="onnx",
+        imgsz=256,
+        simplify=False,
+        output=output,
+        verbose=False,
+    )
+
+    graph = onnx.load(str(out)).graph
+    assert [value.name for value in graph.output] == ["labels", "boxes", "scores"]
+    boxes = next(value for value in graph.output if value.name == "boxes")
+    assert boxes.type.tensor_type.shape.dim[-1].dim_value == 5
+
+
+def test_export_obb_onnxruntime_outputs_obb_contract(tmp_path):
+    import torch
+
+    from dfine import NITID
+
+    pytest.importorskip("onnxruntime", reason="onnxruntime not installed")
+    model = NITID("nitid1n", task="obb", weights=None, device="cpu", verbose=False)
+    output = tmp_path / "obb_parity.onnx"
+    inputs = torch.rand(1, 3, 256, 256, generator=torch.Generator().manual_seed(17))
+
+    out = model.export(
+        format="onnx",
+        imgsz=256,
+        simplify=False,
+        output=output,
+        verbose=False,
+    )
+
+    actual = _onnxruntime_outputs(out, inputs)
+
+    assert len(actual) == 3
+    assert actual[0].shape == (1, 300)
+    assert actual[1].shape == (1, 300, 5)
+    assert actual[2].shape == (1, 300)
+    assert all(torch.isfinite(torch.from_numpy(value)).all() for value in actual)
+
+
+def test_export_obb_does_not_break_subsequent_prediction(tmp_path):
+    import numpy as np
+
+    from dfine import NITID
+
+    model = NITID("nitid1n", task="obb", weights=None, device="cpu", verbose=False)
+    model.export(
+        format="onnx",
+        imgsz=256,
+        simplify=False,
+        output=tmp_path / "obb.onnx",
+        verbose=False,
+    )
+
+    result = model.predict(np.zeros((128, 128, 3), dtype=np.uint8), imgsz=256, conf=1.0)[0]
+
+    assert result.obb is not None
+    assert result.obb.data.shape == (0, 7)
+    assert result.boxes is None
+
+
 def test_semantic_export_rejects_unvalidated_formats(tiny_semantic_checkpoint):
     from dfine import DFINE
 

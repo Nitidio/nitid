@@ -421,6 +421,11 @@ class DFINETrainer:
         from dfine.tasks import normalize_task
 
         task = normalize_task(str(self.cfg.get("task", "detect")))
+        if task == "obb":
+            if imgsz < 256:
+                raise ValueError("OBB training requires imgsz >= 256 for the RiO-DETR decoder")
+            if mosaic > 0 or mixup > 0:
+                raise ValueError("OBB training does not support mosaic or mixup augmentations")
         semantic_config = self.cfg.get("SemanticSegmentation", {})
         ignore_index = (
             int(semantic_config.get("ignore_index", 255))
@@ -983,7 +988,11 @@ class DFINETrainer:
         augment=None,
     ):
         from dfine.tasks import normalize_task
-        from dfine.utils.data import build_detection_dataloader, build_semantic_dataloader
+        from dfine.utils.data import (
+            build_detection_dataloader,
+            build_obb_dataloader,
+            build_semantic_dataloader,
+        )
 
         task = normalize_task(str(self.cfg.get("task", "detect")))
         if task == "semantic":
@@ -998,6 +1007,21 @@ class DFINETrainer:
                 cache=cache,
                 seed=seed,
                 deterministic=deterministic,
+                fraction=fraction,
+                augment=augment,
+            )
+        if task == "obb":
+            return build_obb_dataloader(
+                data,
+                split="train",
+                imgsz=imgsz,
+                batch_size=batch,
+                workers=workers,
+                cache=cache,
+                seed=seed,
+                deterministic=deterministic,
+                classes=classes,
+                single_cls=single_cls,
                 fraction=fraction,
                 augment=augment,
             )
