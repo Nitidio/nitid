@@ -87,8 +87,9 @@ def test_pose_criterion_forward() -> None:
 
     bs = 2
     num_queries = 10
+    num_classes = cfg["DETRPoseDecoder"]["num_classes"]
     outputs = {
-        "pred_logits": torch.randn(bs, num_queries, 1),
+        "pred_logits": torch.randn(bs, num_queries, num_classes),
         "pred_keypoints": torch.rand(bs, num_queries, 34),
     }
     targets = [
