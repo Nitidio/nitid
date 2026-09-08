@@ -199,6 +199,9 @@ class DFINEExporter:
 
         task = str(self.cfg.get("task", "detect")).lower()
         is_semantic = task == "semantic"
+        is_obb = task == "obb"
+        if is_obb:
+            self._prepare_obb_export_geometry(self.model, postprocessor, imgsz)
         wrapped_model = DeployModel(self.model, postprocessor, semantic=is_semantic)
         wrapped_model.eval()
 
@@ -246,6 +249,20 @@ class DFINEExporter:
             ),
             dynamic_axes=dynamic_axes,
         )
+
+    def _prepare_obb_export_geometry(self, model, postprocessor, imgsz: int) -> None:
+        """Align RiO-DETR OBB static anchors/postprocessor scaling with export image size."""
+        input_shape = [imgsz, imgsz]
+        for module in model.modules():
+            if not hasattr(module, "_generate_anchors"):
+                continue
+            if hasattr(module, "eval_spatial_size"):
+                module.eval_spatial_size = input_shape
+            anchors, valid_mask = module._generate_anchors(device=torch.device(self.device))
+            module.anchors = anchors
+            module.valid_mask = valid_mask
+        if hasattr(postprocessor, "input_shape"):
+            postprocessor.input_shape = input_shape
 
     # ── TensorRT ─────────────────────────────────────────────────────────────
 
