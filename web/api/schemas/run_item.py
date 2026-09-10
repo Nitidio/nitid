@@ -24,6 +24,7 @@ class RunItemOut(BaseModel):
     source_path: str
     result_snapshot_path: str | None
     detections: list[DetectionEntry]
+    speed: dict[str, float] | None = None
     frame_idx: int | None
 
     model_config = ConfigDict(from_attributes=True)

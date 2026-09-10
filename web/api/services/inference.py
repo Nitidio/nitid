@@ -13,16 +13,20 @@ from web.api.models.run_item import RunItem
 from web.api.schemas.run import RunCreate
 
 # Lazy import of DFINE — loaded on first model access, not at module import time.
-_model_cache: dict[str, object] = {}
+_model_cache: dict[tuple[str, str, str | None], object] = {}
 
 
-def get_model(model_name: str):
+def get_model(model_name: str, backend: str = "torch", device: str | None = None):
     from dfine import DFINE
 
     model_path = str(Path(settings.models_dir) / model_name)
-    if model_path not in _model_cache:
-        _model_cache[model_path] = DFINE(model_path, device="cuda", verbose=False)
-    return _model_cache[model_path]
+    cache_key = (model_path, backend, device)
+    if cache_key not in _model_cache:
+        # device=None lets DFINE apply its own default: auto-select cuda when
+        # available (backend="torch") or prefer NPU, then GPU, then CPU
+        # (backend="openvino") — do not hardcode a device here.
+        _model_cache[cache_key] = DFINE(model_path, backend=backend, device=device, verbose=False)
+    return _model_cache[cache_key]
 
 
 def _snapshot_path(run_id: int, item_idx: int) -> Path:
@@ -44,7 +48,7 @@ def run_inference(
         run.status = RunStatus.running
         db.commit()
 
-        model = get_model(params.model_name)
+        model = get_model(params.model_name, backend=params.backend, device=params.device)
         classes = params.classes if params.classes else None
 
         if input_type == "images":
@@ -89,6 +93,7 @@ def _process_images(db, run_id, paths, model, params, classes):
             source_path=str(paths[idx]),
             result_snapshot_path=snap.name,
             detections_json=json.dumps(result.to_json()),
+            speed_json=json.dumps(result.speed),
         )
         db.add(item)
         db.commit()
@@ -119,6 +124,7 @@ def _process_video(db, run_id, video_path, model, params, classes):
                 source_path=str(video_path),
                 result_snapshot_path=snap.name,
                 detections_json=json.dumps(result.to_json()),
+                speed_json=json.dumps(result.speed),
                 frame_idx=frame_idx,
             )
             db.add(item)
