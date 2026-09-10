@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from web.api.database import Base
+
+if TYPE_CHECKING:
+    from web.api.models.run_item import RunItem
 
 
 class RunStatus(str, enum.Enum):

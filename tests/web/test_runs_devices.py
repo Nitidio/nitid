@@ -77,6 +77,8 @@ def test_create_run_on_torch_cpu_completes_with_detections_and_speed(
     item = body["items"][0]
     assert item["speed"] is not None
     assert "inference" in item["speed"]
+    assert item["cpu_percent"] is None or isinstance(item["cpu_percent"], float)
+    assert item["device_memory_kib"] is None  # torch backend never reports device memory
 
 
 def test_create_run_on_openvino_cpu_completes(client, auth_headers, tiny_web_checkpoint):
@@ -106,3 +108,5 @@ def test_create_run_on_openvino_cpu_completes(client, auth_headers, tiny_web_che
     assert detail["status"] == "done", detail.get("error_msg")
     assert detail["backend"] == "openvino"
     assert detail["items"][0]["speed"] is not None
+    # device="CPU" never has an associated GPU/NPU memory footprint
+    assert detail["items"][0]["device_memory_kib"] is None

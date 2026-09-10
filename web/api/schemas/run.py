@@ -81,9 +81,11 @@ class RunDetail(RunOut):
                         detections=detections,
                         speed=json.loads(item.speed_json) if item.speed_json else None,
                         frame_idx=item.frame_idx,
+                        cpu_percent=item.cpu_percent,
+                        device_memory_kib=item.device_memory_kib,
                     )
                 )
-            base = RunOut._parse_fields(data)  # type: ignore[attr-defined]
+            base = RunOut._parse_fields(data)  # type: ignore[operator]
             base["items"] = items_out
             return base
         return data

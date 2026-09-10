@@ -11,6 +11,7 @@ from web.api.config import settings
 from web.api.models.run import Run, RunStatus
 from web.api.models.run_item import RunItem
 from web.api.schemas.run import RunCreate
+from web.api.services.telemetry import sample_cpu_percent, sample_device_memory_kib
 
 # Lazy import of DFINE — loaded on first model access, not at module import time.
 _model_cache: dict[tuple[str, str, str | None], object] = {}
@@ -77,6 +78,7 @@ def run_inference(
 
 
 def _process_images(db, run_id, paths, model, params, classes):
+    sample_cpu_percent()  # prime the "since last call" window
     results = model.predict(
         source=[str(p) for p in paths],
         conf=params.conf,
@@ -84,6 +86,8 @@ def _process_images(db, run_id, paths, model, params, classes):
         classes=classes,
         verbose=False,
     )
+    cpu_percent = sample_cpu_percent()
+    device_memory_kib = sample_device_memory_kib(params.backend, params.device)
     for idx, result in enumerate(results):
         snap = _snapshot_path(run_id, idx)
         annotated = result.plot()
@@ -94,6 +98,8 @@ def _process_images(db, run_id, paths, model, params, classes):
             result_snapshot_path=snap.name,
             detections_json=json.dumps(result.to_json()),
             speed_json=json.dumps(result.speed),
+            cpu_percent=cpu_percent,
+            device_memory_kib=device_memory_kib,
         )
         db.add(item)
         db.commit()
@@ -108,6 +114,7 @@ def _process_video(db, run_id, video_path, model, params, classes):
         if not ret:
             break
         if frame_idx % params.frame_step == 0:
+            sample_cpu_percent()  # prime the "since last call" window
             # frame is HWC BGR numpy array — DFINE accepts this directly
             results = model.predict(
                 source=frame,
@@ -116,6 +123,8 @@ def _process_video(db, run_id, video_path, model, params, classes):
                 classes=classes,
                 verbose=False,
             )
+            cpu_percent = sample_cpu_percent()
+            device_memory_kib = sample_device_memory_kib(params.backend, params.device)
             result = results[0]
             snap = _snapshot_path(run_id, item_idx)
             cv2.imwrite(str(snap), result.plot())
@@ -126,6 +135,8 @@ def _process_video(db, run_id, video_path, model, params, classes):
                 detections_json=json.dumps(result.to_json()),
                 speed_json=json.dumps(result.speed),
                 frame_idx=frame_idx,
+                cpu_percent=cpu_percent,
+                device_memory_kib=device_memory_kib,
             )
             db.add(item)
             db.commit()
