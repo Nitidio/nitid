@@ -561,9 +561,13 @@ def test_public_train_runs_error_callbacks_and_reraises_original(monkeypatch, ti
     model = object.__new__(DFINE)
     model._model = tiny_model
     model._cfg = {}
+    model._backend = "torch"
     model._device_str = "cpu"
     model._names = {}
     model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
 
     with pytest.raises(RuntimeError) as caught:
         model.train(data="dataset.yaml")

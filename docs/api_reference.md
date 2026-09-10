@@ -69,13 +69,47 @@ obb = NITID("nitid1s", task="obb", device="cuda:0")
 | `model`   | `str \| Path` | `"nitid1l"` | Checkpoint path or registry model name such as `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`, or `nitid1x` |
 | `task` | `str` | `"detect"` | `"detect"`, `"segment"`, `"semantic"` (`"sem_seg"` alias), `"pose"`, or `"obb"`. Must match an explicit checkpoint's embedded task. |
 | `weights` | `str` | `"default"` | Official weight variant for the selected model/task. Do not combine a non-default value with a checkpoint path. |
-| `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
+| `backend` | `str` | `"torch"` | `"torch"` (PyTorch, CPU/CUDA) or `"openvino"` (OpenVINO Runtime, CPU/Intel iGPU/Intel NPU). Changes what `device` means — see below. |
+| `device`  | `str \| int \| None` | `None` | For `backend="torch"`: a PyTorch device selector (`"cuda"`, `"cpu"`, `"cuda:N"`); omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. For `backend="openvino"`: an OpenVINO device string (`"CPU"`, `"GPU"` for Intel integrated GPU, `"NPU"`), or `"auto"`/omit to prefer NPU, then GPU, then CPU. |
 | `verbose` | `bool`| `True`  | Print load summary |
 
 If you pass an explicit device string, it is used as-is after normalization. Omitting `device` gives the Ultralytics-style smart default.
 
 `DFINE(...)` remains available for existing code and D-FINE-family model names,
 but new code should prefer `NITID(...)`.
+
+### Intel NPU / integrated GPU inference (OpenVINO backend)
+
+```python
+from dfine import NITID
+
+model = NITID("nitid1s", backend="openvino", device="NPU")   # Intel NPU
+model = NITID("nitid1s", backend="openvino", device="GPU")   # Intel integrated GPU
+model = NITID("nitid1s", backend="openvino", device="AUTO")  # prefer NPU, then GPU, then CPU
+results = model.predict("image.jpg", conf=0.5)
+```
+
+Requires the OpenVINO extra: `uv sync --extra openvino`. Under the hood, the
+deployed model is traced to a raw (non-postprocessed) OpenVINO IR and compiled
+for the requested device the first time `predict()`/`track()` is called at a
+given `imgsz`; the compiled model is cached per `imgsz` on the instance, so
+only the first call at a new `imgsz` pays the compile cost. As with the torch
+backend, `imgsz` must match the checkpoint's `eval_spatial_size` (usually
+`640`) for tasks other than `"obb"` — the decoder's anchors are static for a
+given spatial size.
+
+`backend="openvino"` is inference-only: `train()` and `val()` raise a clear
+error, and every other method (`export()`, `info()`) is unaffected by it —
+they keep running on PyTorch/CPU regardless of which backend `predict()`
+uses. Requesting a `device` OpenVINO doesn't report as available (check
+`dfine.nn.openvino_runtime.list_openvino_devices()`) raises a `ValueError`
+naming what's actually available, instead of an unexplained backend error.
+
+Note the naming overlap: this constructor-level `backend` selects the
+*compute* backend (PyTorch vs. OpenVINO). It is unrelated to `predict()`'s
+own `backend` argument below, which selects the *video source* backend
+(`"opencv"` vs. `"gstreamer"`) — the two are independent and can be combined
+freely, e.g. `NITID(..., backend="openvino", device="NPU").predict(source, backend="gstreamer")`.
 
 ---
 

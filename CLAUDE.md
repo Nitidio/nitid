@@ -33,6 +33,7 @@ uv run mypy dfine tools
 - `dfine/exporter.py`: ONNX, OpenVINO, TorchScript, and TensorRT export.
 - `dfine/results.py`: public `Results`, `Boxes`, and `Masks` types.
 - `dfine/nn/architecture/`: backbone, encoder, transformer decoder, and mask head.
+- `dfine/nn/openvino_runtime.py`: OpenVINO Runtime inference backend (Intel CPU/iGPU/NPU), used when `DFINE`/`NITID` is constructed with `backend="openvino"`.
 - `dfine/nn/losses/`: matching and detection/mask criteria.
 - `dfine/nn/configs.py`: supported model-size configurations.
 - `dfine/utils/data.py`: COCO and YOLO detection/segmentation datasets.

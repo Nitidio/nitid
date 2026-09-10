@@ -86,6 +86,7 @@ class NITID(DFINE):
         *,
         task: str = "detect",
         weights: str | None = "default",
+        backend: str = "torch",
         device: str | int | None = None,
         verbose: bool = True,
     ) -> None:
@@ -94,6 +95,11 @@ class NITID(DFINE):
             if weights is None or (
                 isinstance(weights, str) and weights.lower().replace("-", "_") in {"none", "random"}
             ):
+                if backend == "openvino":
+                    raise ValueError(
+                        "backend='openvino' is not supported for randomly-initialized OBB "
+                        "models — there is no pretrained checkpoint to trace"
+                    )
                 self._init_random_obb(
                     model=model,
                     backend_model=backend_model,
@@ -106,6 +112,7 @@ class NITID(DFINE):
                     backend_model,
                     task=task,
                     weights=weights,
+                    backend=backend,
                     device=device,
                     verbose=verbose,
                 )
@@ -117,6 +124,7 @@ class NITID(DFINE):
             backend_model,
             task=task,
             weights=weights,
+            backend=backend,
             device=device,
             verbose=verbose,
         )
@@ -134,6 +142,9 @@ class NITID(DFINE):
         from dfine.nn.native_build import build_native_model
         from dfine.nn.rio import DOTA_OBB_NAMES, make_rio_obb_config
 
+        self._backend = "torch"
+        self._openvino_device: str | None = None
+        self._openvino_cache: dict[int, Any] = {}
         self._device_str: str = resolve_device(device)
         self.verbose = verbose
         self._cfg: dict[str, Any] = make_rio_obb_config(
