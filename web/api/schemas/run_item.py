@@ -26,5 +26,7 @@ class RunItemOut(BaseModel):
     detections: list[DetectionEntry]
     speed: dict[str, float] | None = None
     frame_idx: int | None
+    cpu_percent: float | None = None
+    device_memory_kib: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

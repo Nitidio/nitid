@@ -82,6 +82,7 @@ web = [
     "bcrypt>=4.0",
     "python-jose[cryptography]>=3.3",
     "pydantic-settings>=2.0",
+    "psutil>=5.9",
 ]
 
 [project.scripts]
