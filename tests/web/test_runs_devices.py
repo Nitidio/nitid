@@ -4,6 +4,9 @@ with backend/device selection. First test coverage this app has had."""
 from __future__ import annotations
 
 import io
+import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from PIL import Image
@@ -110,3 +113,42 @@ def test_create_run_on_openvino_cpu_completes(client, auth_headers, tiny_web_che
     assert detail["items"][0]["speed"] is not None
     # device="CPU" never has an associated GPU/NPU memory footprint
     assert detail["items"][0]["device_memory_kib"] is None
+
+
+def test_concurrent_runs_against_the_same_device_all_complete(
+    client, auth_headers, tiny_web_checkpoint
+):
+    """Batch/parallel job submission races several requests against the same
+    (model, backend, device) cache key — this is exactly the scenario the
+    get_model() lock exists for."""
+    params = json.dumps(
+        {
+            "model_name": tiny_web_checkpoint,
+            "conf": 0.01,
+            "imgsz": 640,
+            "backend": "torch",
+            "device": "cpu",
+        }
+    )
+
+    def submit(seed: int) -> int:
+        files = [("files", (f"frame-{seed}.jpg", _fake_image_bytes(seed=seed), "image/jpeg"))]
+        response = client.post("/runs", headers=auth_headers, files=files, data={"params": params})
+        assert response.status_code == 202
+        return response.json()["id"]
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        run_ids = list(pool.map(submit, range(6)))
+
+    deadline = time.monotonic() + 30
+    pending = set(run_ids)
+    while pending and time.monotonic() < deadline:
+        for run_id in list(pending):
+            detail = client.get(f"/runs/{run_id}", headers=auth_headers).json()
+            if detail["status"] not in ("pending", "running"):
+                assert detail["status"] == "done", detail.get("error_msg")
+                pending.discard(run_id)
+        if pending:
+            time.sleep(0.2)
+
+    assert not pending, f"runs still not done after deadline: {pending}"

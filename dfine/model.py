@@ -5,6 +5,7 @@ DFINE — public entry point. Mirrors the ultralytics.YOLO interface.
 from __future__ import annotations
 
 import copy
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Generator, Union
 
@@ -85,6 +86,9 @@ class DFINE:
         self._deployed_model: nn.Module | None = None
         self._deployed_model_device: str | None = None
         self._openvino_cache: dict[int, Any] = {}
+        # RLock: _get_openvino_model() calls _get_deployed_model() while
+        # already holding this lock, from the same thread.
+        self._model_lock = threading.RLock()
         from dfine.tasks import normalize_task
 
         self._task = normalize_task(task)
@@ -681,19 +685,26 @@ class DFINE:
 
     def _get_openvino_model(self, imgsz: int):
         """Return the OpenVINO-compiled raw model for `imgsz`, compiling and
-        caching it on first use (OpenVINO compiles per fixed input shape)."""
+        caching it on first use (OpenVINO compiles per fixed input shape).
+        Locked so concurrent callers (e.g. parallel requests against a
+        shared DFINE instance) don't each compile the same shape."""
         cached = self._openvino_cache.get(imgsz)
         if cached is not None:
             return cached
 
-        from dfine.exporter import DFINEExporter
-        from dfine.nn.openvino_runtime import compile_raw_openvino
+        with self._model_lock:
+            cached = self._openvino_cache.get(imgsz)
+            if cached is not None:
+                return cached
 
-        exporter = DFINEExporter(self._get_deployed_model(), self._cfg, device=self._device_str)
-        assert self._openvino_device is not None
-        compiled = compile_raw_openvino(exporter, imgsz=imgsz, ov_device=self._openvino_device)
-        self._openvino_cache[imgsz] = compiled
-        return compiled
+            from dfine.exporter import DFINEExporter
+            from dfine.nn.openvino_runtime import compile_raw_openvino
+
+            exporter = DFINEExporter(self._get_deployed_model(), self._cfg, device=self._device_str)
+            assert self._openvino_device is not None
+            compiled = compile_raw_openvino(exporter, imgsz=imgsz, ov_device=self._openvino_device)
+            self._openvino_cache[imgsz] = compiled
+            return compiled
 
     # ── Internal ────────────────────────────────────────────────────────────
 
@@ -704,19 +715,24 @@ class DFINE:
         self._openvino_cache.clear()
 
     def _get_deployed_model(self, device: str | None = None) -> nn.Module:
-        """Return a cached deployed copy without mutating the trainable model."""
+        """Return a cached deployed copy without mutating the trainable model.
+        Locked so concurrent callers don't each deep-copy/deploy the model."""
         target_device = device or self._device_str
-        if self._deployed_model is None or self._deployed_model_device != target_device:
-            deployed = copy.deepcopy(self._model)
-            deployed.to(target_device)
-            deployed.eval()
-            deploy_fn = getattr(deployed, "deploy", None)
-            if callable(deploy_fn) and not bool(getattr(deployed, "_deployed", False)):
-                deploy_fn()
-                setattr(deployed, "_deployed", True)
-            self._deployed_model = deployed
-            self._deployed_model_device = target_device
-        return self._deployed_model
+        if self._deployed_model is not None and self._deployed_model_device == target_device:
+            return self._deployed_model
+
+        with self._model_lock:
+            if self._deployed_model is None or self._deployed_model_device != target_device:
+                deployed = copy.deepcopy(self._model)
+                deployed.to(target_device)
+                deployed.eval()
+                deploy_fn = getattr(deployed, "deploy", None)
+                if callable(deploy_fn) and not bool(getattr(deployed, "_deployed", False)):
+                    deploy_fn()
+                    setattr(deployed, "_deployed", True)
+                self._deployed_model = deployed
+                self._deployed_model_device = target_device
+            return self._deployed_model
 
     def _load(self, path: str, *, task: str, weights: str = "default") -> None:
         """Load checkpoint, deserialise config, build model."""
