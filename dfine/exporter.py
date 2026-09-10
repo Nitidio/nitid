@@ -11,8 +11,20 @@ from pathlib import Path
 
 import torch
 
+from dfine.tasks import normalize_task
 from dfine.utils.logging import LOGGER
 from dfine.utils.runs import atomic_output_path, resolve_run_dir, write_run_metadata
+
+# Raw (undecoded) model output names per task — the dict keys the deployed
+# model itself returns, as opposed to the postprocessed (labels, boxes,
+# scores) contract used by the public export() formats.
+_RAW_OUTPUT_NAMES: dict[str, list[str]] = {
+    "detect": ["pred_logits", "pred_boxes"],
+    "obb": ["pred_logits", "pred_boxes"],
+    "segment": ["pred_logits", "pred_boxes", "pred_masks"],
+    "pose": ["pred_logits", "pred_boxes", "pred_keypoints"],
+    "semantic": ["sem_seg_logits"],
+}
 
 
 class DeployModel(torch.nn.Module):
@@ -252,6 +264,12 @@ class DFINEExporter:
 
     def _prepare_obb_export_geometry(self, model, postprocessor, imgsz: int) -> None:
         """Align RiO-DETR OBB static anchors/postprocessor scaling with export image size."""
+        self._prepare_obb_anchors(model, imgsz)
+        if hasattr(postprocessor, "input_shape"):
+            postprocessor.input_shape = [imgsz, imgsz]
+
+    def _prepare_obb_anchors(self, model, imgsz: int) -> None:
+        """Refresh RiO-DETR OBB static anchors on `model` for `imgsz`."""
         input_shape = [imgsz, imgsz]
         for module in model.modules():
             if not hasattr(module, "_generate_anchors"):
@@ -261,8 +279,21 @@ class DFINEExporter:
             anchors, valid_mask = module._generate_anchors(device=torch.device(self.device))
             module.anchors = anchors
             module.valid_mask = valid_mask
-        if hasattr(postprocessor, "input_shape"):
-            postprocessor.input_shape = input_shape
+
+    # ── Raw (non-postprocessed) trace — used by the OpenVINO runtime ────────
+
+    def prepare_raw_trace(self, imgsz: int) -> tuple[torch.nn.Module, list[str]]:
+        """
+        Return ``(model, output_names)`` for a raw trace of the deployed model
+        at ``imgsz`` — its own ``pred_logits``/``pred_boxes``/etc. dict, not
+        the postprocessed ``(labels, boxes, scores)`` graph produced by the
+        public ``export()``. Internal use only: called by
+        ``dfine.nn.openvino_runtime.compile_raw_openvino``.
+        """
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        if task == "obb":
+            self._prepare_obb_anchors(self.model, imgsz)
+        return self.model, _RAW_OUTPUT_NAMES[task]
 
     # ── TensorRT ─────────────────────────────────────────────────────────────
 

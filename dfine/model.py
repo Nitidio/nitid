@@ -29,7 +29,16 @@ class DFINE:
         model:   D-FINE architecture name or path to a wrapped .pth checkpoint.
         task:    ``"detect"``, ``"segment"``, ``"semantic"`` (alias ``"sem_seg"``), or ``"pose"``.
         weights: Official weight variant: ``default``, ``obj2coco``, or ``coco``.
-        device:  "cuda", "cpu", "cuda:N", or None for auto-select.
+        backend: ``"torch"`` (default) or ``"openvino"``. ``"openvino"`` routes
+                 ``predict()``/``track()`` through OpenVINO Runtime, enabling
+                 Intel NPU and integrated GPU inference; every other method
+                 (``train``, ``val``, ``export``, ``info``) keeps running on
+                 PyTorch/CPU regardless of `backend`.
+        device:  Meaning depends on `backend`. For ``backend="torch"``: "cuda",
+                 "cpu", "cuda:N", or None for auto-select. For
+                 ``backend="openvino"``: an OpenVINO device string ("CPU",
+                 "GPU" for Intel integrated GPU, "NPU"), or "auto"/None to
+                 prefer NPU, then GPU, then CPU.
         verbose: Print model info on load.
 
     Example:
@@ -37,6 +46,10 @@ class DFINE:
         results = model("image.jpg", conf=0.5)
         model.train(data="coco.yaml", epochs=50)
         model.export(format="tensorrt")
+
+        # Intel NPU / integrated GPU inference via OpenVINO Runtime:
+        model = DFINE("dfine_l", backend="openvino", device="NPU")
+        results = model("image.jpg", conf=0.5)
     """
 
     def __init__(
@@ -45,10 +58,24 @@ class DFINE:
         *,
         task: str = "detect",
         weights: str = "default",
+        backend: str = "torch",
         device: str | int | None = None,
         verbose: bool = True,
     ) -> None:
-        self._device_str: str = resolve_device(device)
+        if backend not in ("torch", "openvino"):
+            raise ValueError(f"backend must be 'torch' or 'openvino', got {backend!r}")
+        self._backend = backend
+        if backend == "openvino":
+            from dfine.nn.openvino_runtime import resolve_openvino_device
+
+            # Fail fast at construction, not on the first predict() call.
+            self._openvino_device: str | None = resolve_openvino_device(
+                device if isinstance(device, str) else None
+            )
+            self._device_str: str = "cpu"
+        else:
+            self._openvino_device = None
+            self._device_str = resolve_device(device)
         self.verbose = verbose
         self._model: nn.Module
         self._cfg: dict[str, Any]
@@ -57,6 +84,7 @@ class DFINE:
         self._weights: str | None = None
         self._deployed_model: nn.Module | None = None
         self._deployed_model_device: str | None = None
+        self._openvino_cache: dict[int, Any] = {}
         from dfine.tasks import normalize_task
 
         self._task = normalize_task(task)
@@ -105,7 +133,7 @@ class DFINE:
         Returns list[Results] when stream=False,
         Generator[Results] when stream=True.
         """
-        return self.predictor.run(
+        return self._predictor_for(imgsz).run(
             source,
             conf=conf,
             mask_threshold=mask_threshold,
@@ -173,7 +201,7 @@ class DFINE:
         if self.task != "detect":
             raise ValueError("track() currently supports task='detect' only")
 
-        return DFINETracker(self.predictor).run(
+        return DFINETracker(self._predictor_for(imgsz)).run(
             source,
             tracker=tracker,
             tracker_kwargs=tracker_kwargs,
@@ -267,6 +295,10 @@ class DFINE:
         mlflow: bool | dict[str, Any] = False,
     ) -> dict:
         """Fine-tune on a custom dataset. Returns final metrics plus per-epoch history."""
+        if self._backend == "openvino":
+            raise ValueError(
+                "train() requires backend='torch' — the openvino backend is inference-only"
+            )
         from dfine.nn.transfer import adapt_model_to_classes
         from dfine.trainer import DFINETrainer
         from dfine.utils.data import load_data_yaml, normalize_names
@@ -448,6 +480,10 @@ class DFINE:
         verbose: bool = True,
     ) -> dict:
         """Evaluate on val/test split. Returns mAP50, mAP50-95, etc."""
+        if self._backend == "openvino":
+            raise ValueError(
+                "val() requires backend='torch' — the openvino backend is inference-only"
+            )
         from dfine.utils.runs import resolve_run_dir, write_run_metadata
         from dfine.validator import DFINEValidator
 
@@ -598,7 +634,16 @@ class DFINE:
 
     @property
     def device(self) -> str:
+        """Effective compute device: an OpenVINO device string for
+        `backend="openvino"`, otherwise the torch device string."""
+        if self._backend == "openvino":
+            assert self._openvino_device is not None
+            return self._openvino_device
         return self._device_str
+
+    @property
+    def backend(self) -> str:
+        return self._backend
 
     @property
     def task(self) -> str:
@@ -611,8 +656,22 @@ class DFINE:
 
     @property
     def predictor(self):
+        """Predictor built for the default 640 imgsz. `predict()`/`track()`
+        build one sized to the requested `imgsz` instead — for
+        `backend="openvino"` with a non-default `imgsz`, prefer those over
+        this property."""
+        return self._predictor_for(640)
+
+    def _predictor_for(self, imgsz: int):
         from dfine.predictor import DFINEPredictor
 
+        if self._backend == "openvino":
+            return DFINEPredictor(
+                self._get_openvino_model(imgsz),
+                self._cfg,
+                "cpu",
+                self._names,
+            )
         return DFINEPredictor(
             self._get_deployed_model(),
             self._cfg,
@@ -620,12 +679,29 @@ class DFINE:
             self._names,
         )
 
+    def _get_openvino_model(self, imgsz: int):
+        """Return the OpenVINO-compiled raw model for `imgsz`, compiling and
+        caching it on first use (OpenVINO compiles per fixed input shape)."""
+        cached = self._openvino_cache.get(imgsz)
+        if cached is not None:
+            return cached
+
+        from dfine.exporter import DFINEExporter
+        from dfine.nn.openvino_runtime import compile_raw_openvino
+
+        exporter = DFINEExporter(self._get_deployed_model(), self._cfg, device=self._device_str)
+        assert self._openvino_device is not None
+        compiled = compile_raw_openvino(exporter, imgsz=imgsz, ov_device=self._openvino_device)
+        self._openvino_cache[imgsz] = compiled
+        return compiled
+
     # ── Internal ────────────────────────────────────────────────────────────
 
     def _invalidate_deployed_cache(self) -> None:
         """Discard the cached deployed inference copy after model changes."""
         self._deployed_model = None
         self._deployed_model_device = None
+        self._openvino_cache.clear()
 
     def _get_deployed_model(self, device: str | None = None) -> nn.Module:
         """Return a cached deployed copy without mutating the trainable model."""
