@@ -155,11 +155,37 @@ All endpoints except `/auth/register` and `/auth/login` require a JWT in the `Au
   "conf": 0.5,
   "imgsz": 640,
   "classes": null,
-  "frame_step": 30
+  "frame_step": 30,
+  "backend": "torch",
+  "device": null
 }
 ```
 
-**Run status** lifecycle: `pending` → `running` → `done` | `failed`. Poll `GET /runs/{id}` while status is `pending` or `running`.
+`backend` is `"torch"` (default) or `"openvino"`. `device` means a PyTorch
+device string (`"cpu"`, `"cuda"`, `"cuda:0"`, …) for `backend="torch"`, or an
+OpenVINO device string (`"CPU"`, `"GPU"` for Intel integrated GPU, `"NPU"`)
+for `backend="openvino"`; omit it (or pass `null`) for the same auto-select
+behavior `DFINE`/`NITID` use directly — see [api_reference.md](api_reference.md).
+Check `GET /devices` first to only offer choices this server actually
+supports.
+
+**Run status** lifecycle: `pending` → `running` → `done` | `failed`. Poll `GET /runs/{id}` while status is `pending` or `running`. Each returned run item includes `speed` — `{"preprocess": ms, "inference": ms, "postprocess": ms}` — so a client can compare devices on the same image.
+
+### Devices
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/devices` | Report the compute devices actually available on *this* server. Unauthenticated — hardware capability only, no user/run data. |
+
+```json
+{"torch": {"cpu": true, "cuda": false},
+ "openvino": {"available": true, "devices": ["CPU", "GPU", "NPU"]}}
+```
+
+`openvino.available` is `false` (with an empty `devices` list) when the
+server doesn't have the optional `openvino` extra installed
+(`uv sync --extra openvino`) — request a run with `backend="openvino"`
+anyway and it fails with a clear error rather than a silent fallback.
 
 ### Files
 
@@ -182,6 +208,8 @@ All endpoints except `/auth/register` and `/auth/login` require a JWT in the `Au
 | `imgsz` | int | Input image size |
 | `classes` | str (JSON) | `[0,1,2]` or `null` |
 | `frame_step` | int | Video sampling interval |
+| `backend` | str | `torch` or `openvino` |
+| `device` | str, nullable | Torch or OpenVINO device string used for this run |
 | `status` | str | `pending` / `running` / `done` / `failed` |
 | `input_type` | str | `images` or `video` |
 | `created_at` | datetime | |
@@ -199,6 +227,7 @@ One row per processed image or sampled video frame.
 | `source_path` | text | Absolute path to the uploaded file |
 | `result_snapshot_path` | text | Filename (within `results/{run_id}/`) of the annotated JPEG |
 | `detections_json` | text | JSON array of detections from `result.to_json()` |
+| `speed_json` | text | JSON object from `result.speed` — `preprocess`/`inference`/`postprocess` in ms |
 | `frame_idx` | int | Video frame number; `null` for image runs |
 
 ---
@@ -211,7 +240,7 @@ The model is not thread-safe for concurrent inference. Always start uvicorn with
 
 ### Model cache
 
-`get_model(model_name)` in `services/inference.py` returns a cached `DFINE` instance keyed by absolute checkpoint path. The first call per model loads weights (~100–200 MB). The `DFINE` instance keeps its trainable architecture intact and creates a separate cached deployed inference copy on first prediction, so later predictions avoid repeated deployment work without mutating the authoritative model.
+`get_model(model_name, backend, device)` in `services/inference.py` returns a cached `DFINE` instance keyed by `(absolute checkpoint path, backend, device)` — a CPU-backend run and an NPU-backend run against the same checkpoint each get their own cached instance, since `backend="openvino"` compiles a separate OpenVINO model per `imgsz` internally (see `dfine.nn.openvino_runtime`). The first call per key loads weights (~100–200 MB); an `openvino` run also pays a one-time trace/compile cost on its first `imgsz`. The `DFINE` instance keeps its trainable architecture intact and creates a separate cached deployed inference copy on first prediction, so later predictions avoid repeated deployment work without mutating the authoritative model.
 
 ### Background inference
 

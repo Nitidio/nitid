@@ -58,6 +58,8 @@ def create_run(
         imgsz=run_params.imgsz,
         classes=json.dumps(run_params.classes) if run_params.classes else None,
         frame_step=run_params.frame_step,
+        backend=run_params.backend,
+        device=run_params.device,
         status=RunStatus.pending,
         input_type=input_type,
     )

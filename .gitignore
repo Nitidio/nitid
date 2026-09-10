@@ -208,7 +208,7 @@ __marimo__/
 
 # nitid web application runtime data
 web/storage/
-models/
+/models/
 web/frontend/node_modules/
 web/frontend/dist/
 

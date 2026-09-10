@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from web.api.config import settings
 from web.api.database import init_db
-from web.api.routers import auth, files, models, runs
+from web.api.routers import auth, devices, files, models, runs
 
 
 @asynccontextmanager
@@ -33,3 +33,4 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(models.router, tags=["models"])
 app.include_router(runs.router, tags=["runs"])
 app.include_router(files.router, tags=["files"])
+app.include_router(devices.router, tags=["devices"])
