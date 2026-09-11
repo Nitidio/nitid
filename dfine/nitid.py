@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -145,6 +146,7 @@ class NITID(DFINE):
         self._backend = "torch"
         self._openvino_device: str | None = None
         self._openvino_cache: dict[int, Any] = {}
+        self._model_lock = threading.RLock()
         self._device_str: str = resolve_device(device)
         self.verbose = verbose
         self._cfg: dict[str, Any] = make_rio_obb_config(

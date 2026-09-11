@@ -7,6 +7,7 @@ Used internally by ``DFINE``/``NITID`` when constructed with
 from __future__ import annotations
 
 import tempfile
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -79,6 +80,13 @@ class OpenVINORawModel:
 
     Exposes a no-op ``deploy()`` and ``_deployed = True`` so it satisfies the
     deployed-model guard in ``DFINEPredictor.__init__`` unchanged.
+
+    ``ov.CompiledModel.__call__`` reuses a single internal infer request and
+    raises "Infer Request is busy" under concurrent calls from multiple
+    threads (confirmed by testing, not just docs) — a real scenario once
+    several jobs can target the same device at once. Each thread gets its
+    own ``InferRequest``, created once and reused for that thread's later
+    calls, per OpenVINO's documented multi-threaded serving pattern.
     """
 
     _deployed = True
@@ -86,12 +94,20 @@ class OpenVINORawModel:
     def __init__(self, compiled_model, output_names: list[str]) -> None:
         self._compiled = compiled_model
         self._output_names = output_names
+        self._local = threading.local()
 
     def deploy(self) -> "OpenVINORawModel":
         return self
 
+    def _infer_request(self):
+        request = getattr(self._local, "request", None)
+        if request is None:
+            request = self._compiled.create_infer_request()
+            self._local.request = request
+        return request
+
     def __call__(self, images: torch.Tensor) -> dict[str, torch.Tensor]:
-        raw_outputs = self._compiled([images.detach().cpu().numpy()])
+        raw_outputs = self._infer_request().infer([images.detach().cpu().numpy()])
         return {
             name: torch.from_numpy(np.asarray(raw_outputs[index]))
             for index, name in enumerate(self._output_names)

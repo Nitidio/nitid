@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,19 +16,32 @@ from web.api.services.telemetry import sample_cpu_percent, sample_device_memory_
 
 # Lazy import of DFINE — loaded on first model access, not at module import time.
 _model_cache: dict[tuple[str, str, str | None], object] = {}
+_model_cache_lock = threading.Lock()
 
 
 def get_model(model_name: str, backend: str = "torch", device: str | None = None):
+    """Get (or lazily build) the cached model for this (path, backend, device).
+
+    Locked so concurrent requests — e.g. a batch of parallel jobs against
+    the same device — don't each build a duplicate model on first use.
+    """
     from dfine import DFINE
 
     model_path = str(Path(settings.models_dir) / model_name)
     cache_key = (model_path, backend, device)
-    if cache_key not in _model_cache:
-        # device=None lets DFINE apply its own default: auto-select cuda when
-        # available (backend="torch") or prefer NPU, then GPU, then CPU
-        # (backend="openvino") — do not hardcode a device here.
-        _model_cache[cache_key] = DFINE(model_path, backend=backend, device=device, verbose=False)
-    return _model_cache[cache_key]
+    cached = _model_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with _model_cache_lock:
+        cached = _model_cache.get(cache_key)
+        if cached is None:
+            # device=None lets DFINE apply its own default: auto-select cuda
+            # when available (backend="torch") or prefer NPU, then GPU, then
+            # CPU (backend="openvino") — do not hardcode a device here.
+            cached = DFINE(model_path, backend=backend, device=device, verbose=False)
+            _model_cache[cache_key] = cached
+        return cached
 
 
 def _snapshot_path(run_id: int, item_idx: int) -> Path:
