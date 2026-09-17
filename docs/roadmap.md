@@ -1,6 +1,6 @@
 # nitid Roadmap
 
-*Last reviewed: 2026-09-08.*
+*Last reviewed: 2026-09-17.*
 
 nitid is an Ultralytics-style library for focused DETR-style vision models. The project is
 focused on a small number of well-supported workflows: load a model by name,
@@ -86,6 +86,15 @@ Known gaps:
 - Distributed training and automatic batch sizing are not implemented.
 - Quantized deployment is not implemented.
 - Public PyPI release workflow and hosted model registry remain release tasks.
+
+## Path to public release
+
+nitid is not yet public. The remaining work to publish the repository and ship
+`pip install nitid` at v0.1.0 is tracked in
+[Epic #157](https://github.com/Vaelsys/nitid/issues/157), which is release and
+publication work rather than features: third-party attribution, the published
+import/CLI name, wheel namespacing, branch and changelog sync, and the PyPI
+pipeline. The known gaps above are documented gaps for v0.1.0, not blockers.
 
 ## Near-term priorities
 
