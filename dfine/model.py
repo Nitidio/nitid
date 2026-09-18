@@ -552,6 +552,7 @@ class DFINE:
         simplify: bool = True,
         opset: int = 17,
         half: bool = False,
+        postprocess: bool = True,
         device: str | None = None,
         verbose: bool = True,
         project: str = "runs/export",
@@ -560,7 +561,15 @@ class DFINE:
         output: str | Path | None = None,
         exist_ok: bool = False,
     ) -> Path:
-        """Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path."""
+        """
+        Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path.
+
+        Set ``postprocess=False`` to export the raw decoder outputs
+        (``pred_logits``/``pred_boxes``/…) instead of the decoded
+        ``(labels, boxes, scores, …)`` contract, leaving score activation, top-k
+        selection and box decoding to the consuming runtime. TorchScript always
+        traces the raw model, so the flag has no effect on that format.
+        """
         if self.task == "semantic" and format.lower() not in {"onnx", "openvino"}:
             raise ValueError(
                 "Semantic segmentation currently supports format='onnx' or 'openvino' only"
@@ -580,6 +589,7 @@ class DFINE:
             simplify=simplify,
             opset=opset,
             half=half,
+            postprocess=postprocess,
             verbose=verbose,
             project=project,
             name=name,

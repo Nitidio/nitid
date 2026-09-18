@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `export(..., postprocess=False)` (CLI `postprocess=false`) exports the
+  decoder's raw outputs (`pred_logits`, `pred_boxes`, `pred_masks` or
+  `sem_seg_logits`) without the postprocessor, for ONNX, OpenVINO and
+  TensorRT. See docs/export.md › Raw export (#15).
+
 ### Changed
 
 - Examples live in one place, `examples/`: two notebooks

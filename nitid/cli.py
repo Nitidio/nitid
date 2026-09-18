@@ -301,6 +301,8 @@ Options:
   simplify=BOOL       Simplify the ONNX graph (default: true)
   opset=INT           ONNX opset version (default: 17)
   half=BOOL           Enable FP16 OpenVINO/TensorRT export (default: false)
+  postprocess=BOOL    Bake the postprocessor into the graph (default: true);
+                      false exports the raw decoder outputs instead
   device=DEVICE       cpu, cuda, or cuda:N (default: model device)
   project=PATH        Export run root (default: runs/export)
   name=NAME           Export run name (default: exp)
@@ -315,6 +317,7 @@ Examples:
   nitid export model=model1s task=segment format=onnx
   nitid export model=semantic_best.pth task=semantic format=onnx
   nitid export model=model1l weights=coco format=openvino
+  nitid export model=model1l format=openvino postprocess=false
   nitid export model=model1l format=tensorrt half=true
 """,
     "convert": """\

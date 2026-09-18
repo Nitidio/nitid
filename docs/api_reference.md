@@ -604,6 +604,10 @@ model.export(format="torchscript") # → dfine_640.torchscript
 model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt installation)
 ```
 
+```python
+model.export(format="openvino", postprocess=False)  # raw pred_logits/pred_boxes
+```
+
 `export()` uses the same deployed-copy path as inference and does not mutate the
 trainable model. Repeated exports reuse the valid deployed copy when possible;
 training or loading different weights invalidates that cache automatically.
@@ -620,6 +624,7 @@ shape `[B, C, H, W]`. Apply softmax and argmax in the consuming runtime.
 | `simplify`  | `True`   | Simplify the intermediate ONNX graph (ONNX and OpenVINO) |
 | `opset`     | 17       | ONNX opset version (ONNX and OpenVINO) |
 | `half`      | `False`  | FP16 precision/weight compression (OpenVINO and TensorRT) |
+| `postprocess` | `True` | Bake the postprocessor into the graph; `False` exports raw decoder outputs (ONNX, OpenVINO, and TensorRT) |
 | `device`    | `None`   | Override export device |
 | `verbose`   | `True`   | Print export progress |
 
