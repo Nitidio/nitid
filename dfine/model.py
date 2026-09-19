@@ -7,7 +7,7 @@ from __future__ import annotations
 import copy
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generator, Union
+from typing import TYPE_CHECKING, Any, Callable, Generator, TypeVar, Union, cast
 
 import numpy as np
 import torch.nn as nn
@@ -20,6 +20,21 @@ if TYPE_CHECKING:
 
 Source = Union[str, Path, int, np.ndarray, list, FrameSource]
 ModelCallback = Callable[..., object]
+_T = TypeVar("_T")
+
+
+class _DefaultTrainOption:
+    def __repr__(self) -> str:
+        return "default"
+
+
+_TRAIN_DEFAULT = _DefaultTrainOption()
+
+
+def _resolve_train_option(value: _T | _DefaultTrainOption, default: _T) -> _T:
+    if value is _TRAIN_DEFAULT:
+        return default
+    return cast(_T, value)
 
 
 class DFINE:
@@ -242,24 +257,24 @@ class DFINE:
     def train(
         self,
         data: str,
-        epochs: int = 50,
+        epochs: int | _DefaultTrainOption = _TRAIN_DEFAULT,
         imgsz: int = 640,
-        batch: int = 16,
-        lr0: float = 1e-4,
-        backbone_lr: float | None = None,
-        lrf: float = 0.01,
-        cos_lr: bool = False,
-        warmup_epochs: float = 0.0,
-        warmup_momentum: float = 0.8,
-        warmup_bias_lr: float = 0.1,
-        optimizer: str = "AdamW",
-        momentum: float = 0.9,
-        weight_decay: float = 1e-4,
-        clip_grad: float = 0.1,
+        batch: int | _DefaultTrainOption = _TRAIN_DEFAULT,
+        lr0: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        backbone_lr: float | None | _DefaultTrainOption = _TRAIN_DEFAULT,
+        lrf: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        cos_lr: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_epochs: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_momentum: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_bias_lr: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        optimizer: str | _DefaultTrainOption = _TRAIN_DEFAULT,
+        momentum: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        weight_decay: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        clip_grad: float | _DefaultTrainOption = _TRAIN_DEFAULT,
         resume: bool = False,
-        amp: bool = False,
-        ema: bool = False,
-        ema_decay: float = 0.9999,
+        amp: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        ema: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        ema_decay: float | _DefaultTrainOption = _TRAIN_DEFAULT,
         device: str | None = None,
         project: str = "runs/train",
         name: str = "exp",
@@ -306,7 +321,7 @@ class DFINE:
             )
         from dfine.nn.transfer import adapt_model_to_classes
         from dfine.trainer import DFINETrainer
-        from dfine.training_recipes import resolve_training_recipe
+        from dfine.training_recipes import default_train_options, resolve_training_recipe
         from dfine.utils.data import load_data_yaml, normalize_names
 
         resolved_recipe = resolve_training_recipe(
@@ -317,6 +332,27 @@ class DFINE:
                 "recipe='deim' is recognized for detection training, but the DEIM "
                 "criterion, scheduler, and augmentation phases are not implemented yet"
             )
+        train_defaults = default_train_options(recipe=resolved_recipe, config=self._cfg)
+        resolved_epochs = _resolve_train_option(epochs, train_defaults.epochs)
+        resolved_batch = _resolve_train_option(batch, train_defaults.batch)
+        resolved_lr0 = _resolve_train_option(lr0, train_defaults.lr0)
+        resolved_backbone_lr = _resolve_train_option(backbone_lr, train_defaults.backbone_lr)
+        resolved_lrf = _resolve_train_option(lrf, train_defaults.lrf)
+        resolved_cos_lr = _resolve_train_option(cos_lr, train_defaults.cos_lr)
+        resolved_warmup_epochs = _resolve_train_option(warmup_epochs, train_defaults.warmup_epochs)
+        resolved_warmup_momentum = _resolve_train_option(
+            warmup_momentum, train_defaults.warmup_momentum
+        )
+        resolved_warmup_bias_lr = _resolve_train_option(
+            warmup_bias_lr, train_defaults.warmup_bias_lr
+        )
+        resolved_optimizer = _resolve_train_option(optimizer, train_defaults.optimizer)
+        resolved_momentum = _resolve_train_option(momentum, train_defaults.momentum)
+        resolved_weight_decay = _resolve_train_option(weight_decay, train_defaults.weight_decay)
+        resolved_clip_grad = _resolve_train_option(clip_grad, train_defaults.clip_grad)
+        resolved_amp = _resolve_train_option(amp, train_defaults.amp)
+        resolved_ema = _resolve_train_option(ema, train_defaults.ema)
+        resolved_ema_decay = _resolve_train_option(ema_decay, train_defaults.ema_decay)
 
         data_config = load_data_yaml(data)
         dataset_names = {0: "object"} if single_cls else normalize_names(data_config)
@@ -378,24 +414,24 @@ class DFINE:
         try:
             metrics = trainer.train(
                 data=data,
-                epochs=epochs,
+                epochs=resolved_epochs,
                 imgsz=imgsz,
-                batch=batch,
-                lr0=lr0,
-                backbone_lr=backbone_lr,
-                lrf=lrf,
-                cos_lr=cos_lr,
-                warmup_epochs=warmup_epochs,
-                warmup_momentum=warmup_momentum,
-                warmup_bias_lr=warmup_bias_lr,
-                optimizer=optimizer,
-                momentum=momentum,
-                weight_decay=weight_decay,
-                clip_grad=clip_grad,
+                batch=resolved_batch,
+                lr0=resolved_lr0,
+                backbone_lr=resolved_backbone_lr,
+                lrf=resolved_lrf,
+                cos_lr=resolved_cos_lr,
+                warmup_epochs=resolved_warmup_epochs,
+                warmup_momentum=resolved_warmup_momentum,
+                warmup_bias_lr=resolved_warmup_bias_lr,
+                optimizer=resolved_optimizer,
+                momentum=resolved_momentum,
+                weight_decay=resolved_weight_decay,
+                clip_grad=resolved_clip_grad,
                 resume=resume,
-                amp=amp,
-                ema=ema,
-                ema_decay=ema_decay,
+                amp=resolved_amp,
+                ema=resolved_ema,
+                ema_decay=resolved_ema_decay,
                 project=project,
                 name=name,
                 save_dir=save_dir,

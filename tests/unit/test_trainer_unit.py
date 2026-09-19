@@ -576,6 +576,133 @@ def test_public_train_runs_error_callbacks_and_reraises_original(monkeypatch, ti
     assert handled == [original_error]
 
 
+def test_public_train_applies_default_detection_recipe_options(monkeypatch, tiny_model):
+    from dfine.model import DFINE
+
+    captured = {}
+
+    class CapturingTrainer:
+        def __init__(self, **kwargs):
+            pass
+
+        def train(self, **kwargs):
+            captured.update(kwargs)
+            return {"ok": True}
+
+        def _handle_train_error(self, error):
+            raise AssertionError("unexpected training error") from error
+
+    monkeypatch.setattr("dfine.trainer.DFINETrainer", CapturingTrainer)
+    monkeypatch.setattr("dfine.utils.data.load_data_yaml", lambda _path: {"names": {0: "object"}})
+
+    class UnchangedTransfer:
+        changed = False
+        mapped_proposal_scorer = ()
+        initialized = ()
+
+        def __init__(self, model, config):
+            self.model = model
+            self.config = config
+
+    monkeypatch.setattr(
+        "dfine.nn.transfer.adapt_model_to_classes",
+        lambda model, cfg, *_args: UnchangedTransfer(model, cfg),
+    )
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {
+        "task": "detect",
+        "HGNetv2": {"name": "B0"},
+        "HybridEncoder": {"hidden_dim": 256},
+    }
+    model._backend = "torch"
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
+    model._task = "detect"
+    model.verbose = False
+
+    metrics = model.train(data="dataset.yaml")
+
+    assert metrics == {"ok": True}
+    assert captured["recipe"] == "default"
+    assert captured["epochs"] == 132
+    assert captured["batch"] == 32
+    assert captured["lr0"] == pytest.approx(2e-4)
+    assert captured["backbone_lr"] == pytest.approx(1e-4)
+    assert captured["lrf"] == pytest.approx(1.0)
+    assert captured["amp"] is True
+    assert captured["ema"] is True
+
+
+def test_public_train_keeps_explicit_options_over_recipe_defaults(monkeypatch, tiny_model):
+    from dfine.model import DFINE
+
+    captured = {}
+
+    class CapturingTrainer:
+        def __init__(self, **kwargs):
+            pass
+
+        def train(self, **kwargs):
+            captured.update(kwargs)
+            return {"ok": True}
+
+        def _handle_train_error(self, error):
+            raise AssertionError("unexpected training error") from error
+
+    monkeypatch.setattr("dfine.trainer.DFINETrainer", CapturingTrainer)
+    monkeypatch.setattr("dfine.utils.data.load_data_yaml", lambda _path: {"names": {0: "object"}})
+
+    class UnchangedTransfer:
+        changed = False
+        mapped_proposal_scorer = ()
+        initialized = ()
+
+        def __init__(self, model, config):
+            self.model = model
+            self.config = config
+
+    monkeypatch.setattr(
+        "dfine.nn.transfer.adapt_model_to_classes",
+        lambda model, cfg, *_args: UnchangedTransfer(model, cfg),
+    )
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {
+        "task": "detect",
+        "HGNetv2": {"name": "B0"},
+        "HybridEncoder": {"hidden_dim": 256},
+    }
+    model._backend = "torch"
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
+    model._task = "detect"
+    model.verbose = False
+
+    model.train(
+        data="dataset.yaml",
+        epochs=3,
+        batch=2,
+        backbone_lr=None,
+        amp=False,
+        ema=False,
+    )
+
+    assert captured["epochs"] == 3
+    assert captured["batch"] == 2
+    assert captured["backbone_lr"] is None
+    assert captured["amp"] is False
+    assert captured["ema"] is False
+
+
 def test_public_train_recognizes_deim_but_does_not_run_unimplemented_path(tiny_model):
     from dfine.model import DFINE
 
