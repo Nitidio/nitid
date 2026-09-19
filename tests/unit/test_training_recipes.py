@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from dfine.training_recipes import (
+    apply_training_recipe_to_config,
     default_train_options,
     infer_dfine_model_size,
     normalize_training_recipe,
@@ -93,3 +94,29 @@ def test_default_train_options_keeps_legacy_defaults_for_non_detection_tasks() -
     assert defaults.backbone_lr is None
     assert defaults.amp is False
     assert defaults.ema is False
+
+
+def test_apply_deim_recipe_to_config_selects_mal_without_mutating_source() -> None:
+    source = {
+        "DFINECriterion": {
+            "weight_dict": {"loss_vfl": 1, "loss_bbox": 5, "loss_giou": 2},
+            "losses": ["vfl", "boxes"],
+            "gamma": 2.0,
+        }
+    }
+    recipe = resolve_training_recipe("deim", task="detect")
+
+    resolved = apply_training_recipe_to_config(source, recipe=recipe)
+
+    assert source["DFINECriterion"]["weight_dict"] == {
+        "loss_vfl": 1,
+        "loss_bbox": 5,
+        "loss_giou": 2,
+    }
+    assert resolved["DFINECriterion"]["weight_dict"] == {
+        "loss_bbox": 5,
+        "loss_giou": 2,
+        "loss_mal": 1,
+    }
+    assert resolved["DFINECriterion"]["losses"] == ["mal", "boxes"]
+    assert resolved["DFINECriterion"]["gamma"] == pytest.approx(1.5)

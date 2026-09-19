@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -181,3 +182,29 @@ def default_train_options(
             ema=True,
         )
     return _OFFICIAL_DFINE_DETECTION_DEFAULTS[model_size]
+
+
+def apply_training_recipe_to_config(
+    config: Mapping[str, Any],
+    *,
+    recipe: TrainingRecipe,
+) -> dict[str, Any]:
+    """Return a config copy with recipe-specific criterion settings applied."""
+    resolved = copy.deepcopy(dict(config))
+    if recipe.name != "deim":
+        return resolved
+
+    criterion = resolved.get("DFINECriterion")
+    if recipe.task != "detect" or not isinstance(criterion, dict):
+        return resolved
+
+    weight_dict = dict(criterion.get("weight_dict", {}))
+    weight_dict.pop("loss_vfl", None)
+    weight_dict["loss_mal"] = 1
+    criterion["weight_dict"] = weight_dict
+    criterion["losses"] = ["mal" if loss == "vfl" else loss for loss in criterion.get("losses", [])]
+    if "mal" not in criterion["losses"]:
+        criterion["losses"].insert(0, "mal")
+    criterion["gamma"] = 1.5
+    criterion.setdefault("mal_alpha", None)
+    return resolved
