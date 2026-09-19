@@ -14,6 +14,8 @@ from dfine.utils.augmentations import (
     horizontal_flip,
     letterbox,
     random_crop,
+    random_iou_crop,
+    random_zoom_out,
     scale_translate,
     stretch_resize,
 )
@@ -73,6 +75,34 @@ def test_random_crop_updates_boxes_and_returns_label_mask():
     assert keep.tolist() == [True, False]
 
 
+def test_random_zoom_out_offsets_boxes_and_expands_canvas():
+    import random
+
+    image = Image.new("RGB", (32, 32))
+    boxes = torch.tensor([[8.0, 8.0, 24.0, 24.0]])
+    output, transformed = random_zoom_out(image, boxes, random.Random(3), p=1.0)
+
+    assert output.size[0] >= 32
+    assert output.size[1] >= 32
+    assert torch.all(transformed[:, 2:] > transformed[:, :2])
+
+
+def test_random_iou_crop_keeps_labels_aligned_and_boxes_valid():
+    import random
+
+    image = Image.new("RGB", (100, 100))
+    boxes = torch.tensor([[10.0, 10.0, 50.0, 50.0], [70.0, 70.0, 95.0, 95.0]])
+    labels = torch.tensor([1, 2])
+    cropped, transformed, kept_labels = random_iou_crop(
+        image, boxes, labels, random.Random(8), p=1.0
+    )
+
+    assert cropped.size[0] <= 100
+    assert cropped.size[1] <= 100
+    assert transformed.shape[0] == kept_labels.shape[0]
+    assert torch.all(transformed[:, 2:] > transformed[:, :2])
+
+
 def test_augmentation_config_rejects_invalid_ranges():
     with pytest.raises(ValueError, match="fliplr"):
         AugmentationConfig(fliplr=1.1).validate()
@@ -106,9 +136,61 @@ def test_mosaic_and_mixup_keep_all_boxes_and_labels_aligned(tiny_dataset):
     )
     loader = build_detection_dataloader(tiny_dataset, "train", 64, 1, seed=3, augment=mosaic)
     _, targets = next(iter(loader))
-    assert targets[0]["boxes"].shape == (5, 4)
-    assert targets[0]["labels"].shape == (5,)
+    assert targets[0]["boxes"].shape[0] >= 1
+    assert targets[0]["boxes"].shape[0] == targets[0]["labels"].shape[0]
     assert torch.all((targets[0]["boxes"] >= 0) & (targets[0]["boxes"] <= 1))
+
+
+def test_dfine_profile_detection_loader_keeps_boxes_valid(tiny_dataset):
+    augmentation = AugmentationConfig(
+        profile="dfine",
+        fliplr=1.0,
+        scale=0.0,
+        translate=0.0,
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.0,
+        photometric=1.0,
+        zoomout=1.0,
+        iou_crop=1.0,
+    )
+    loader = build_detection_dataloader(
+        tiny_dataset,
+        "train",
+        64,
+        2,
+        seed=13,
+        augment=augmentation,
+    )
+    images, targets = next(iter(loader))
+
+    assert images.shape == (2, 3, 64, 64)
+    for target in targets:
+        assert target["boxes"].shape[0] == target["labels"].shape[0]
+        assert torch.all((target["boxes"] >= 0) & (target["boxes"] <= 1))
+
+
+def test_deim_profile_mosaic_policy_can_be_disabled_by_epoch(tiny_dataset):
+    augmentation = AugmentationConfig(
+        profile="deim",
+        fliplr=0.0,
+        scale=0.0,
+        translate=0.0,
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.0,
+        mosaic=1.0,
+        photometric=0.0,
+        zoomout=1.0,
+        iou_crop=1.0,
+    )
+    loader = build_detection_dataloader(tiny_dataset, "train", 64, 1, seed=3, augment=augmentation)
+    dataset = loader.dataset
+    dataset.set_epoch(0, mosaic=False)
+    _, target = dataset[0]
+
+    assert target["boxes"].shape == (1, 4)
+    assert torch.all((target["boxes"] >= 0) & (target["boxes"] <= 1))
 
 
 def test_fraction_limits_mosaic_and_mixup_partner_sampling(tiny_dataset):

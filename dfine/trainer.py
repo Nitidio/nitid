@@ -17,7 +17,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from tqdm.auto import tqdm
@@ -530,9 +530,24 @@ class DFINETrainer:
             clip_grad=clip_grad,
             time=time_limit,
         )
+        from dfine.tasks import normalize_task
         from dfine.utils.augmentations import AugmentationConfig
 
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        augmentation_profile: Literal["legacy", "dfine", "deim"] = "legacy"
+        photometric = 0.0
+        zoomout = 0.0
+        iou_crop = 0.0
+        if task == "detect":
+            augmentation_profile = "deim" if recipe == "deim" else "dfine"
+            photometric = 0.5
+            zoomout = 1.0
+            iou_crop = 0.8
+            if recipe == "deim" and mosaic == 0.0:
+                mosaic = 0.5
+
         augmentation = AugmentationConfig(
+            profile=augmentation_profile,
             enabled=augment,
             fliplr=fliplr,
             scale=scale,
@@ -544,11 +559,11 @@ class DFINETrainer:
             mosaic=mosaic,
             mixup=mixup,
             close_mosaic=close_mosaic,
+            photometric=photometric,
+            zoomout=zoomout,
+            iou_crop=iou_crop,
         )
         augmentation.validate()
-        from dfine.tasks import normalize_task
-
-        task = normalize_task(str(self.cfg.get("task", "detect")))
         if task == "obb":
             if imgsz < 256:
                 raise ValueError("OBB training requires imgsz >= 256 for the RiO-DETR decoder")

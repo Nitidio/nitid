@@ -66,6 +66,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 
 from dfine.utils.augmentations import (
     AugmentationConfig,
+    _clip_boxes,
     color_jitter_hsv,
     horizontal_flip,
     horizontal_flip_keypoints,
@@ -73,6 +74,9 @@ from dfine.utils.augmentations import (
     random_crop,
     random_crop_instances,
     random_crop_semantic,
+    random_iou_crop,
+    random_photometric_distort,
+    random_zoom_out,
     resize_masks,
     resize_semantic_mask,
     sanitize,
@@ -457,6 +461,9 @@ class CocoFinetuneDataset(Dataset):
         image, boxes, labels, masks, keypoints, areas, img_id = self._load_item(idx)
         rng = random.Random(self.seed + self.epoch * max(len(self), 1) + idx)
         cfg = self.augment
+        detection_recipe_aug = bool(
+            cfg and cfg.enabled and self.task == "detect" and cfg.profile in {"dfine", "deim"}
+        )
         mosaic_active = bool(
             cfg
             and cfg.enabled
@@ -469,6 +476,14 @@ class CocoFinetuneDataset(Dataset):
             image, boxes, labels, masks = self._mosaic(idx, rng)
             keypoints = torch.zeros((0, 0), dtype=torch.float32)
             areas = torch.zeros((len(labels),), dtype=torch.float32)
+        elif detection_recipe_aug:
+            assert cfg is not None
+            image = random_photometric_distort(image, rng, cfg.photometric)
+            image, boxes = random_zoom_out(image, boxes, rng, cfg.zoomout)
+            image, boxes, labels = random_iou_crop(image, boxes, labels, rng, cfg.iou_crop)
+            boxes, labels = sanitize(boxes, labels, image.size[0], image.size[1])
+            image, boxes = stretch_resize(image, boxes, self.imgsz)
+            masks = resize_masks(masks, self.imgsz)
         else:
             orig_w, orig_h = image.size
             image, boxes = stretch_resize(image, boxes, self.imgsz)
@@ -481,7 +496,7 @@ class CocoFinetuneDataset(Dataset):
                 )
             masks = resize_masks(masks, self.imgsz)
 
-        if cfg and cfg.enabled:
+        if cfg and cfg.enabled and not detection_recipe_aug:
             if cfg.fliplr and rng.random() < cfg.fliplr:
                 image, boxes = horizontal_flip(image, boxes)
                 masks = horizontal_flip_masks(masks)
@@ -540,6 +555,15 @@ class CocoFinetuneDataset(Dataset):
                 boxes = torch.cat((boxes, other_boxes))
                 labels = torch.cat((labels, other_labels))
                 masks = torch.cat((masks, other_masks))
+        elif detection_recipe_aug:
+            assert cfg is not None
+            if not mosaic_active:
+                pass
+            image = random_photometric_distort(
+                image, rng, cfg.photometric if mosaic_active else 0.0
+            )
+            if cfg.fliplr and rng.random() < cfg.fliplr:
+                image, boxes = horizontal_flip(image, boxes)
 
         if self.task == "segment":
             boxes, labels, masks = sanitize_instances(boxes, labels, masks, self.imgsz, self.imgsz)
@@ -617,33 +641,46 @@ class CocoFinetuneDataset(Dataset):
     def _mosaic(
         self, idx: int, rng: random.Random
     ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor]:
-        half = self.imgsz // 2
-        canvas = Image.new("RGB", (self.imgsz, self.imgsz), (114, 114, 114))
+        canvas_size = self.imgsz * 2
+        canvas = Image.new("RGB", (canvas_size, canvas_size), (114, 114, 114))
         indices = [idx, *(self._sample_partner_index(rng) for _ in range(3))]
         all_boxes, all_labels, all_masks = [], [], []
-        offsets = ((0, 0), (half, 0), (0, half), (half, half))
+        offsets = ((0, 0), (self.imgsz, 0), (0, self.imgsz), (self.imgsz, self.imgsz))
         for item_idx, (left, top) in zip(indices, offsets):
             image, boxes, labels, masks, _, _, _ = self._load_item(item_idx)
-            image, boxes = stretch_resize(image, boxes, half)
-            masks = resize_masks(masks, half)
+            image, boxes = stretch_resize(image, boxes, self.imgsz)
+            masks = resize_masks(masks, self.imgsz)
             canvas.paste(image, (left, top))
             boxes[:, [0, 2]] += left
             boxes[:, [1, 3]] += top
             all_boxes.append(boxes)
             all_labels.append(labels)
-            placed_masks = torch.zeros((len(masks), self.imgsz, self.imgsz), dtype=torch.uint8)
-            placed_masks[:, top : top + half, left : left + half] = masks
+            placed_masks = torch.zeros((len(masks), canvas_size, canvas_size), dtype=torch.uint8)
+            placed_masks[:, top : top + self.imgsz, left : left + self.imgsz] = masks
             all_masks.append(placed_masks)
-        return canvas, torch.cat(all_boxes), torch.cat(all_labels), torch.cat(all_masks)
+        crop_left = rng.randint(self.imgsz // 2, self.imgsz + self.imgsz // 2) - self.imgsz // 2
+        crop_top = rng.randint(self.imgsz // 2, self.imgsz + self.imgsz // 2) - self.imgsz // 2
+        crop_right, crop_bottom = crop_left + self.imgsz, crop_top + self.imgsz
+        boxes = torch.cat(all_boxes)
+        labels = torch.cat(all_labels)
+        masks = torch.cat(all_masks)
+        boxes[:, [0, 2]] -= crop_left
+        boxes[:, [1, 3]] -= crop_top
+        masks = masks[:, crop_top:crop_bottom, crop_left:crop_right]
+        if len(masks) != len(boxes):
+            masks = torch.zeros((len(boxes), self.imgsz, self.imgsz), dtype=torch.uint8)
+        boxes, labels, masks = sanitize_instances(boxes, labels, masks, self.imgsz, self.imgsz)
+        return canvas.crop((crop_left, crop_top, crop_right, crop_bottom)), boxes, labels, masks
 
     def _normalize_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
-        result = boxes.clone()
+        result = _clip_boxes(boxes, self.imgsz, self.imgsz)
         if result.numel():
             xyxy = result.clone()
             result[:, 0] = (xyxy[:, 0] + xyxy[:, 2]) / 2 / self.imgsz
             result[:, 1] = (xyxy[:, 1] + xyxy[:, 3]) / 2 / self.imgsz
             result[:, 2] = (xyxy[:, 2] - xyxy[:, 0]) / self.imgsz
             result[:, 3] = (xyxy[:, 3] - xyxy[:, 1]) / self.imgsz
+            result.clamp_(0.0, 1.0)
         return result
 
     def set_epoch(self, epoch: int, mosaic: bool = True) -> None:
