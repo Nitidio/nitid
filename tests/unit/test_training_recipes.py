@@ -46,7 +46,7 @@ def test_resolve_training_recipe_recognizes_deim_detection_contract() -> None:
 
     assert recipe.name == "deim"
     assert recipe.task == "detect"
-    assert recipe.implemented is False
+    assert recipe.implemented is True
 
 
 def test_resolve_training_recipe_rejects_deim_for_non_detection_tasks() -> None:

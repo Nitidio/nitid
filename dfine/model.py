@@ -321,18 +321,19 @@ class DFINE:
             )
         from dfine.nn.transfer import adapt_model_to_classes
         from dfine.trainer import DFINETrainer
-        from dfine.training_recipes import default_train_options, resolve_training_recipe
+        from dfine.training_recipes import (
+            apply_training_recipe_to_config,
+            default_train_options,
+            resolve_training_recipe,
+            training_recipe_policy,
+        )
         from dfine.utils.data import load_data_yaml, normalize_names
 
         resolved_recipe = resolve_training_recipe(
             recipe, task=str(getattr(self, "_task", "detect"))
         )
-        if not resolved_recipe.implemented:
-            raise NotImplementedError(
-                "recipe='deim' is recognized for detection training, but the DEIM "
-                "criterion, scheduler, and augmentation phases are not implemented yet"
-            )
         train_defaults = default_train_options(recipe=resolved_recipe, config=self._cfg)
+        recipe_policy = training_recipe_policy(recipe=resolved_recipe, config=self._cfg)
         resolved_epochs = _resolve_train_option(epochs, train_defaults.epochs)
         resolved_batch = _resolve_train_option(batch, train_defaults.batch)
         resolved_lr0 = _resolve_train_option(lr0, train_defaults.lr0)
@@ -392,7 +393,7 @@ class DFINE:
             dataset_names,
         )
         self._model = transfer.model
-        self._cfg = transfer.config
+        self._cfg = apply_training_recipe_to_config(transfer.config, recipe=resolved_recipe)
         self._names = dataset_names
         self._invalidate_deployed_cache()
         if transfer.changed and self.verbose:
@@ -465,6 +466,13 @@ class DFINE:
                 close_mosaic=close_mosaic,
                 time_limit=time,
                 recipe=resolved_recipe.name,
+                scheduler=recipe_policy.scheduler,
+                warmup_iter=recipe_policy.warmup_iter,
+                flat_epochs=recipe_policy.flat_epochs,
+                no_aug_epochs=recipe_policy.no_aug_epochs,
+                lr_gamma=recipe_policy.lr_gamma,
+                collate_mixup_prob=recipe_policy.collate_mixup_prob,
+                collate_mixup_epochs=recipe_policy.collate_mixup_epochs,
                 verbose=verbose,
                 callbacks=callbacks,
                 wandb=wandb,

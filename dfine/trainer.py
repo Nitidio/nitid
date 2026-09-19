@@ -252,6 +252,7 @@ class DFINETrainer:
             "loss_bbox",
             "loss_giou",
             "loss_vfl",
+            "loss_mal",
             "loss_fgl",
             "loss_mask_bce",
             "loss_mask_dice",
@@ -319,6 +320,13 @@ class DFINETrainer:
         time_limit: float | None,
         recipe: str,
         verbose: bool,
+        scheduler: str = "auto",
+        warmup_iter: int = 0,
+        flat_epochs: int = 0,
+        no_aug_epochs: int = 0,
+        lr_gamma: float | None = None,
+        collate_mixup_prob: float = 0.0,
+        collate_mixup_epochs: tuple[int, int] = (0, 0),
         callbacks: object | None = None,
         wandb: bool | Mapping[str, Any] = False,
         mlflow: bool | Mapping[str, Any] = False,
@@ -432,6 +440,13 @@ class DFINETrainer:
                     "close_mosaic": close_mosaic,
                     "time": time_limit,
                     "recipe": recipe,
+                    "scheduler": scheduler,
+                    "warmup_iter": warmup_iter,
+                    "flat_epochs": flat_epochs,
+                    "no_aug_epochs": no_aug_epochs,
+                    "lr_gamma": lr_gamma,
+                    "collate_mixup_prob": collate_mixup_prob,
+                    "collate_mixup_epochs": collate_mixup_epochs,
                 },
             )
             data = str(resolved["data"])
@@ -487,6 +502,24 @@ class DFINETrainer:
                 resolved["time"] if resolved["time"] is None else _as_float(resolved["time"])
             )
             recipe = str(resolved["recipe"])
+            scheduler = str(resolved["scheduler"])
+            warmup_iter = _as_int(resolved["warmup_iter"])
+            flat_epochs = _as_int(resolved["flat_epochs"])
+            no_aug_epochs = _as_int(resolved["no_aug_epochs"])
+            lr_gamma = (
+                resolved["lr_gamma"]
+                if resolved["lr_gamma"] is None
+                else _as_float(resolved["lr_gamma"])
+            )
+            collate_mixup_prob = _as_float(resolved["collate_mixup_prob"])
+            mixup_epochs_value = resolved["collate_mixup_epochs"]
+            if isinstance(mixup_epochs_value, (list, tuple)) and len(mixup_epochs_value) == 2:
+                collate_mixup_epochs = (
+                    _as_int(mixup_epochs_value[0]),
+                    _as_int(mixup_epochs_value[1]),
+                )
+            else:
+                collate_mixup_epochs = (0, 0)
 
         self._validate_train_options(
             patience=patience,
@@ -542,6 +575,8 @@ class DFINETrainer:
             single_cls=single_cls,
             fraction=fraction,
             augment=augmentation,
+            collate_mixup_prob=collate_mixup_prob,
+            collate_mixup_epochs=collate_mixup_epochs,
         )
         opt = self._build_optimizer(
             optimizer,
@@ -552,11 +587,22 @@ class DFINETrainer:
         )
         warmup_epoch_count = max(float(warmup_epochs), 0.0)
         decay_epochs = max(epochs - int(warmup_epoch_count), 1)
-        scheduler = self._build_scheduler(opt, epochs=decay_epochs, lrf=lrf, cos_lr=cos_lr)
+        scheduler_obj = self._build_scheduler(
+            opt,
+            epochs=decay_epochs,
+            lrf=lrf,
+            cos_lr=cos_lr,
+            schedule=scheduler,
+            iter_per_epoch=len(dataloader),
+            warmup_iter=warmup_iter,
+            flat_epochs=flat_epochs,
+            no_aug_epochs=no_aug_epochs,
+            lr_gamma=lr_gamma,
+        )
         criterion = self._build_criterion()
         self.dataloader = dataloader
         self.optimizer = opt
-        self.scheduler = scheduler
+        self.scheduler = scheduler_obj
         self.criterion = criterion
 
         # AMP: only meaningful on CUDA
@@ -629,6 +675,13 @@ class DFINETrainer:
             close_mosaic=close_mosaic,
             time=time_limit,
             recipe=recipe,
+            scheduler=scheduler,
+            warmup_iter=warmup_iter,
+            flat_epochs=flat_epochs,
+            no_aug_epochs=no_aug_epochs,
+            lr_gamma=lr_gamma,
+            collate_mixup_prob=collate_mixup_prob,
+            collate_mixup_epochs=collate_mixup_epochs,
             verbose=verbose,
         )
         self.train_args["save_dir"] = str(save_dir)
@@ -645,7 +698,7 @@ class DFINETrainer:
             ) = self._restore_training_state(
                 resume_state=resume_state,
                 optimizer=opt,
-                scheduler=scheduler,
+                scheduler=scheduler_obj,
                 scaler=scaler,
                 ema_model=ema_model,
                 epochs=epochs,
@@ -794,7 +847,7 @@ class DFINETrainer:
                     opt.zero_grad()
                     if ema_model is not None:
                         ema_model.update(self.model)
-                    self._step_iteration_scheduler(scheduler, ni + 1, opt)
+                    self._step_iteration_scheduler(scheduler_obj, ni + 1, opt)
 
                 epoch_loss += loss.item()
                 batch_count += 1
@@ -821,9 +874,9 @@ class DFINETrainer:
                     progress.set_postfix(postfix)
 
             if epoch + 1 > warmup_epoch_count and not self._scheduler_steps_per_iteration(
-                scheduler
+                scheduler_obj
             ):
-                scheduler.step()
+                scheduler_obj.step()
             epoch_time = time.perf_counter() - epoch_start
             train_loss = epoch_loss / max(batch_count, 1)
             train_stats = {key: total / max(batch_count, 1) for key, total in loss_sums.items()}
@@ -885,7 +938,7 @@ class DFINETrainer:
                 epochs_without_improvement += 1
             training_state = self._serialize_training_state(
                 optimizer=opt,
-                scheduler=scheduler,
+                scheduler=scheduler_obj,
                 scaler=scaler,
                 ema_model=ema_model,
                 history=history,
@@ -1085,6 +1138,8 @@ class DFINETrainer:
         single_cls: bool = False,
         fraction: float = 1.0,
         augment=None,
+        collate_mixup_prob: float = 0.0,
+        collate_mixup_epochs: tuple[int, int] = (0, 0),
     ):
         from dfine.tasks import normalize_task
         from dfine.utils.data import (
@@ -1138,6 +1193,8 @@ class DFINETrainer:
             fraction=fraction,
             augment=augment,
             task=task,
+            collate_mixup_prob=collate_mixup_prob,
+            collate_mixup_epochs=collate_mixup_epochs,
         )
 
     @staticmethod

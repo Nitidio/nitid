@@ -47,6 +47,19 @@ class TrainOptionDefaults:
     ema_decay: float = 0.9999
 
 
+@dataclass(frozen=True)
+class TrainRecipePolicy:
+    """Internal train policy values that are not public ``train()`` kwargs."""
+
+    scheduler: str = "auto"
+    warmup_iter: int = 0
+    flat_epochs: int = 0
+    no_aug_epochs: int = 0
+    lr_gamma: float | None = None
+    collate_mixup_prob: float = 0.0
+    collate_mixup_epochs: tuple[int, int] = (0, 0)
+
+
 _OFFICIAL_DFINE_DETECTION_DEFAULTS: dict[str, TrainOptionDefaults] = {
     "n": TrainOptionDefaults(
         epochs=160,
@@ -98,6 +111,54 @@ _OFFICIAL_DFINE_DETECTION_DEFAULTS: dict[str, TrainOptionDefaults] = {
     ),
 }
 
+_DEIM_POLICIES: dict[str, TrainRecipePolicy] = {
+    "n": TrainRecipePolicy(
+        scheduler="flatcosine",
+        warmup_iter=2000,
+        flat_epochs=7800,
+        no_aug_epochs=12,
+        lr_gamma=1.0,
+        collate_mixup_prob=0.5,
+        collate_mixup_epochs=(4, 78),
+    ),
+    "s": TrainRecipePolicy(
+        scheduler="flatcosine",
+        warmup_iter=2000,
+        flat_epochs=64,
+        no_aug_epochs=12,
+        lr_gamma=0.5,
+        collate_mixup_prob=0.5,
+        collate_mixup_epochs=(4, 64),
+    ),
+    "m": TrainRecipePolicy(
+        scheduler="flatcosine",
+        warmup_iter=2000,
+        flat_epochs=49,
+        no_aug_epochs=12,
+        lr_gamma=0.5,
+        collate_mixup_prob=0.5,
+        collate_mixup_epochs=(4, 49),
+    ),
+    "l": TrainRecipePolicy(
+        scheduler="flatcosine",
+        warmup_iter=2000,
+        flat_epochs=29,
+        no_aug_epochs=12,
+        lr_gamma=0.5,
+        collate_mixup_prob=0.5,
+        collate_mixup_epochs=(4, 29),
+    ),
+    "x": TrainRecipePolicy(
+        scheduler="flatcosine",
+        warmup_iter=2000,
+        flat_epochs=29,
+        no_aug_epochs=12,
+        lr_gamma=0.5,
+        collate_mixup_prob=0.5,
+        collate_mixup_epochs=(4, 29),
+    ),
+}
+
 
 def normalize_training_recipe(recipe: str) -> TrainingRecipeName:
     """Normalize and validate a public training recipe name."""
@@ -114,9 +175,7 @@ def normalize_training_recipe(recipe: str) -> TrainingRecipeName:
 def resolve_training_recipe(recipe: str, *, task: str) -> TrainingRecipe:
     """Resolve a recipe for the given task.
 
-    DEIM is intentionally detection-only. Until the later implementation
-    phases land, it is recognized but marked as not implemented so callers can
-    fail with a clear message instead of silently running the D-FINE path.
+    DEIM is intentionally detection-only.
     """
     recipe_name = normalize_training_recipe(recipe)
     resolved_task = normalize_task(task)
@@ -125,7 +184,7 @@ def resolve_training_recipe(recipe: str, *, task: str) -> TrainingRecipe:
     return TrainingRecipe(
         name=recipe_name,
         task=resolved_task,
-        implemented=recipe_name == "default",
+        implemented=True,
     )
 
 
@@ -166,7 +225,7 @@ def default_train_options(
     config: Mapping[str, Any],
 ) -> TrainOptionDefaults:
     """Return task-native public train defaults for the resolved recipe."""
-    if recipe.name != "default" or recipe.task != "detect":
+    if recipe.task != "detect":
         return TrainOptionDefaults()
 
     model_size = infer_dfine_model_size(config)
@@ -181,7 +240,49 @@ def default_train_options(
             amp=True,
             ema=True,
         )
-    return _OFFICIAL_DFINE_DETECTION_DEFAULTS[model_size]
+    defaults = _OFFICIAL_DFINE_DETECTION_DEFAULTS[model_size]
+    if recipe.name == "deim":
+        return TrainOptionDefaults(
+            epochs=defaults.epochs,
+            batch=defaults.batch,
+            lr0=defaults.lr0,
+            backbone_lr=defaults.backbone_lr,
+            lrf=0.5 if model_size != "n" else 1.0,
+            cos_lr=False,
+            warmup_epochs=0.0,
+            warmup_momentum=defaults.warmup_momentum,
+            warmup_bias_lr=defaults.warmup_bias_lr,
+            optimizer=defaults.optimizer,
+            momentum=defaults.momentum,
+            weight_decay=defaults.weight_decay,
+            clip_grad=defaults.clip_grad,
+            amp=defaults.amp,
+            ema=defaults.ema,
+            ema_decay=defaults.ema_decay,
+        )
+    return defaults
+
+
+def training_recipe_policy(
+    *,
+    recipe: TrainingRecipe,
+    config: Mapping[str, Any],
+) -> TrainRecipePolicy:
+    """Return internal trainer policy values for a resolved recipe."""
+    if recipe.name != "deim" or recipe.task != "detect":
+        return TrainRecipePolicy()
+    model_size = infer_dfine_model_size(config)
+    if model_size is None:
+        return TrainRecipePolicy(
+            scheduler="flatcosine",
+            warmup_iter=2000,
+            flat_epochs=29,
+            no_aug_epochs=12,
+            lr_gamma=0.5,
+            collate_mixup_prob=0.5,
+            collate_mixup_epochs=(4, 29),
+        )
+    return _DEIM_POLICIES[model_size]
 
 
 def apply_training_recipe_to_config(

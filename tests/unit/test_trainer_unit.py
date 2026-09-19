@@ -779,12 +779,50 @@ def test_public_train_keeps_explicit_options_over_recipe_defaults(monkeypatch, t
     assert captured["ema"] is False
 
 
-def test_public_train_recognizes_deim_but_does_not_run_unimplemented_path(tiny_model):
+def test_public_train_runs_deim_detection_recipe_policy(monkeypatch, tiny_model):
     from dfine.model import DFINE
 
+    captured = {}
+
+    class CapturingTrainer:
+        def __init__(self, **kwargs):
+            captured["trainer_init"] = kwargs
+
+        def train(self, **kwargs):
+            captured["train_kwargs"] = kwargs
+            return {"ok": True}
+
+        def _handle_train_error(self, error):
+            raise AssertionError("unexpected training error") from error
+
+    monkeypatch.setattr("dfine.trainer.DFINETrainer", CapturingTrainer)
+    monkeypatch.setattr("dfine.utils.data.load_data_yaml", lambda _path: {"names": {0: "object"}})
+
+    class UnchangedTransfer:
+        changed = False
+        mapped_proposal_scorer = ()
+        initialized = ()
+
+        def __init__(self, model, config):
+            self.model = model
+            self.config = config
+
+    monkeypatch.setattr(
+        "dfine.nn.transfer.adapt_model_to_classes",
+        lambda model, cfg, *_args: UnchangedTransfer(model, cfg),
+    )
     model = object.__new__(DFINE)
     model._model = tiny_model
-    model._cfg = {"task": "detect"}
+    model._cfg = {
+        "task": "detect",
+        "HGNetv2": {"name": "B0"},
+        "HybridEncoder": {"hidden_dim": 256},
+        "DFINECriterion": {
+            "weight_dict": {"loss_vfl": 1, "loss_bbox": 5, "loss_giou": 2},
+            "losses": ["vfl", "boxes"],
+            "gamma": 2.0,
+        },
+    }
     model._backend = "torch"
     model._device_str = "cpu"
     model._names = {}
@@ -793,9 +831,23 @@ def test_public_train_recognizes_deim_but_does_not_run_unimplemented_path(tiny_m
     model._deployed_model_device = None
     model._openvino_cache = {}
     model._task = "detect"
+    model.verbose = False
 
-    with pytest.raises(NotImplementedError, match="recipe='deim'"):
-        model.train(data="missing.yaml", recipe="deim")
+    metrics = model.train(data="dataset.yaml", recipe="deim")
+
+    assert metrics == {"ok": True}
+    trainer_config = captured["trainer_init"]["cfg"]
+    assert trainer_config["DFINECriterion"]["losses"] == ["mal", "boxes"]
+    assert "loss_mal" in trainer_config["DFINECriterion"]["weight_dict"]
+    assert "loss_vfl" not in trainer_config["DFINECriterion"]["weight_dict"]
+    train_kwargs = captured["train_kwargs"]
+    assert train_kwargs["recipe"] == "deim"
+    assert train_kwargs["scheduler"] == "flatcosine"
+    assert train_kwargs["warmup_iter"] == 2000
+    assert train_kwargs["flat_epochs"] == 64
+    assert train_kwargs["lr_gamma"] == pytest.approx(0.5)
+    assert train_kwargs["collate_mixup_prob"] == pytest.approx(0.5)
+    assert train_kwargs["collate_mixup_epochs"] == (4, 64)
 
 
 def test_public_train_rejects_deim_for_non_detection_tasks(tiny_model):
