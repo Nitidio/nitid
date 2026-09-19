@@ -1053,6 +1053,10 @@ class DFINETrainer:
             dataset = dataset.dataset
         if hasattr(dataset, "set_epoch"):
             dataset.set_epoch(epoch, mosaic=mosaic_open)
+        collate_fn = getattr(dataloader, "collate_fn", None)
+        set_collate_epoch = getattr(collate_fn, "set_epoch", None)
+        if callable(set_collate_epoch):
+            set_collate_epoch(epoch)
 
     def _build_optimizer(
         self,

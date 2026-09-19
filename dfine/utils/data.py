@@ -51,9 +51,10 @@ import math
 import os
 import random
 import sys
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, Sequence, cast
 
 import cv2
 import numpy as np
@@ -408,6 +409,7 @@ class CocoFinetuneDataset(Dataset):
         self.imgsz = imgsz
         self.augment = augment
         self.mosaic_enabled = True
+        self.sample_indices: list[int] | None = None
         self.seed = seed
         self.epoch = 0
         self.task = task
@@ -527,7 +529,7 @@ class CocoFinetuneDataset(Dataset):
                 masks = resize_masks(masks, self.imgsz)
             image = color_jitter_hsv(image, cfg, rng)
             if cfg.mixup and rng.random() < cfg.mixup:
-                other_idx = rng.randrange(len(self))
+                other_idx = self._sample_partner_index(rng)
                 other_image, other_boxes, other_labels, other_masks, _, _, _ = self._load_item(
                     other_idx
                 )
@@ -617,7 +619,7 @@ class CocoFinetuneDataset(Dataset):
     ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor]:
         half = self.imgsz // 2
         canvas = Image.new("RGB", (self.imgsz, self.imgsz), (114, 114, 114))
-        indices = [idx, *(rng.randrange(len(self)) for _ in range(3))]
+        indices = [idx, *(self._sample_partner_index(rng) for _ in range(3))]
         all_boxes, all_labels, all_masks = [], [], []
         offsets = ((0, 0), (half, 0), (0, half), (half, half))
         for item_idx, (left, top) in zip(indices, offsets):
@@ -648,6 +650,15 @@ class CocoFinetuneDataset(Dataset):
         """Select the deterministic transform stream and optionally disable mosaic."""
         self.epoch = epoch
         self.mosaic_enabled = mosaic
+
+    def set_sample_indices(self, indices: list[int] | None) -> None:
+        """Restrict partner augmentations to the active subset of source samples."""
+        self.sample_indices = list(indices) if indices is not None else None
+
+    def _sample_partner_index(self, rng: random.Random) -> int:
+        if self.sample_indices:
+            return self.sample_indices[rng.randrange(len(self.sample_indices))]
+        return rng.randrange(len(self))
 
     def _load_image(self, idx: int) -> Image.Image:
         info = self.coco.imgs[self.ids[idx]]
@@ -900,6 +911,57 @@ def _collate(batch):
     return torch.stack(images), list(targets)
 
 
+class DetectionBatchCollate:
+    """DEIM-style detection collate with optional batch-level MixUp."""
+
+    def __init__(
+        self,
+        *,
+        mixup_prob: float = 0.0,
+        mixup_epochs: tuple[int, int] = (0, 0),
+        seed: int = 0,
+    ) -> None:
+        self.mixup_prob = float(mixup_prob)
+        self.mixup_epochs = mixup_epochs
+        self.seed = seed
+        self.epoch = 0
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = epoch
+
+    def __call__(self, batch):
+        images, targets = _collate(batch)
+        if not self._mixup_active():
+            return images, targets
+
+        rng = random.Random(self.seed + self.epoch)
+        beta = round(rng.uniform(0.45, 0.55), 6)
+        source_images = images
+        rolled_images = source_images.roll(shifts=1, dims=0)
+        images = rolled_images.mul(1.0 - beta).add(source_images.mul(beta))
+        shifted_targets = targets[-1:] + targets[:-1]
+        mixed_targets = deepcopy(targets)
+        for index, target in enumerate(targets):
+            shifted = shifted_targets[index]
+            for key in ("boxes", "labels", "area", "masks"):
+                if key in target and key in shifted:
+                    mixed_targets[index][key] = torch.cat((target[key], shifted[key]), dim=0)
+            primary_count = len(target["labels"])
+            shifted_count = len(shifted["labels"])
+            mixed_targets[index]["mixup"] = torch.tensor(
+                [beta] * primary_count + [1.0 - beta] * shifted_count,
+                dtype=torch.float32,
+            )
+        return images, mixed_targets
+
+    def _mixup_active(self) -> bool:
+        start_epoch, stop_epoch = self.mixup_epochs
+        if self.mixup_prob <= 0.0 or not start_epoch <= self.epoch < stop_epoch:
+            return False
+        rng = random.Random(self.seed + self.epoch * 1_000_003)
+        return rng.random() < self.mixup_prob
+
+
 def scale_translate_with_params(
     image: Image.Image,
     boxes: torch.Tensor,
@@ -1029,6 +1091,8 @@ def build_detection_dataloader(
     fraction: float = 1.0,
     augment: AugmentationConfig | None = None,
     task: Literal["detect", "segment", "pose"] = "detect",
+    collate_mixup_prob: float = 0.0,
+    collate_mixup_epochs: Sequence[int] = (0, 0),
 ) -> DataLoader:
     """Build a DataLoader from COCO JSON or YOLO txt labels."""
     cfg = load_data_yaml(data)
@@ -1058,8 +1122,19 @@ def build_detection_dataloader(
         count = max(1, int(len(base_dataset) * fraction))
         generator = torch.Generator().manual_seed(seed)
         indices = torch.randperm(len(base_dataset), generator=generator)[:count].tolist()
+        base_dataset.set_sample_indices(indices)
         dataset = Subset(base_dataset, indices)
         dataset_size = count
+
+    collate_fn = _collate
+    if task == "detect" and collate_mixup_prob > 0.0:
+        if len(collate_mixup_epochs) != 2:
+            raise ValueError("collate_mixup_epochs must contain start and stop epochs")
+        collate_fn = DetectionBatchCollate(
+            mixup_prob=collate_mixup_prob,
+            mixup_epochs=(int(collate_mixup_epochs[0]), int(collate_mixup_epochs[1])),
+            seed=seed,
+        )
 
     generator = torch.Generator().manual_seed(seed)
     return DataLoader(
@@ -1067,7 +1142,7 @@ def build_detection_dataloader(
         batch_size=batch_size,
         shuffle=split == "train",
         num_workers=workers,
-        collate_fn=_collate,
+        collate_fn=collate_fn,
         drop_last=split == "train" and dataset_size >= batch_size,
         generator=generator,
         worker_init_fn=_seed_worker if workers > 0 and deterministic else None,

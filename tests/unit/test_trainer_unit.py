@@ -127,6 +127,26 @@ def test_set_dataset_epoch_controls_mosaic(trainer):
     assert dataset.calls == [(7, False)]
 
 
+def test_set_dataset_epoch_updates_collate_epoch(trainer):
+    class Dataset:
+        def set_epoch(self, epoch, mosaic=True):
+            pass
+
+    class Collate:
+        def __init__(self):
+            self.calls = []
+
+        def set_epoch(self, epoch):
+            self.calls.append(epoch)
+
+    collate = Collate()
+    loader = type("Loader", (), {"dataset": Dataset(), "collate_fn": collate})()
+
+    trainer._set_dataset_epoch(loader, 4, mosaic_open=True)
+
+    assert collate.calls == [4]
+
+
 def test_freeze_parameter_pattern(trainer):
     frozen = trainer._apply_freeze("l.weight")
 
