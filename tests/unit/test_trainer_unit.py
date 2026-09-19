@@ -574,3 +574,41 @@ def test_public_train_runs_error_callbacks_and_reraises_original(monkeypatch, ti
 
     assert caught.value is original_error
     assert handled == [original_error]
+
+
+def test_public_train_recognizes_deim_but_does_not_run_unimplemented_path(tiny_model):
+    from dfine.model import DFINE
+
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {"task": "detect"}
+    model._backend = "torch"
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
+    model._task = "detect"
+
+    with pytest.raises(NotImplementedError, match="recipe='deim'"):
+        model.train(data="missing.yaml", recipe="deim")
+
+
+def test_public_train_rejects_deim_for_non_detection_tasks(tiny_model):
+    from dfine.model import DFINE
+
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {"task": "pose"}
+    model._backend = "torch"
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
+    model._task = "pose"
+
+    with pytest.raises(ValueError, match="detection-only"):
+        model.train(data="missing.yaml", recipe="deim")

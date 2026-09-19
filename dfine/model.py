@@ -293,6 +293,7 @@ class DFINE:
         mixup: float = 0.0,
         close_mosaic: int = 10,
         time: float | None = None,
+        recipe: str = "default",
         verbose: bool = True,
         callbacks: object | None = None,
         wandb: bool | dict[str, Any] = False,
@@ -305,7 +306,17 @@ class DFINE:
             )
         from dfine.nn.transfer import adapt_model_to_classes
         from dfine.trainer import DFINETrainer
+        from dfine.training_recipes import resolve_training_recipe
         from dfine.utils.data import load_data_yaml, normalize_names
+
+        resolved_recipe = resolve_training_recipe(
+            recipe, task=str(getattr(self, "_task", "detect"))
+        )
+        if not resolved_recipe.implemented:
+            raise NotImplementedError(
+                "recipe='deim' is recognized for detection training, but the DEIM "
+                "criterion, scheduler, and augmentation phases are not implemented yet"
+            )
 
         data_config = load_data_yaml(data)
         dataset_names = {0: "object"} if single_cls else normalize_names(data_config)
@@ -417,6 +428,7 @@ class DFINE:
                 mixup=mixup,
                 close_mosaic=close_mosaic,
                 time_limit=time,
+                recipe=resolved_recipe.name,
                 verbose=verbose,
                 callbacks=callbacks,
                 wandb=wandb,

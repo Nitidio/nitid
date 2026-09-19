@@ -428,6 +428,7 @@ def test_train_args_match_serialized_training_state(tiny_checkpoint, tiny_datase
         "mixup",
         "close_mosaic",
         "time",
+        "recipe",
     }
 
 

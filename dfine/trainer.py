@@ -226,6 +226,7 @@ class DFINETrainer:
         mixup: float,
         close_mosaic: int,
         time_limit: float | None,
+        recipe: str,
         verbose: bool,
         callbacks: object | None = None,
         wandb: bool | Mapping[str, Any] = False,
@@ -236,6 +237,7 @@ class DFINETrainer:
 
         Args:
             data:       Path to the data YAML (ultralytics-style).
+            recipe:     Training recipe. ``"default"`` preserves the task's normal path.
             epochs:     Number of training epochs.
             imgsz:      Input image size (square).
             batch:      Batch size.
@@ -338,6 +340,7 @@ class DFINETrainer:
                     "mixup": mixup,
                     "close_mosaic": close_mosaic,
                     "time": time_limit,
+                    "recipe": recipe,
                 },
             )
             data = str(resolved["data"])
@@ -392,6 +395,7 @@ class DFINETrainer:
             time_limit = (
                 resolved["time"] if resolved["time"] is None else _as_float(resolved["time"])
             )
+            recipe = str(resolved["recipe"])
 
         self._validate_train_options(
             patience=patience,
@@ -533,6 +537,7 @@ class DFINETrainer:
             mixup=mixup,
             close_mosaic=close_mosaic,
             time=time_limit,
+            recipe=recipe,
             verbose=verbose,
         )
         self.train_args["save_dir"] = str(save_dir)
