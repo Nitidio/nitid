@@ -26,7 +26,7 @@ uv run mypy dfine/
 ## 2. Project layout
 
 ```
-dfine/              Public Python package — the only thing users import
+dfine/              Core model Python package
   model.py          DFINE class (single public entry point)
   predictor.py      Inference worker
   trainer.py        Fine-tuning worker
@@ -35,9 +35,11 @@ dfine/              Public Python package — the only thing users import
   results.py        Results + Boxes + Masks + Keypoints return types
   nn/               Integrated detection, segmentation, semantic, and pose architectures/losses
   utils/            sources.py (LoadSource), plotting, misc helpers
-tools/
-  dfine_cli.py      `dfine` CLI entry point
+nitid/              Product namespace for distribution entry points
+  cli.py                  `dfine` CLI entry point
   convert_checkpoint.py   Maintainer utility for raw upstream checkpoints
+tools/
+  visualize_augmentations.py  Source-checkout maintainer utility
 configs/
   datasets/         coco.yml and example_custom.yml
 tests/
@@ -198,7 +200,7 @@ If you are maintaining support for a new upstream checkpoint, use the conversion
 tool explicitly:
 
 ```bash
-uv run python tools/convert_checkpoint.py \
+uv run python -m nitid.convert_checkpoint \
     --weights upstream_checkpoint.pth \
     --model   nitid1l \
     --task    detect \

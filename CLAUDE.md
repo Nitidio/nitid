@@ -19,9 +19,9 @@ segmenter = DFINE("dfine_s", task="segment")
 uv sync --extra dev --extra train
 uv run pytest tests/unit
 uv run pytest tests/integration
-uv run ruff check dfine tools tests
-uv run ruff format --check dfine tools tests
-uv run mypy dfine tools
+uv run ruff check dfine nitid tools tests
+uv run ruff format --check dfine nitid tools tests
+uv run mypy dfine nitid tools
 ```
 
 ## Architecture
@@ -45,7 +45,7 @@ uv run mypy dfine tools
 Raw checkpoints can be wrapped without a separate model config:
 
 ```bash
-uv run python tools/convert_checkpoint.py \
+uv run python -m nitid.convert_checkpoint \
     --weights dfine_l.pth \
     --model dfine_l \
     --task detect \

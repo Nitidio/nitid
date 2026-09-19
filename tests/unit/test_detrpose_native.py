@@ -13,7 +13,7 @@ from dfine.nn.build import build_model
 from dfine.nn.configs import make_pose_config
 from dfine.nn.native_build import build_native_model
 from dfine.pose_contract import POSE_MODEL_NAMES, get_pose_checkpoint, get_pose_model_spec
-from tools.convert_checkpoint import convert as convert_checkpoint
+from nitid.convert_checkpoint import convert as convert_checkpoint
 
 
 def test_native_detrpose_architecture_construction() -> None:

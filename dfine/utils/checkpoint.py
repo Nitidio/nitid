@@ -83,7 +83,7 @@ def load_checkpoint(path: str | Path, device: str = "cpu"):
     if "config" not in ckpt:
         raise KeyError(
             f"'{path}' has no embedded config. "
-            "Run tools/convert_checkpoint.py to migrate a raw D-FINE .pth."
+            "Run python -m nitid.convert_checkpoint to migrate a raw D-FINE .pth."
         )
 
     _validate_checkpoint_format(ckpt)

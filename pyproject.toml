@@ -3,7 +3,7 @@ requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["dfine*", "nitid*", "tools*", "web*"]
+include = ["dfine*", "nitid*"]
 
 [project]
 name = "nitid"
@@ -86,12 +86,14 @@ web = [
 ]
 
 [project.scripts]
-dfine = "tools.dfine_cli:main"
+dfine = "nitid.cli:main"
 
 [project.urls]
+Homepage = "https://Vaelsys.github.io/nitid/"
 Documentation = "https://Vaelsys.github.io/nitid/"
 Issues = "https://github.com/Vaelsys/nitid/issues"
 Repository = "https://github.com/Vaelsys/nitid"
+Changelog = "https://github.com/Vaelsys/nitid/blob/develop/CHANGELOG.md"
 
 [dependency-groups]
 dev = [

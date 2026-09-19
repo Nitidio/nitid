@@ -15,7 +15,7 @@ from dfine.nn.configs import make_model_config, make_pose_config
 from dfine.nn.rio import DOTA_OBB_NAMES, make_rio_obb_config
 from dfine.pose_contract import get_pose_checkpoint
 from dfine.tasks import normalize_task
-from tools.convert_checkpoint import convert as convert_checkpoint
+from nitid.convert_checkpoint import convert as convert_checkpoint
 
 _ROOT = Path(__file__).parents[2]
 _RELEASE_ROOT = "https://github.com/Peterande/storage/releases/download/dfinev1.0"

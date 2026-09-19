@@ -5,7 +5,7 @@ Migrates a raw D-FINE .pth (weights only) into the dfine-wrap format
 (weights + embedded config + class names) so users only need one file.
 
 Usage:
-    python tools/convert_checkpoint.py \
+    python -m nitid.convert_checkpoint \
         --weights dfine_l.pth \
         --model   dfine_l \
         --task    detect \

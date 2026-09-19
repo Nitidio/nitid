@@ -1,5 +1,5 @@
 """
-dfine CLI — mirrors the `yolo` command from Ultralytics.
+Command-line interface for Nitid's D-FINE workflows.
 
 Usage:
     dfine predict  model=dfine_l weights=obj2coco source=image.jpg conf=0.5
