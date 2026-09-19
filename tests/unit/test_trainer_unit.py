@@ -7,7 +7,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from dfine.trainer import DFINETrainer, ModelEMA
+from dfine.trainer import DFINETrainer, FlatCosineLRScheduler, ModelEMA
 
 
 @pytest.fixture
@@ -224,6 +224,62 @@ def test_cosine_scheduler_end_lr(trainer):
         scheduler.step()
     final_lr = opt.param_groups[0]["lr"]
     assert final_lr == pytest.approx(lr0 * lrf, rel=1e-3)
+
+
+def test_build_scheduler_flat_cosine_iter_policy(trainer):
+    opt = trainer._build_optimizer("AdamW", lr=1e-3)
+    scheduler = trainer._build_scheduler(
+        opt,
+        epochs=10,
+        lrf=0.5,
+        schedule="flatcosine",
+        iter_per_epoch=2,
+        warmup_iter=2,
+        flat_epochs=3,
+        no_aug_epochs=1,
+    )
+
+    assert isinstance(scheduler, FlatCosineLRScheduler)
+    assert scheduler.step_per_iteration is True
+
+    scheduler.step(0, opt)
+    assert opt.param_groups[0]["lr"] == pytest.approx(0.0)
+    scheduler.step(2, opt)
+    assert opt.param_groups[0]["lr"] == pytest.approx(1e-3)
+    scheduler.step(6, opt)
+    assert opt.param_groups[0]["lr"] == pytest.approx(1e-3)
+    scheduler.step(19, opt)
+    assert opt.param_groups[0]["lr"] == pytest.approx(5e-4)
+
+
+def test_flat_cosine_scheduler_state_roundtrip(trainer):
+    opt = trainer._build_optimizer("AdamW", lr=1e-3)
+    scheduler = FlatCosineLRScheduler(
+        opt,
+        lr_gamma=0.25,
+        iter_per_epoch=2,
+        total_epochs=4,
+        warmup_iter=1,
+        flat_epochs=1,
+        no_aug_epochs=1,
+    )
+    scheduler.step(3, opt)
+    restored = FlatCosineLRScheduler(
+        opt,
+        lr_gamma=1.0,
+        iter_per_epoch=1,
+        total_epochs=1,
+        warmup_iter=0,
+        flat_epochs=0,
+        no_aug_epochs=0,
+    )
+
+    restored.load_state_dict(scheduler.state_dict())
+
+    assert restored.last_iter == 3
+    assert restored.total_iter == 8
+    assert restored.min_lrs == pytest.approx([2.5e-4, 2.5e-4])
+    assert restored.get_last_lr() == pytest.approx(scheduler.get_last_lr())
 
 
 def test_warmup_cosine_scheduler_progression(trainer):
