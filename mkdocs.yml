@@ -29,5 +29,4 @@ nav:
           - "ADR-0003: Native RiO-DETR OBB integration": adr/0003-native-rio-detr-obb-integration.md
   - Contributing:
       - Onboarding: onboarding.md
-      - Project Recap: project_recap.md
       - macOS Docker Setup: macos_docker_setup.md
