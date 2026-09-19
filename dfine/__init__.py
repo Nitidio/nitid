@@ -1,10 +1,10 @@
 """
-nitid: Ultralytics-style D-FINE detection and instance/semantic segmentation.
+nitid: Ultralytics-style DETR models for detection, segmentation, pose, and OBB.
 
 Usage:
-    from dfine import DFINE
+    from dfine import NITID
 
-    model = DFINE("dfine_l")
+    model = NITID("nitid1s", task="detect")
     results = model("image.jpg")
     model.train(data="coco.yaml", epochs=50)
     model.export(format="onnx")

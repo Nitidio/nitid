@@ -324,6 +324,7 @@ Fine-tune a model:
 
 ```bash
 uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50
+uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
 ```
 
 By default, training saves wrapped epoch checkpoints under `runs/train/exp/`.

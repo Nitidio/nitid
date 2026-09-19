@@ -580,6 +580,7 @@ Fine-tune on a custom dataset. See [fine_tuning.md](fine_tuning.md).
 ```python
 metrics = model.train(
     data="configs/datasets/my_dataset.yml",
+    recipe="default",    # default task-native training, or "deim" for detection
     epochs=50,
     imgsz=640,
     batch=16,
@@ -617,7 +618,9 @@ Training controls added to the public API:
 
 | Argument | Type / default | Meaning |
 |---|---|---|
-| `batch` | `int = 16` | Explicit positive batch size. |
+| `recipe` | `str = "default"` | Training recipe. Use `"default"` for the task-native path or `"deim"` for detection-only DEIM training. |
+| `batch` | recipe/task dependent | Explicit positive batch size. |
+| `epochs`, `lr0`, `lrf` | recipe/task dependent | Omitted detection values follow the selected recipe and model size. Explicit values override the recipe. |
 | `optimizer` | `str = "AdamW"` | Auto, Adam, AdamW, SGD, RAdam, NAdam, or RMSprop; Auto predictably selects AdamW. |
 | `momentum` | `float = 0.9` | SGD momentum or Adam-family beta1. |
 | `weight_decay` | `float = 1e-4` | Non-bias weight decay. |
@@ -638,13 +641,13 @@ Training controls added to the public API:
 | `fraction` | `float = 1.0` | Deterministically use a fraction in `(0, 1]`. |
 | `accumulate` | `int = 1` | Batches accumulated per optimizer step. |
 | `multi_scale` | `bool = False` | Random per-batch resizing around `imgsz`. |
-| `augment` | `bool = True` | Enable deterministic box-aware training transforms. |
+| `augment` | `bool = True` | Enable recipe-aware box transforms for detection and task-native transforms for other tasks. |
 | `fliplr` | `float = 0.5` | Horizontal-flip probability. |
 | `scale` | `float = 0.5` | Random isotropic scale gain. |
 | `translate` | `float = 0.1` | Random translation gain. |
 | `crop` | `float = 0.0` | Crop probability and maximum edge fraction. |
 | `hsv_h`, `hsv_s`, `hsv_v` | `0.015`, `0.7`, `0.4` | Hue, saturation, and brightness jitter gains. |
-| `mosaic`, `mixup` | `float = 0.0` | Experimental probabilities. Not supported for semantic, pose, or OBB. |
+| `mosaic`, `mixup` | `float = 0.0` (`mosaic=0.5` in DEIM when omitted) | Detection probabilities. `recipe="deim"` also enables recipe-controlled batch MixUp. Not supported for semantic, pose, or OBB. |
 | `close_mosaic` | `int = 10` | Turn mosaic off for the final N epochs. |
 | `time` | `float \| None = None` | Training duration in hours; when set, it overrides `epochs`. |
 | `save_dir` | `str \| Path \| None = None` | Exact requested run directory. |

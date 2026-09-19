@@ -116,6 +116,13 @@ result.save("obb.jpg")
 ```python
 metrics = model.train(data="configs/datasets/my_dataset.yml", epochs=50)
 print(metrics["mAP50"], metrics["mAP50-95"])
+
+# Detection-only DEIM recipe for faster convergence experiments.
+deim_metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    recipe="deim",
+)
 ```
 
 See [fine-tuning](docs/fine_tuning.md) for COCO, YOLO, semantic-mask, pose, and OBB dataset formats.
@@ -213,6 +220,7 @@ uv run dfine predict model=semantic_best.pth task=semantic source=image.jpg save
 uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 uv run dfine track model=nitid1s source=video.mp4 conf=0.5 save=true
 uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50
+uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
 uv run dfine val model=nitid1s task=detect data=my_dataset.yml
 uv run dfine export model=nitid1s task=detect format=onnx
 uv run dfine predict model=nitid1s source=image.jpg --report
