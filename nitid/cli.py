@@ -24,10 +24,11 @@ COMMANDS = {
     "val",
     "export",
     "convert",
+    "benchmark",
     "info",
     "bugreport",
 }
-REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
+REPORT_COMMANDS = {"predict", "track", "train", "val", "export", "benchmark"}
 HELP_FLAGS = {"-h", "--help"}
 TRACKER_OPTIONS = {
     "cmc_downscale",
@@ -61,6 +62,7 @@ Commands:
   val      Evaluate detection/instance mAP or semantic mIoU
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
   convert  Convert a detection dataset between YOLO and COCO formats
+  benchmark Compare exported runtime performance on this machine
   info     Show model parameters, GFLOPs, and checkpoint size
   bugreport Create an environment-only log for a GitHub issue
 
@@ -339,6 +341,32 @@ Examples:
   nitid convert data=data.yaml target=coco output=converted-coco
   nitid convert data=data.yaml target=yolo output=converted-yolo
 """,
+    "benchmark": """\
+Usage:
+  nitid benchmark model=MODEL [key=value ...]
+
+Options:
+  model=MODEL         Architecture name or wrapped checkpoint path (default: model1l)
+  task=TASK           detect or segment (default: detect)
+  weights=NAME        default, obj2coco, or coco (default: default)
+  formats=LIST        onnx, torchscript, tensorrt (default: all three)
+  imgsz=INT           Square input size (default: 640)
+  batch=INT           Images per inference call (default: 1)
+  warmup=INT          Unmeasured warm-up calls (default: 10)
+  iterations=INT      Measured inference calls (default: 100)
+  device=DEVICE       cpu, cuda, or cuda:N (default: model device)
+  half=BOOL           Build the TensorRT engine in FP16 (default: false)
+  project=PATH        Benchmark run root (default: runs/benchmark)
+  name=NAME           Benchmark run name (default: exp)
+  save_dir=PATH       Exact benchmark output directory
+  exist_ok=BOOL       Reuse the requested output directory (default: false)
+
+The table reports mean latency per batch, batches per second, and image FPS.
+Unavailable runtimes are shown as skipped instead of aborting other formats.
+
+Example:
+  nitid benchmark model=model1s formats=[onnx,torchscript] iterations=50
+""",
     "info": """\
 Usage:
   nitid info model=MODEL [key=value ...]
@@ -529,6 +557,12 @@ def _execute(argv: list[str]) -> None:
     elif command == "val":
         metrics = model.val(**kwargs)
         print(metrics)
+    elif command == "benchmark":
+        from dfine.benchmark import _format_table, benchmark_model
+
+        results, report = benchmark_model(model, **kwargs)
+        print(_format_table(results))
+        print(f"Benchmark report saved to {report}")
     elif command == "export":
         path = model.export(**kwargs)
         print(f"Exported to {path}")
@@ -555,7 +589,9 @@ def main(argv: list[str] | None = None, report_dir: str | Path = "runs/bugreport
         return
 
     if command not in REPORT_COMMANDS:
-        print("ERROR: --report is supported only for train, predict, track, val, and export")
+        print(
+            "ERROR: --report is supported only for train, predict, track, val, export, and benchmark"
+        )
         raise SystemExit(1)
 
     from dfine.utils.reporting import capture_command_report

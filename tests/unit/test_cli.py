@@ -33,6 +33,10 @@ from nitid.cli import COMMAND_HELP, COMMANDS, main, parse_args
         ("val", ("data=PATH", "task=TASK", "split=NAME", "nitid val")),
         ("export", ("task=TASK", "format=FORMAT", "opset=INT", "nitid export")),
         ("convert", ("data=DATA", "target=FORMAT", "output=PATH", "nitid convert")),
+        (
+            "benchmark",
+            ("formats=LIST", "warmup=INT", "iterations=INT", "nitid benchmark"),
+        ),
         ("info", ("task=TASK", "detailed=BOOL", "nitid info")),
         ("bugreport", ("environment-only", "nitid bugreport")),
     ],
