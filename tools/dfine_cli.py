@@ -24,12 +24,13 @@ COMMANDS = {
     "train",
     "val",
     "export",
+    "benchmark",
     "info",
     "gstreamer-info",
     "onvif",
     "bugreport",
 }
-REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
+REPORT_COMMANDS = {"predict", "track", "train", "val", "export", "benchmark"}
 HELP_FLAGS = {"-h", "--help"}
 TRACKER_OPTIONS = {
     "cmc_downscale",
@@ -62,6 +63,7 @@ Commands:
   train    Fine-tune detection, instance-, or semantic-segmentation models
   val      Evaluate detection/instance mAP or semantic mIoU
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
+  benchmark Compare exported runtime performance on this machine
   info     Show model parameters, GFLOPs, and checkpoint size
   gstreamer-info  Show GStreamer and hardware codec profile availability
   onvif    Discover cameras, list media profiles, or resolve an RTSP URI
@@ -353,6 +355,32 @@ Examples:
   dfine export model=semantic_best.pth task=semantic format=onnx
   dfine export model=dfine_l weights=coco format=openvino
   dfine export model=dfine_l format=tensorrt half=true
+""",
+    "benchmark": """\
+Usage:
+  dfine benchmark model=MODEL [key=value ...]
+
+Options:
+  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  task=TASK           detect or segment (default: detect)
+  weights=NAME        default, obj2coco, or coco (default: default)
+  formats=LIST        onnx, torchscript, tensorrt (default: all three)
+  imgsz=INT           Square input size (default: 640)
+  batch=INT           Images per inference call (default: 1)
+  warmup=INT          Unmeasured warm-up calls (default: 10)
+  iterations=INT      Measured inference calls (default: 100)
+  device=DEVICE       cpu, cuda, or cuda:N (default: model device)
+  half=BOOL           Build the TensorRT engine in FP16 (default: false)
+  project=PATH        Benchmark run root (default: runs/benchmark)
+  name=NAME           Benchmark run name (default: exp)
+  save_dir=PATH       Exact benchmark output directory
+  exist_ok=BOOL       Reuse the requested output directory (default: false)
+
+The table reports mean latency per batch, batches per second, and image FPS.
+Unavailable runtimes are shown as skipped instead of aborting other formats.
+
+Example:
+  dfine benchmark model=dfine_s formats=[onnx,torchscript] iterations=50
 """,
     "info": """\
 Usage:
@@ -699,6 +727,12 @@ def _execute(argv: list[str]) -> None:
     elif command == "export":
         path = model.export(**kwargs)
         print(f"Exported to {path}")
+    elif command == "benchmark":
+        from dfine.benchmark import _format_table, benchmark_model
+
+        results, report = benchmark_model(model, **kwargs)
+        print(_format_table(results))
+        print(f"Benchmark report saved to {report}")
     elif command == "info":
         model.info(detailed=kwargs.get("detailed", False))
 

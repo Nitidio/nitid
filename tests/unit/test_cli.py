@@ -32,6 +32,10 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
         ("train", ("data=PATH", "task=TASK", "epochs=INT", "dfine train")),
         ("val", ("data=PATH", "task=TASK", "split=NAME", "dfine val")),
         ("export", ("task=TASK", "format=FORMAT", "opset=INT", "dfine export")),
+        (
+            "benchmark",
+            ("formats=LIST", "warmup=INT", "iterations=INT", "dfine benchmark"),
+        ),
         ("info", ("task=TASK", "detailed=BOOL", "dfine info")),
         ("gstreamer-info", ("named decode/encode profiles", "software", "jetson")),
         ("onvif", ("action=discover", "password_env=NAME", "action=uri")),
