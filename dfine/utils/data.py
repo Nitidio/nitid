@@ -138,7 +138,12 @@ def normalize_names(cfg: dict) -> dict[int, str]:
 def resolve_detection_split(data: str | Path, split: str) -> DetectionSplitSpec:
     """Resolve one split to either a COCO annotation file or YOLO label directory."""
     cfg = load_data_yaml(data)
-    root = Path(cfg["path"])
+    root_value = cfg.get("path")
+    if not isinstance(root_value, (str, Path)):
+        raise ValueError("Data YAML must define a dataset 'path'")
+    root = Path(root_value).expanduser()
+    if not root.is_absolute():
+        root = (Path(data).resolve().parent / root).resolve()
     img_dir = root / cfg[split]
 
     ann_file = _find_coco_annotation(root, cfg, split, img_dir)

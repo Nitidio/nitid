@@ -3,6 +3,7 @@ import json
 import yaml
 
 from dfine.dataset_converter import convert_dataset
+from dfine.utils.data import resolve_detection_split
 
 
 def test_yolo_to_coco_preserves_splits_and_emits_config(tiny_yolo_dataset, tmp_path):
@@ -10,7 +11,9 @@ def test_yolo_to_coco_preserves_splits_and_emits_config(tiny_yolo_dataset, tmp_p
 
     assert result.splits == {"train": 4, "val": 2}
     config = yaml.safe_load(result.config_path.read_text())
+    assert config["path"] == "../.."
     assert config["train_ann"] == "annotations/instances_train.json"
+    assert resolve_detection_split(result.config_path, "train").format == "coco"
     payload = json.loads((result.output_dir / config["train_ann"]).read_text())
     assert len(payload["images"]) == 4
     assert {item["name"] for item in payload["categories"]} == {"person", "car"}
@@ -21,7 +24,9 @@ def test_coco_to_yolo_preserves_splits_polygons_and_images(tiny_dataset, tmp_pat
 
     assert result.splits == {"train": 4, "val": 2}
     config = yaml.safe_load(result.config_path.read_text())
+    assert config["path"] == "../.."
     assert config["names"] == {0: "person", 1: "car"}
+    assert resolve_detection_split(result.config_path, "train").format == "yolo"
     labels = (result.output_dir / "labels/train/000001.txt").read_text().split()
     assert labels[0] == "0"
     assert [float(value) for value in labels[1:]] == [

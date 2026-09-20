@@ -48,5 +48,15 @@ def test_dataset_conversion_returns_download(client, auth_headers, tiny_yolo_dat
     assert response.headers["content-type"] == "application/zip"
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         names = set(archive.namelist())
+        generated_config = yaml.safe_load(
+            archive.read(
+                next(
+                    name
+                    for name in names
+                    if name.startswith("configs/datasets/") and name.endswith((".yml", ".yaml"))
+                )
+            )
+        )
     assert "annotations/instances_train.json" in names
     assert any(name.startswith("configs/datasets/") for name in names)
+    assert generated_config["path"] == "../.."

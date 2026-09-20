@@ -167,7 +167,7 @@ def convert_dataset(
     output_dir.mkdir(parents=True)
 
     names = normalize_names(config)
-    generated: dict[str, object] = {"path": str(output_dir), "nc": len(names), "names": names}
+    generated: dict[str, object] = {"path": "../..", "nc": len(names), "names": names}
     split_counts: dict[str, int] = {}
     converted_categories: list[dict] | None = None
 
