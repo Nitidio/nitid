@@ -11,7 +11,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
 @pytest.mark.parametrize(
     ("command", "expected_text"),
     [
-        ("predict", ("source=SOURCE", "conf=FLOAT", "save=BOOL", "dfine predict")),
+        ("predict", ("source=SOURCE", "conf=FLOAT", "save=BOOL", "half=BOOL", "dfine predict")),
         (
             "track",
             (

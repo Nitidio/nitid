@@ -144,6 +144,7 @@ results = model.predict(
     iou=0.85,          # IoU threshold for TTA NMS
     sink=None,         # optional FrameSink receiving annotated frames
     return_probs=False, # semantic only: retain float [C, H, W] probabilities
+    half=False,        # CUDA FP16 mixed precision; other devices retain FP32
 )
 ```
 
@@ -152,6 +153,19 @@ Returns `list[Results]` (or a generator when `stream=True`).
 `predict()` preserves the trainable model. Internally, nitid creates and caches
 a separate deployed inference copy, so workflows such as `predict()` → `train()`
 continue training the original full architecture.
+
+Set `half=True` for CUDA FP16 mixed-precision prediction, including streaming
+and flipped-image augmentation. PyTorch autocast selects FP16 for eligible
+operations and keeps operations requiring more precision in FP32. Model weights
+remain FP32, and floating outputs are converted to FP32 before postprocessing.
+CPU and other non-CUDA devices automatically retain the normal FP32 path.
+For the OpenVINO compute backend this flag has no effect on compiled precision;
+OpenVINO continues to manage precision itself. Saved run metadata records both
+`half` (requested) and `half_enabled` (whether CUDA autocast was enabled).
+
+```python
+results = model.predict("image.jpg", half=True)
+```
 
 Semantic prediction uses per-pixel argmax, so `conf` and `mask_threshold` do
 not alter its output. `classes` filtering is rejected because removing dense
