@@ -11,7 +11,7 @@ from nitid.cli import COMMAND_HELP, COMMANDS, main, parse_args
 @pytest.mark.parametrize(
     ("command", "expected_text"),
     [
-        ("predict", ("source=SOURCE", "conf=FLOAT", "save=BOOL", "nitid predict")),
+        ("predict", ("source=SOURCE", "conf=FLOAT", "save=BOOL", "half=BOOL", "nitid predict")),
         (
             "track",
             (

@@ -6,6 +6,7 @@ Called internally by DFINE.predict(). Not part of the public API.
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Callable, Generator
 
@@ -69,12 +70,14 @@ class DFINEPredictor:
         run_metadata: dict[str, object] | None = None,
         frame_sink: FrameSink | None = None,
         return_probs: bool = False,
+        half: bool = False,
     ) -> list | Generator:
         """Iterate over source and return results (list or generator if stream=True)."""
         if not 0.0 <= mask_threshold <= 1.0:
             raise ValueError("mask_threshold must be between 0 and 1")
         if self.task == "semantic" and classes is not None:
             raise ValueError("Semantic prediction does not support classes filtering")
+        use_half = half and torch.device(self.device).type == "cuda"
         loader = LoadSource(
             source,
             imgsz=imgsz,
@@ -109,6 +112,8 @@ class DFINEPredictor:
                 "rtsp_authenticated": rtsp_username is not None,
                 "iou": iou,
                 "return_probs": return_probs,
+                "half": half,
+                "half_enabled": use_half,
             }
             if run_metadata:
                 metadata.update(run_metadata)
@@ -126,6 +131,7 @@ class DFINEPredictor:
             result_processor=result_processor,
             frame_sink=frame_sink,
             return_probs=return_probs,
+            half=use_half,
         )
         return gen if stream else list(gen)
 
@@ -141,6 +147,7 @@ class DFINEPredictor:
         result_processor: Callable[[Results], Results] | None = None,
         frame_sink: FrameSink | None = None,
         return_probs: bool = False,
+        half: bool = False,
     ) -> Generator:
         """Yield one Results object per frame/image."""
         seen: dict[str, int] = {}
@@ -167,7 +174,7 @@ class DFINEPredictor:
                 orig_size = torch.tensor([[w, h]], dtype=torch.float32, device=self.device)
                 inference_start = time.perf_counter()
                 with torch.no_grad():
-                    raw = self.model(tensor)
+                    raw = self._forward(tensor, half=half)
                     detections = self._postprocessor(raw, orig_size)
                     if not isinstance(detections, list):
                         raise RuntimeError("Prediction postprocessor returned an invalid result")
@@ -178,7 +185,7 @@ class DFINEPredictor:
                     if augment:
                         # Run prediction on horizontally flipped image
                         tensor_flipped = torch.flip(tensor, dims=[3])
-                        raw_flipped = self.model(tensor_flipped)
+                        raw_flipped = self._forward(tensor_flipped, half=half)
                         detections_flipped = self._postprocessor(raw_flipped, orig_size)
                         if not isinstance(detections_flipped, list):
                             raise RuntimeError(
@@ -255,6 +262,22 @@ class DFINEPredictor:
             if frame_sink is not None:
                 frame_sink.close()
             loader.close()
+
+    def _forward(self, tensor: torch.Tensor, *, half: bool):
+        # Scope autocast to each forward, never across a generator yield. Keep
+        # cached inference and trainable weights in FP32 for subsequent calls.
+        context = torch.autocast("cuda", dtype=torch.float16) if half else nullcontext()
+        with context:
+            raw = self.model(tensor)
+        if half:
+            # Geometry, mask decoding, and NMS consume FP32 outside autocast.
+            raw = {
+                key: value.float()
+                if isinstance(value, torch.Tensor) and value.is_floating_point()
+                else value
+                for key, value in raw.items()
+            }
+        return raw
 
     def _save_result(
         self,
