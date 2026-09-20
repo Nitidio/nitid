@@ -95,6 +95,19 @@ a:hover { text-decoration: underline; }
   padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; min-width: 240px;
 }
 
+/* ── Dataset converter ────────────────────────────────── */
+.converter-page > p { color: #6b7280; }
+.converter-page form {
+  max-width: 620px; display: flex; flex-direction: column; gap: 18px;
+  padding: 24px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+}
+.converter-page label { display: flex; flex-direction: column; gap: 7px; font-weight: 500; }
+.converter-page label span { color: #6b7280; font-size: 12px; font-weight: 400; }
+.converter-page input, .converter-page select {
+  padding: 9px 11px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit;
+}
+.converter-page .btn-primary { align-self: flex-start; }
+
 /* ── Param form ──────────────────────────────────────── */
 .param-form { display: flex; flex-direction: column; gap: 14px; }
 .param-form label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: #374151; }

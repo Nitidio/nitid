@@ -1,0 +1,52 @@
+import json
+
+import yaml
+
+from dfine.dataset_converter import convert_dataset
+
+
+def test_yolo_to_coco_preserves_splits_and_emits_config(tiny_yolo_dataset, tmp_path):
+    result = convert_dataset(tiny_yolo_dataset, tmp_path / "coco", "coco")
+
+    assert result.splits == {"train": 4, "val": 2}
+    config = yaml.safe_load(result.config_path.read_text())
+    assert config["train_ann"] == "annotations/instances_train.json"
+    payload = json.loads((result.output_dir / config["train_ann"]).read_text())
+    assert len(payload["images"]) == 4
+    assert {item["name"] for item in payload["categories"]} == {"person", "car"}
+
+
+def test_coco_to_yolo_preserves_splits_polygons_and_images(tiny_dataset, tmp_path):
+    result = convert_dataset(tiny_dataset, tmp_path / "yolo", "yolo")
+
+    assert result.splits == {"train": 4, "val": 2}
+    config = yaml.safe_load(result.config_path.read_text())
+    assert config["names"] == {0: "person", 1: "car"}
+    labels = (result.output_dir / "labels/train/000001.txt").read_text().split()
+    assert labels[0] == "0"
+    assert [float(value) for value in labels[1:]] == [
+        0.15625,
+        0.15625,
+        0.46875,
+        0.15625,
+        0.46875,
+        0.46875,
+        0.15625,
+        0.46875,
+    ]
+    assert (result.output_dir / "images/val/000001.jpg").is_file()
+
+
+def test_converter_refuses_to_replace_output_without_permission(tiny_yolo_dataset, tmp_path):
+    output = tmp_path / "existing"
+    output.mkdir()
+    marker = output / "keep.txt"
+    marker.write_text("keep")
+
+    try:
+        convert_dataset(tiny_yolo_dataset, output, "coco")
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("expected FileExistsError")
+    assert marker.read_text() == "keep"

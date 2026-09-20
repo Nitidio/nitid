@@ -360,6 +360,22 @@ Display model information:
 uv run dfine info model=nitid1s task=detect
 ```
 
+## Convert detection datasets
+
+Convert every split declared in a dataset YAML between YOLO text labels and
+COCO JSON annotations:
+
+```bash
+uv run dfine convert data=data.yaml target=coco output=converted-coco
+uv run dfine convert data=data.yaml target=yolo output=converted-yolo
+```
+
+The converter preserves `train`, `val`, and `test` splits, copies images and
+labels into a self-contained output directory, and writes a directly trainable
+configuration under `OUTPUT/configs/datasets/`. Bounding boxes and polygon
+segmentations are retained. Existing output is protected unless
+`exist_ok=true` is supplied explicitly.
+
 ## Create a bug-report log
 
 Add `--report` to a training, prediction, tracking, validation, or export command:

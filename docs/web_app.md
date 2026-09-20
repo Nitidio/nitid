@@ -113,6 +113,14 @@ The page auto-refreshes every 2 seconds until the run reaches `done` or `failed`
 
 The **Runs** list shows all past runs for the logged-in user with status, model, input type, item count, and creation time. Click **View** to revisit any run, or **Delete** to remove it along with all uploaded files and result snapshots.
 
+### 5. Convert a dataset
+
+Open **Convert Dataset**, upload a ZIP containing the dataset and its data YAML,
+then choose COCO JSON or YOLO text as the destination. If the archive contains
+more than one YAML, enter the relative path to the dataset configuration. The
+browser downloads a converted ZIP with preserved splits and a trainable config
+under `configs/datasets/`.
+
 ---
 
 ## REST API reference
@@ -186,6 +194,16 @@ supports.
 server doesn't have the optional `openvino` extra installed
 (`uv sync --extra openvino`) — request a run with `backend="openvino"`
 anyway and it fails with a clear error rather than a silent fallback.
+
+### Dataset conversion
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/datasets/convert` | Convert an authenticated user's ZIP dataset and return a ZIP download. |
+
+The multipart fields are `archive` (`.zip`), `target` (`coco` or `yolo`), and
+optional `config` (the YAML path inside the archive). Archive paths are checked
+before extraction; invalid or ambiguous inputs return status 422.
 
 ### Files
 
