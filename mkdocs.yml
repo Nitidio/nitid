@@ -17,6 +17,7 @@ nav:
   - ONVIF Cameras: onvif.md
   - Fine-tuning: fine_tuning.md
   - Export: export.md
+  - Deployment: deployment.md
   - Web App: web_app.md
   - API Reference: api_reference.md
   - Troubleshooting: troubleshooting.md
