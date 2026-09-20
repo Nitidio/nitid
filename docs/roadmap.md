@@ -12,7 +12,7 @@ real video sources.
 The public API should stay compact:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 detector = NITID("nitid1s", task="detect")
 segmenter = NITID("nitid1s", task="segment")

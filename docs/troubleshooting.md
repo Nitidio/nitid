@@ -9,11 +9,11 @@ Most nitid problems come from one missing setup step. The usual flow is:
 3. If one of those pieces is missing, Python prints an error.
 4. The fix is usually to install dependencies, download a model, or use the right command form.
 
-## `dfine: command not found`
+## `nitid: command not found`
 
 ### What it means
 
-The `dfine` command exists inside nitid's virtual environment, but your terminal cannot see it directly.
+The `nitid` command exists inside Nitid's virtual environment, but your terminal cannot see it directly.
 
 This usually happens when `.venv` is not activated.
 
@@ -22,21 +22,21 @@ This usually happens when `.venv` is not activated.
 From the repository root, use `uv run`:
 
 ```bash
-uv run dfine --help
-uv run dfine predict --help
+uv run nitid --help
+uv run nitid predict --help
 ```
 
 Or activate the environment first:
 
 ```bash
 source .venv/bin/activate
-dfine --help
+nitid --help
 ```
 
 Inside the Docker container, you can also call the executable directly:
 
 ```bash
-.venv/bin/dfine --help
+.venv/bin/nitid --help
 ```
 
 See the [command-line guide](cli.md) for the full CLI workflow.
@@ -101,19 +101,19 @@ If the internet connection or class names file is missing, the download or wrapp
 Try a direct download command:
 
 ```bash
-uv run dfine download model=nitid1s task=detect
+uv run nitid download model=nitid1s task=detect
 ```
 
 To save the model in a folder:
 
 ```bash
-uv run dfine download model=nitid1s task=detect output=models
+uv run nitid download model=nitid1s task=detect output=models
 ```
 
 To replace an existing wrapped checkpoint:
 
 ```bash
-uv run dfine download model=nitid1s task=detect output=models force=true
+uv run nitid download model=nitid1s task=detect output=models force=true
 ```
 
 Detection, instance segmentation, semantic segmentation, pose, and OBB all use
@@ -135,7 +135,7 @@ cannot find `config`.
 If you are using an official model, use the model name and let nitid prepare it:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 ```
@@ -143,7 +143,7 @@ model = NITID("nitid1s", task="detect")
 Or use the CLI:
 
 ```bash
-uv run dfine download model=nitid1s task=detect
+uv run nitid download model=nitid1s task=detect
 ```
 
 If you are maintaining support for a new upstream checkpoint, see the maintainer
@@ -163,7 +163,7 @@ If you are on a Mac or a CPU-only machine, `torch.cuda.is_available()` returns `
 For CPU testing, let nitid choose the device automatically or use CPU:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect", device="cpu")
 ```
@@ -171,7 +171,7 @@ model = NITID("nitid1s", task="detect", device="cpu")
 For CLI usage:
 
 ```bash
-uv run dfine predict model=nitid1s task=detect source=image.jpg
+uv run nitid predict model=nitid1s task=detect source=image.jpg
 ```
 
 For GPU usage, run on a Linux or Windows machine with an NVIDIA GPU and working drivers.
@@ -193,13 +193,13 @@ pip install --extra-index-url https://pypi.nvidia.com tensorrt>=8.6
 Then export:
 
 ```bash
-uv run dfine export model=nitid1s task=detect format=tensorrt
+uv run nitid export model=nitid1s task=detect format=tensorrt
 ```
 
 If you do not need TensorRT, export to ONNX instead:
 
 ```bash
-uv run dfine export model=nitid1s task=detect format=onnx
+uv run nitid export model=nitid1s task=detect format=onnx
 ```
 
 See the [export guide](export.md) for export options and constraints.
@@ -224,7 +224,7 @@ cd /app
 Or use `uv run`:
 
 ```bash
-uv run dfine --help
+uv run nitid --help
 ```
 
 From your host terminal:
@@ -247,7 +247,7 @@ Create the folder and download a model into it:
 
 ```bash
 mkdir -p models
-uv run dfine download model=nitid1s task=detect output=models
+uv run nitid download model=nitid1s task=detect output=models
 ```
 
 Then start the backend:
@@ -267,7 +267,7 @@ Run these checks from the repository root and include the output when asking for
 ```bash
 git status
 python --version
-uv run dfine --help
+uv run nitid --help
 uv run pytest tests/unit
 ```
 
