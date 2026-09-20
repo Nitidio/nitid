@@ -51,7 +51,8 @@ The audit identified these RiO-DETR source areas as integration candidates:
 
 The integration should not import from `RiO-DETR-master` at runtime and should not package the
 reference checkout. Adapted code must live inside the installable nitid package with attribution where
-required.
+required. The repository-root `THIRD_PARTY_NOTICES.md` records the released
+framework attribution, inherited upstream notices, and audited source revisions.
 
 ## OBB representation contract
 

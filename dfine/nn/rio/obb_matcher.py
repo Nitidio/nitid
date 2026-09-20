@@ -1,4 +1,8 @@
 # mypy: ignore-errors
+# Adapted from RiO-DETR / RT-DETRv2-OBB (Apache-2.0).
+# Source: https://github.com/RicePasteM/RiO-DETR
+# Modified for native integration into nitid in 2026.
+# Upstream copyright notices are retained below; see THIRD_PARTY_NOTICES.md.
 """
 Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 Modules to compute the matching cost and solve the corresponding LSAP.
