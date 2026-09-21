@@ -1,13 +1,12 @@
-"""
-dfine CLI — mirrors the `yolo` command from Ultralytics.
+"""Nitid command-line interface.
 
 Usage:
-    dfine predict  model=dfine_l weights=obj2coco source=image.jpg conf=0.5
-    dfine track    model=dfine_s source=video.mp4 conf=0.5 save=true
-    dfine download model=dfine_l weights=coco
-    dfine train    model=dfine_l data=coco.yaml epochs=50
-    dfine val      model=dfine_l data=coco.yaml
-    dfine export   model=dfine_l format=onnx
+    nitid predict  model=nitid1l weights=obj2coco source=image.jpg conf=0.5
+    nitid track    model=nitid1s source=video.mp4 conf=0.5 save=true
+    nitid download model=nitid1l weights=coco
+    nitid train    model=nitid1l data=coco.yaml epochs=50
+    nitid val      model=nitid1l data=coco.yaml
+    nitid export   model=nitid1l format=onnx
 """
 
 from __future__ import annotations
@@ -51,10 +50,10 @@ TRACKER_OPTIONS = {
 }
 
 GENERAL_HELP = """\
-nitid D-FINE CLI
+Nitid CLI
 
 Usage:
-  dfine COMMAND [key=value ...] [--report]
+  nitid COMMAND [key=value ...] [--report]
 
 Commands:
   predict  Run detection, instance segmentation, or semantic segmentation
@@ -69,20 +68,20 @@ Commands:
   onvif    Discover cameras, list media profiles, or resolve an RTSP URI
   bugreport Create an environment-only log for a GitHub issue
 
-Run "dfine COMMAND --help" for command-specific options and examples.
+Run "nitid COMMAND --help" for command-specific options and examples.
 Add --report to train, predict, track, val, or export to capture output and environment details.
 """
 
 COMMAND_HELP = {
     "predict": """\
 Usage:
-  dfine predict model=MODEL source=SOURCE [key=value ...]
+  nitid predict model=MODEL source=SOURCE [key=value ...]
 
 Required:
   source=SOURCE       Image, directory, video, URL, webcam index, or stream URL
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   conf=FLOAT          Confidence threshold (default: 0.5)
@@ -118,20 +117,20 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
-  dfine predict model=dfine_l source=image.jpg
-  dfine predict model=dfine_l weights=coco source=image.jpg save=true
-  dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
-  dfine predict model=dfine_l source=video.mp4 conf=0.3 stream=true
+  nitid predict model=nitid1l source=image.jpg
+  nitid predict model=nitid1l weights=coco source=image.jpg save=true
+  nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
+  nitid predict model=nitid1l source=video.mp4 conf=0.3 stream=true
 """,
     "track": """\
 Usage:
-  dfine track model=MODEL source=SOURCE [key=value ...]
+  nitid track model=MODEL source=SOURCE [key=value ...]
 
 Required:
   source=SOURCE       Video, webcam index, or stream URL
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   weights=NAME        default, obj2coco, or coco (default: default)
   tracker=NAME        bytetrack (default), botsort, or ocsort
   conf=FLOAT          Detection confidence threshold (default: 0.1)
@@ -197,23 +196,23 @@ OC-SORT options:
 Install tracking support first with: uv sync --extra track
 
 Examples:
-  dfine track model=dfine_s source=video.mp4
-  dfine track model=dfine_s source=video.mp4 tracker=botsort
-  dfine track model=dfine_s source=video.mp4 tracker=ocsort
-  dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
-  dfine track model=dfine_s source=0 classes=[0] stream=true
-  dfine track model=dfine_s source=rtsp://camera/stream lost_track_buffer=60
-  dfine track model=dfine_s source=rtsp://camera/stream backend=gstreamer reconnect=true
-  dfine track model=dfine_s source=video.mp4 output=runs/segments segment_duration=60
-  dfine track model=dfine_s source=rtsp://camera/stream backend=gstreamer hardware_profile=vaapi
+  nitid track model=nitid1s source=video.mp4
+  nitid track model=nitid1s source=video.mp4 tracker=botsort
+  nitid track model=nitid1s source=video.mp4 tracker=ocsort
+  nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
+  nitid track model=nitid1s source=0 classes=[0] stream=true
+  nitid track model=nitid1s source=rtsp://camera/stream lost_track_buffer=60
+  nitid track model=nitid1s source=rtsp://camera/stream backend=gstreamer reconnect=true
+  nitid track model=nitid1s source=video.mp4 output=runs/segments segment_duration=60
+  nitid track model=nitid1s source=rtsp://camera/stream backend=gstreamer hardware_profile=vaapi
 """,
     "download": """\
 Usage:
-  dfine download [model=MODEL] [key=value ...]
+  nitid download [model=MODEL] [key=value ...]
 
 Options:
-  model=NAME          dfine_n (segmentation only), dfine_s, dfine_m, dfine_l, or dfine_x
-                      (default: dfine_l)
+  model=NAME          nitid1n (segmentation only), nitid1s, nitid1m, nitid1l, or nitid1x
+                      (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   output=PATH         Output directory or .pth file (default: current directory)
@@ -223,22 +222,22 @@ The command downloads the official raw checkpoint and converts it to nitid's
 wrapped .pth format. The filename includes the resolved weight variant.
 
 Examples:
-  dfine download model=dfine_s
-  dfine download model=dfine_s task=segment
-  dfine download model=dfine_s task=semantic
-  dfine download model=dfine_s weights=coco
-  dfine download model=dfine_m output=models
-  dfine download model=dfine_l output=models/custom.pth force=true
+  nitid download model=nitid1s
+  nitid download model=nitid1s task=segment
+  nitid download model=nitid1s task=semantic
+  nitid download model=nitid1s weights=coco
+  nitid download model=nitid1m output=models
+  nitid download model=nitid1l output=models/custom.pth force=true
 """,
     "train": """\
 Usage:
-  dfine train model=MODEL data=DATA [key=value ...]
+  nitid train model=MODEL data=DATA [key=value ...]
 
 Required:
   data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   epochs=INT          Number of training epochs (default: 50)
@@ -293,19 +292,19 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
-  dfine train model=dfine_l data=coco.yaml epochs=50 batch=16 mlflow=true
-  dfine train model=dfine_s task=segment data=instances.yaml epochs=50
-  dfine train model=dfine_s task=semantic data=semantic.yaml epochs=50
+  nitid train model=nitid1l data=coco.yaml epochs=50 batch=16 mlflow=true
+  nitid train model=nitid1s task=segment data=instances.yaml epochs=50
+  nitid train model=nitid1s task=semantic data=semantic.yaml epochs=50
 """,
     "val": """\
 Usage:
-  dfine val model=MODEL data=DATA [key=value ...]
+  nitid val model=MODEL data=DATA [key=value ...]
 
 Required:
   data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   imgsz=INT           Square validation image size (default: 640)
@@ -321,16 +320,16 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
-  dfine val model=dfine_l data=coco.yaml split=val batch=16
-  dfine val model=dfine_s task=segment data=instances.yaml
-  dfine val model=semantic_last.pth task=semantic data=semantic.yaml
+  nitid val model=nitid1l data=coco.yaml split=val batch=16
+  nitid val model=nitid1s task=segment data=instances.yaml
+  nitid val model=semantic_last.pth task=semantic data=semantic.yaml
 """,
     "export": """\
 Usage:
-  dfine export model=MODEL [key=value ...]
+  nitid export model=MODEL [key=value ...]
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
@@ -350,11 +349,11 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
-  dfine export model=dfine_l format=onnx
-  dfine export model=dfine_s task=segment format=onnx
-  dfine export model=semantic_best.pth task=semantic format=onnx
-  dfine export model=dfine_l weights=coco format=openvino
-  dfine export model=dfine_l format=tensorrt half=true
+  nitid export model=nitid1l format=onnx
+  nitid export model=nitid1s task=segment format=onnx
+  nitid export model=semantic_best.pth task=semantic format=onnx
+  nitid export model=nitid1l weights=coco format=openvino
+  nitid export model=nitid1l format=tensorrt half=true
 """,
     "convert": """\
 Usage:
@@ -377,20 +376,20 @@ Examples:
 """,
     "info": """\
 Usage:
-  dfine info model=MODEL [key=value ...]
+  nitid info model=MODEL [key=value ...]
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   detailed=BOOL       Include per-layer parameter counts (default: false)
 
 Example:
-  dfine info model=dfine_l weights=obj2coco detailed=true
+  nitid info model=nitid1l weights=obj2coco detailed=true
 """,
     "gstreamer-info": """\
 Usage:
-  dfine gstreamer-info
+  nitid gstreamer-info
 
 Reports whether OpenCV has GStreamer enabled, whether gst-inspect-1.0 is
 available, and which named decode/encode profiles have all required elements.
@@ -404,9 +403,9 @@ Profiles:
 """,
     "onvif": """\
 Usage:
-  dfine onvif action=discover [timeout=SECONDS] [interface=IP]
-  dfine onvif action=profiles host=HOST [username=USER] [password_env=NAME]
-  dfine onvif action=uri host=HOST [profile=TOKEN_OR_NAME] [username=USER]
+  nitid onvif action=discover [timeout=SECONDS] [interface=IP]
+  nitid onvif action=profiles host=HOST [username=USER] [password_env=NAME]
+  nitid onvif action=uri host=HOST [profile=TOKEN_OR_NAME] [username=USER]
 
 Options:
   action=NAME         discover, profiles, or uri (default: discover)
@@ -425,7 +424,7 @@ arguments, which may be visible to other local processes.
 """,
     "bugreport": """\
 Usage:
-  dfine bugreport
+  nitid bugreport
 
 Creates an environment-only log containing OS, Python, package, PyTorch,
 CUDA, cuDNN, and GPU information. Attach the resulting file to a GitHub issue.
@@ -626,7 +625,7 @@ def _execute(argv: list[str]) -> None:
         return
 
     if command == "download":
-        model_name = kwargs.pop("model", "dfine_l")
+        model_name = kwargs.pop("model", "nitid1l")
         task = kwargs.pop("task", "detect")
         weights = kwargs.pop("weights", "default")
         output = kwargs.pop("output", None)
@@ -688,13 +687,13 @@ def _execute(argv: list[str]) -> None:
             raise SystemExit(1) from None
         return
 
-    model_path = kwargs.pop("model", "dfine_l")
+    model_path = kwargs.pop("model", "nitid1l")
     task = kwargs.pop("task", "detect")
     weights = kwargs.pop("weights", "default")
 
-    from dfine import DFINE
+    from nitid import NITID
 
-    model = DFINE(model_path, task=task, weights=weights)
+    model = NITID(model_path, task=task, weights=weights)
 
     if command in {"predict", "track"}:
         source = kwargs.pop("source", None)

@@ -26,8 +26,10 @@ uv run mypy dfine/
 ## 2. Project layout
 
 ```
-dfine/              Public Python package — the only thing users import
-  model.py          DFINE class (single public entry point)
+nitid/              Public Python package — import NITID from here
+dfine/              Internal implementation and compatibility namespace
+  nitid.py          NITID public class and model-name mapping
+  model.py          D-FINE backend class and checkpoint validation
   predictor.py      Inference worker
   trainer.py        Fine-tuning worker
   validator.py      COCO evaluation worker
@@ -36,7 +38,7 @@ dfine/              Public Python package — the only thing users import
   nn/               Integrated detection, segmentation, semantic, and pose architectures/losses
   utils/            sources.py (LoadSource), plotting, misc helpers
 tools/
-  dfine_cli.py      `dfine` CLI entry point
+  dfine_cli.py      Nitid CLI implementation (internal filename)
   convert_checkpoint.py   Maintainer utility for raw upstream checkpoints
 configs/
   datasets/         coco.yml and example_custom.yml
@@ -188,10 +190,10 @@ The integration tests use synthetic tiny models — they never need to download 
 real checkpoint. For manual testing, prefer official model names:
 
 ```bash
-uv run dfine predict model=nitid1s task=detect source=image.jpg conf=0.5
-uv run dfine predict model=nitid1s task=segment source=image.jpg conf=0.5
-uv run dfine predict model=nitid1s task=pose source=image.jpg conf=0.25
-uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
+uv run nitid predict model=nitid1s task=detect source=image.jpg conf=0.5
+uv run nitid predict model=nitid1s task=segment source=image.jpg conf=0.5
+uv run nitid predict model=nitid1s task=pose source=image.jpg conf=0.25
+uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 If you are maintaining support for a new upstream checkpoint, use the conversion

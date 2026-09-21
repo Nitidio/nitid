@@ -14,7 +14,7 @@ UsernameToken digest authentication without an additional Python dependency.
 ## Discover cameras
 
 ```bash
-dfine onvif action=discover timeout=3
+nitid onvif action=discover timeout=3
 ```
 
 Discovery sends a WS-Discovery Probe to `239.255.255.250:3702` and deduplicates
@@ -22,7 +22,7 @@ responses by endpoint reference. Select a specific local interface when the
 machine has multiple network adapters:
 
 ```bash
-dfine onvif action=discover timeout=5 interface=192.0.2.20
+nitid onvif action=discover timeout=5 interface=192.0.2.20
 ```
 
 Multicast normally stays within one local network segment. Firewalls, VLANs,
@@ -31,7 +31,7 @@ responses. On Linux, a discovery container commonly needs host networking:
 
 ```bash
 docker run --rm --network host nitid-gstreamer \
-    dfine onvif action=discover timeout=5
+    nitid onvif action=discover timeout=5
 ```
 
 Discovery is optional. When the camera address is already known, pass the host
@@ -45,14 +45,14 @@ Keep passwords out of process arguments:
 export ONVIF_USERNAME=operator
 export ONVIF_PASSWORD='camera password'
 
-dfine onvif action=profiles host=192.0.2.10
+nitid onvif action=profiles host=192.0.2.10
 ```
 
 Use another environment variable when desired:
 
 ```bash
 export LOBBY_CAMERA_PASSWORD='camera password'
-dfine onvif action=profiles \
+nitid onvif action=profiles \
     host=http://192.0.2.10:8080/onvif/device_service \
     username=operator \
     password_env=LOBBY_CAMERA_PASSWORD
@@ -62,8 +62,8 @@ The output contains the profile token, display name, codec, resolution, and
 frame rate when the camera supplies them. Resolve by token or name:
 
 ```bash
-dfine onvif action=uri host=192.0.2.10 profile=main
-dfine onvif action=uri host=192.0.2.10 profile='Main Stream'
+nitid onvif action=uri host=192.0.2.10 profile=main
+nitid onvif action=uri host=192.0.2.10 profile='Main Stream'
 ```
 
 The printed RTSP URI intentionally has no inserted username or password.
@@ -75,7 +75,7 @@ Use a separate password environment variable with the normal tracking command:
 ```bash
 export CAMERA_RTSP_PASSWORD='camera password'
 
-dfine track \
+nitid track \
     model=nitid1s task=detect \
     source=rtsp://192.0.2.10/Streaming/Channels/101 \
     backend=gstreamer \
@@ -93,7 +93,7 @@ inserted into the source URL or written to run metadata. Direct
 ## Python API
 
 ```python
-from dfine import NITID, ONVIFCamera, discover_onvif_devices
+from nitid import NITID, ONVIFCamera, discover_onvif_devices
 
 devices = discover_onvif_devices(timeout=3, interface="192.0.2.20")
 device = devices[0]
@@ -150,7 +150,7 @@ are correct. Correct camera NTP first. As a temporary diagnostic, offset the
 client timestamp:
 
 ```bash
-dfine onvif action=profiles host=192.0.2.10 time_offset=-120
+nitid onvif action=profiles host=192.0.2.10 time_offset=-120
 ```
 
 ```python

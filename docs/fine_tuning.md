@@ -293,7 +293,7 @@ needed when you want a *different* ordering than sorted order.
 ### Python API
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1l", task="detect")
 
@@ -459,7 +459,7 @@ uv sync --extra wandb
 Enable logging directly from `train()`, in the same style as Ultralytics:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 model.train(
@@ -544,7 +544,7 @@ uv sync --extra mlflow
 Enable MLflow directly on training:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 model.train(
@@ -638,7 +638,7 @@ this flag at safe lifecycle boundaries and finalizes the run cleanly.
 ### CLI
 
 ```bash
-uv run dfine train \
+uv run nitid train \
     model=nitid1l task=detect \
     data=configs/datasets/my_dataset.yml \
     epochs=50 \
@@ -875,7 +875,7 @@ print(metrics)
 ### CLI
 
 ```bash
-uv run dfine val \
+uv run nitid val \
     model=nitid1l task=detect \
     data=configs/datasets/my_dataset.yml \
     conf=0.001

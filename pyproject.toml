@@ -86,6 +86,7 @@ web = [
 ]
 
 [project.scripts]
+nitid = "tools.dfine_cli:main"
 dfine = "tools.dfine_cli:main"
 
 [project.urls]

@@ -1,3 +1,7 @@
+# DOTA parsing and OBB target conventions adapted from RiO-DETR (Apache-2.0).
+# Source: https://github.com/RicePasteM/RiO-DETR
+# Modified for native dataset integration into nitid in 2026.
+# See THIRD_PARTY_NOTICES.md for upstream attribution.
 """
 Dataset utilities for fine-tuning and validation.
 
