@@ -212,9 +212,6 @@ web/storage/
 web/frontend/node_modules/
 web/frontend/dist/
 
-# Local reference source checkout
-/extern/
-
 # D-FINE Weights and Model Exports
 *.pth
 *.pt
