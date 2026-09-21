@@ -23,6 +23,7 @@ COMMANDS = {
     "train",
     "val",
     "export",
+    "convert",
     "info",
     "gstreamer-info",
     "onvif",
@@ -61,6 +62,7 @@ Commands:
   train    Fine-tune detection, instance-, or semantic-segmentation models
   val      Evaluate detection/instance mAP or semantic mIoU
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
+  convert  Convert a detection dataset between YOLO and COCO formats
   info     Show model parameters, GFLOPs, and checkpoint size
   gstreamer-info  Show GStreamer and hardware codec profile availability
   onvif    Discover cameras, list media profiles, or resolve an RTSP URI
@@ -353,6 +355,25 @@ Examples:
   nitid export model=nitid1l weights=coco format=openvino
   nitid export model=nitid1l format=tensorrt half=true
 """,
+    "convert": """\
+Usage:
+  nitid convert data=DATA target=FORMAT output=PATH [exist_ok=BOOL]
+
+Required:
+  data=PATH           Source data YAML with train/val/test splits
+  target=FORMAT       coco or yolo
+  output=PATH         Destination dataset directory
+
+Options:
+  exist_ok=BOOL       Replace an existing destination (default: false)
+
+The command preserves declared splits, copies images and labels, and writes a
+trainable YAML under OUTPUT/configs/datasets/.
+
+Examples:
+  nitid convert data=data.yaml target=coco output=converted-coco
+  nitid convert data=data.yaml target=yolo output=converted-yolo
+""",
     "info": """\
 Usage:
   nitid info model=MODEL [key=value ...]
@@ -619,6 +640,25 @@ def _execute(argv: list[str]) -> None:
             force=force,
         )
         print(f"Downloaded wrapped checkpoint to {path}")
+        return
+
+    if command == "convert":
+        data = kwargs.pop("data", None)
+        target = kwargs.pop("target", None)
+        output = kwargs.pop("output", None)
+        exist_ok = bool(kwargs.pop("exist_ok", False))
+        if data is None or target is None or output is None:
+            print("ERROR: data=, target=, and output= are required for convert")
+            raise SystemExit(1)
+        if kwargs:
+            print(f"ERROR: unsupported convert options: {', '.join(sorted(kwargs))}")
+            raise SystemExit(1)
+        from dfine.utils.dataset_converter import convert_dataset
+
+        result = convert_dataset(data, output, target, exist_ok=exist_ok)
+        split_summary = ", ".join(f"{split}={count}" for split, count in result.splits.items())
+        print(f"Converted to {result.target_format}: {split_summary}")
+        print(f"Dataset config saved to {result.config_path}")
         return
 
     if command == "gstreamer-info":

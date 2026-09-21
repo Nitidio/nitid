@@ -10,6 +10,7 @@ export function NavBar() {
       <div className="navbar-links">
         <Link to="/runs">Runs</Link>
         <Link to="/runs/new">New Run</Link>
+        <Link to="/datasets/convert">Convert Dataset</Link>
       </div>
       <div className="navbar-user">
         <span>{user?.username}</span>
