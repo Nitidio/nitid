@@ -112,6 +112,13 @@ model.train(
     optimizer="AdamW",
 )
 
+# Detection-only DEIM recipe.
+model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    recipe="deim",
+)
+
 # Validation
 metrics = model.val(data="configs/datasets/my_dataset.yml")
 
@@ -272,6 +279,7 @@ for r in model.track("video.mp4", stream=True, conf=0.5):
     track_ids = r.boxes.id
 
 model.train(data="my_dataset.yml", epochs=50, batch=16)
+model.train(data="my_dataset.yml", epochs=50, recipe="deim")  # detection only
 model.train(data="my_dataset.yml", epochs=50, amp=True, ema=True)
 
 metrics = model.val(data="my_dataset.yml")
@@ -362,6 +370,7 @@ Other common CLI commands:
 
 ```bash
 uv run nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50
+uv run nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50 recipe=deim
 uv run nitid val model=nitid1l task=detect data=my_dataset.yml
 uv run nitid export model=nitid1l task=detect format=onnx
 uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
