@@ -26,7 +26,7 @@ Create a model using a supported nitid model name. nitid will automatically
 download, wrap, and load the corresponding checkpoint on first use.
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
@@ -91,7 +91,7 @@ result.save("obb.jpg")
 Use the same model object for inference, training, validation, and export:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 
@@ -168,7 +168,7 @@ This requires an OpenCV build compiled with GStreamer. See
 Write annotated one-minute segments from the CLI:
 
 ```bash
-uv run dfine track model=nitid1s task=detect source=video.mp4 \
+uv run nitid track model=nitid1s task=detect source=video.mp4 \
     output=runs/segments segment_duration=60 conf=0.5
 ```
 
@@ -176,7 +176,7 @@ Discover an ONVIF camera, select a media profile, and hand it directly to the
 tracking pipeline:
 
 ```python
-from dfine import NITID, ONVIFCamera, discover_onvif_devices
+from nitid import NITID, ONVIFCamera, discover_onvif_devices
 
 device = discover_onvif_devices(timeout=3)[0]
 camera = ONVIFCamera(device.service_url, username="operator", password="secret")
@@ -246,7 +246,7 @@ from ultralytics import YOLO
 model = YOLO("yolo11n.pt")
 
 # After
-from dfine import NITID
+from nitid import NITID
 model = NITID("nitid1s", task="detect")
 ```
 
@@ -299,7 +299,7 @@ model.export(format="tensorrt", half=True)
 ### Capture a Python API bug report
 
 ```python
-from dfine import NITID, bugreport
+from nitid import NITID, bugreport
 
 with bugreport("prediction") as report:
     model = NITID("nitid1s", task="detect")
@@ -330,7 +330,7 @@ Use the CLI when you want to run nitid from the terminal instead of Python.
 Run prediction and save the annotated image:
 
 ```bash
-uv run dfine predict model=nitid1s task=detect source=image.jpg save=true conf=0.5
+uv run nitid predict model=nitid1s task=detect source=image.jpg save=true conf=0.5
 ```
 
 This automatically downloads the matching checkpoint on first use, runs detection
@@ -343,7 +343,7 @@ runs/detect/exp/image.jpg
 Choose your own output folder name:
 
 ```bash
-uv run dfine predict \
+uv run nitid predict \
     model=nitid1s task=detect \
     source=image.jpg \
     save=true \
@@ -361,7 +361,7 @@ Track a video and save annotations with persistent IDs:
 
 ```bash
 uv sync --extra track
-uv run dfine track model=nitid1s task=detect source=video.mp4 conf=0.5 save=true
+uv run nitid track model=nitid1s task=detect source=video.mp4 conf=0.5 save=true
 ```
 
 The tracked video defaults to `runs/track/exp/video.mp4`.
@@ -369,11 +369,11 @@ The tracked video defaults to `runs/track/exp/video.mp4`.
 Other common CLI commands:
 
 ```bash
-uv run dfine train model=nitid1l task=detect data=my_dataset.yml epochs=50
-uv run dfine train model=nitid1l task=detect data=my_dataset.yml epochs=50 recipe=deim
-uv run dfine val model=nitid1l task=detect data=my_dataset.yml
-uv run dfine export model=nitid1l task=detect format=onnx
-uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
+uv run nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50
+uv run nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50 recipe=deim
+uv run nitid val model=nitid1l task=detect data=my_dataset.yml
+uv run nitid export model=nitid1l task=detect format=onnx
+uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 - `train`: fine-tune a model on a supported dataset YAML.
@@ -385,6 +385,6 @@ By default, `train` writes wrapped epoch checkpoints to `runs/train/exp/`, while
 Show all prediction or tracking options:
 
 ```bash
-uv run dfine predict --help
-uv run dfine track --help
+uv run nitid predict --help
+uv run nitid track --help
 ```

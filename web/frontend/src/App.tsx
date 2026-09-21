@@ -6,6 +6,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { NewRunPage } from "./pages/NewRunPage";
 import { RunDetailPage } from "./pages/RunDetailPage";
 import { RunsListPage } from "./pages/RunsListPage";
+import { DatasetConverterPage } from "./pages/DatasetConverterPage";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -22,6 +23,7 @@ function Layout() {
           <Route path="runs" element={<RunsListPage />} />
           <Route path="runs/new" element={<NewRunPage />} />
           <Route path="runs/:id" element={<RunDetailPage />} />
+          <Route path="datasets/convert" element={<DatasetConverterPage />} />
         </Routes>
       </main>
     </>

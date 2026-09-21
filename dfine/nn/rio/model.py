@@ -1,3 +1,7 @@
+# Adapted from RiO-DETR / RT-DETRv2-OBB (Apache-2.0).
+# Source: https://github.com/RicePasteM/RiO-DETR
+# Modified for native integration into nitid in 2026.
+# Upstream copyright notices are retained below; see THIRD_PARTY_NOTICES.md.
 """RiO-DETR OBB backbone/encoder/decoder composition."""
 
 from __future__ import annotations

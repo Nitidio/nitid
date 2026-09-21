@@ -19,7 +19,7 @@ Use the public `bugreport()` context manager to capture Python API operations in
 the same single-file format as the CLI's `--report` flag:
 
 ```python
-from dfine import NITID, bugreport
+from nitid import NITID, bugreport
 
 with bugreport("training") as report:
     model = NITID("nitid1s", task="detect")
@@ -50,7 +50,7 @@ with `bugreport("training", report_dir="reports")`.
 ## `NITID`
 
 ```python
-from dfine import NITID
+from nitid import NITID
 ```
 
 The recommended public class. Instantiate with a path to a nitid-wrapped `.pth`
@@ -81,7 +81,7 @@ but new code should prefer `NITID(...)`.
 ### Intel NPU / integrated GPU inference (OpenVINO backend)
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", backend="openvino", device="NPU")   # Intel NPU
 model = NITID("nitid1s", backend="openvino", device="GPU")   # Intel integrated GPU
@@ -481,7 +481,7 @@ and closes the sink when iteration finishes or the generator is closed.
 The public media types can be imported directly:
 
 ```python
-from dfine import (
+from nitid import (
     Frame,
     FrameMetadata,
     FrameSink,
@@ -498,7 +498,7 @@ and sinks have explicit `close()` methods and support context-manager use.
 `GStreamerFrameSource` is the built-in accelerated/live-stream implementation:
 
 ```python
-from dfine import GStreamerFrameSource
+from nitid import GStreamerFrameSource
 
 source = GStreamerFrameSource(
     "rtsp://camera/live",
@@ -536,12 +536,12 @@ when the streaming generator is explicitly closed.
 Set `hardware_profile=` on `GStreamerVideoSink` to select a named encoder. The
 input `hardware_profile=` argument and the sink profile are independent because
 decode and encode support may differ on the same host. Use
-`inspect_gstreamer_capabilities()` or `dfine gstreamer-info` before deployment.
+`inspect_gstreamer_capabilities()` or `nitid gstreamer-info` before deployment.
 
 #### ONVIF camera discovery
 
 ```python
-from dfine import ONVIFCamera, discover_onvif_devices
+from nitid import ONVIFCamera, discover_onvif_devices
 
 devices = discover_onvif_devices(timeout=3, interface=None)
 camera = ONVIFCamera(

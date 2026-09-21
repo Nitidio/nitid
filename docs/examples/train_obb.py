@@ -1,6 +1,6 @@
 """Fine-tune oriented bounding boxes on a YOLO-OBB, DOTA, or COCO-polygon dataset."""
 
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="obb")
 

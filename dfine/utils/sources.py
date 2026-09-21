@@ -553,15 +553,26 @@ class LoadSource:
 
     def __iter__(self) -> Generator:
         """Yield historical ``(tensor, image, path)`` tuples for compatibility."""
-        for sample in self.iter_samples():
-            yield sample.as_legacy_tuple()
+        # Close the generator we delegate to rather than letting it fall out of
+        # scope. Abandoning this iterator early raises GeneratorExit here, and
+        # the traceback that unwinds keeps this frame — and so the generator
+        # below — alive in a reference cycle, leaving the capture handle open
+        # until the cycle collector happens to run.
+        samples = self.iter_samples()
+        try:
+            for sample in samples:
+                yield sample.as_legacy_tuple()
+        finally:
+            samples.close()
 
     def iter_samples(self) -> Generator[SourceSample, None, None]:
         """Yield preprocessed samples while preserving frame metadata."""
+        frames = self.iter_frames()
         try:
-            for frame in self.iter_frames():
+            for frame in frames:
                 yield SourceSample(tensor=self._preprocess(frame.image), frame=frame)
         finally:
+            frames.close()
             self.close()
 
     def iter_frames(self) -> Generator[Frame, None, None]:

@@ -1,13 +1,6 @@
-"""
-nitid: Ultralytics-style DETR models for detection, segmentation, pose, and OBB.
+"""Compatibility namespace for existing ``dfine`` imports.
 
-Usage:
-    from dfine import NITID
-
-    model = NITID("nitid1s", task="detect")
-    results = model("image.jpg")
-    model.train(data="coco.yaml", epochs=50)
-    model.export(format="onnx")
+New applications should import :class:`nitid.NITID` from :mod:`nitid`.
 """
 
 from dfine.gstreamer import (

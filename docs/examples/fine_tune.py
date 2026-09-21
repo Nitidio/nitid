@@ -1,6 +1,6 @@
 """Fine-tune a nitid model on a custom dataset."""
 
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 

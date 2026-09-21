@@ -21,7 +21,7 @@ task.
 ## ONNX
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1l", task="detect")
 model.export(format="onnx")
@@ -29,7 +29,7 @@ model.export(format="onnx")
 ```
 
 ```bash
-uv run dfine export model=nitid1l task=detect format=onnx
+uv run nitid export model=nitid1l task=detect format=onnx
 ```
 
 The exported model takes a single input `images [B, 3, H, W]`. Detection returns
@@ -85,7 +85,7 @@ Export through the corrected ONNX graph to OpenVINO Intermediate Representation
 (IR):
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1l", task="detect")
 xml_path = model.export(format="openvino")
@@ -94,7 +94,7 @@ xml_path = model.export(format="openvino")
 ```
 
 ```bash
-uv run dfine export model=nitid1l task=detect format=openvino
+uv run nitid export model=nitid1l task=detect format=openvino
 ```
 
 The `.xml` file stores the graph and the matching `.bin` file stores its weights.
@@ -141,7 +141,7 @@ model.export(format="tensorrt")
 ```
 
 ```bash
-uv run dfine export model=nitid1l task=detect format=tensorrt
+uv run nitid export model=nitid1l task=detect format=tensorrt
 ```
 
 The workflow is: trace model → temporary ONNX → TensorRT engine (the intermediate ONNX is removed automatically). Requires a CUDA-capable GPU.

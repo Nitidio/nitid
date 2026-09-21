@@ -5,7 +5,7 @@ nitid can decode video through a GStreamer pipeline while preserving the same
 The backend is opt-in:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 for result in model.track(
@@ -19,7 +19,7 @@ for result in model.track(
 ```
 
 ```bash
-uv run dfine track \
+uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
@@ -165,7 +165,7 @@ queue to favor current frames over growing latency.
 ### Segmented recording
 
 ```python
-from dfine import GStreamerVideoSink
+from nitid import GStreamerVideoSink
 
 sink = GStreamerVideoSink(
     "runs/segments/camera-1",
@@ -190,7 +190,7 @@ the destination ends in `.mp4`, its stem becomes the segment prefix instead:
 The equivalent CLI command is:
 
 ```bash
-uv run dfine track \
+uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/input \
     backend=gstreamer \
@@ -219,7 +219,7 @@ publishing server.
 CLI:
 
 ```bash
-uv run dfine track model=nitid1s task=detect source=video.mp4 \
+uv run nitid track model=nitid1s task=detect source=video.mp4 \
     output=rtsp://media-server/nitid output_rtsp_transport=tcp
 ```
 
@@ -267,7 +267,7 @@ nitid provides named H.264 codec profiles:
 Inspect the active OpenCV build and installed elements:
 
 ```bash
-dfine gstreamer-info
+nitid gstreamer-info
 ```
 
 Decode and encode are reported separately because a host can support only one
@@ -277,7 +277,7 @@ elements; there is no implicit software fallback.
 Apply a profile to automatic H.264 RTSP ingest:
 
 ```bash
-dfine track \
+nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
@@ -288,7 +288,7 @@ dfine track \
 Apply a potentially different profile to output:
 
 ```bash
-dfine track \
+nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
@@ -335,7 +335,7 @@ For Intel/AMD VA-API on Linux:
 docker run --rm \
     --device /dev/dri:/dev/dri \
     nitid-gstreamer \
-    dfine gstreamer-info
+    nitid gstreamer-info
 ```
 
 The optional Compose service supplies `/dev/dri` and host video/render group

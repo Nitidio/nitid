@@ -59,6 +59,12 @@ For the web application:
 uv sync --extra web
 ```
 
+## Public names
+
+Use `nitid` for the Python package and command, and `NITID` for the public
+model class. Existing `from dfine import ...` imports and the `dfine` command
+remain supported compatibility aliases for the 0.1 release series. New code
+should use the Nitid names shown below.
 
 ## Quick Start
 
@@ -67,7 +73,7 @@ The canonical quickstart lives in [docs/quickstart.md](docs/quickstart.md); use 
 ### Inference
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
@@ -157,7 +163,7 @@ pipelines, hardware-decoder examples, and reconnect semantics.
 Inspect available codec paths before selecting acceleration:
 
 ```bash
-dfine gstreamer-info
+nitid gstreamer-info
 ```
 
 Named profiles are `software`, `vaapi`, `v4l2`, `nvidia`, and `jetson`.
@@ -165,16 +171,16 @@ Named profiles are `software`, `vaapi`, `v4l2`, `nvidia`, and `jetson`.
 Discover ONVIF cameras and inspect their streams:
 
 ```bash
-dfine onvif action=discover timeout=3
+nitid onvif action=discover timeout=3
 ONVIF_USERNAME=operator ONVIF_PASSWORD=secret \
-  dfine onvif action=profiles host=192.0.2.10
+  nitid onvif action=profiles host=192.0.2.10
 ```
 
 Annotated tracking can also be published or segmented without buffering
 results in Python:
 
 ```bash
-dfine track model=nitid1s task=detect source=video.mp4 \
+nitid track model=nitid1s task=detect source=video.mp4 \
   output=runs/segments segment_duration=60
 ```
 
@@ -202,7 +208,7 @@ Capture Python API output, environment details, and failure tracebacks in one
 attachable log:
 
 ```python
-from dfine import NITID, bugreport
+from nitid import NITID, bugreport
 
 with bugreport("prediction") as report:
     model = NITID("nitid1s", task="detect")
@@ -215,16 +221,16 @@ print(report.path)
 ### Command Line Interface
 
 ```bash
-uv run dfine predict model=nitid1s task=detect source=image.jpg
-uv run dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
-uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
-uv run dfine track model=nitid1s source=video.mp4 conf=0.5 save=true
-uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50
-uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
-uv run dfine val model=nitid1s task=detect data=my_dataset.yml
-uv run dfine export model=nitid1s task=detect format=onnx
-uv run dfine predict model=nitid1s source=image.jpg --report
-uv run dfine bugreport
+uv run nitid predict model=nitid1s task=detect source=image.jpg
+uv run nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
+uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
+uv run nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
+uv run nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50
+uv run nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
+uv run nitid val model=nitid1s task=detect data=my_dataset.yml
+uv run nitid export model=nitid1s task=detect format=onnx
+uv run nitid predict model=nitid1s source=image.jpg --report
+uv run nitid bugreport
 ```
 
 For the full guide:
@@ -263,7 +269,7 @@ nitid includes a browser-based UI for running detection without writing code. Up
 uv sync --extra web
 
 # Download the recommended checkpoint into models/
-uv run dfine download model=nitid1l task=detect output=models
+uv run nitid download model=nitid1l task=detect output=models
 
 # Start the API (single worker — inference is not thread-safe)
 uv run uvicorn web.api.main:app --workers 1
