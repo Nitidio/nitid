@@ -5,7 +5,7 @@ This is Jorge's primary use case — feed cv2/GStreamer frames directly.
 
 import cv2
 
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 

@@ -60,7 +60,7 @@ everything it finds there:
 
 ```bash
 mkdir -p models
-uv run dfine download model=nitid1l task=detect output=models
+uv run nitid download model=nitid1l task=detect output=models
 ```
 
 ### Environment variables

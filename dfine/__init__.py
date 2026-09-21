@@ -1,13 +1,6 @@
-"""
-nitid: Ultralytics-style D-FINE detection and instance/semantic segmentation.
+"""Compatibility namespace for existing ``dfine`` imports.
 
-Usage:
-    from dfine import DFINE
-
-    model = DFINE("dfine_l")
-    results = model("image.jpg")
-    model.train(data="coco.yaml", epochs=50)
-    model.export(format="onnx")
+New applications should import :class:`nitid.NITID` from :mod:`nitid`.
 """
 
 from dfine.gstreamer import (
