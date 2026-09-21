@@ -140,3 +140,30 @@ def test_screen_iteration_closes_mss_on_exit(monkeypatch):
     gen.close()  # simulates early abandonment (e.g. islice not exhausting it)
 
     assert closed["called"], "mss instance should be closed when the generator exits early"
+
+
+def test_screen_iter_samples_closes_mss_on_exit(monkeypatch):
+    """iter_samples() is a public entry point too, and leaked the handle the same way."""
+    from dfine.utils.sources import LoadSource
+
+    closed = {"called": False}
+    fake_bgra = np.zeros((100, 100, 4), dtype=np.uint8)
+
+    class FakeSct:
+        monitors = [{"top": 0, "left": 0, "width": 100, "height": 100}]
+
+        def grab(self, monitor):
+            return fake_bgra
+
+        def close(self):
+            closed["called"] = True
+
+    monkeypatch.setattr("mss.mss", lambda: FakeSct())
+
+    loader = LoadSource("screen", imgsz=640, device="cpu")
+    gen = loader.iter_samples()
+    next(gen)
+    gen.close()
+
+    assert closed["called"], "mss instance should be closed when iter_samples() exits early"
+    assert not hasattr(loader, "_sct"), "the cached mss instance should be dropped, not reused"
