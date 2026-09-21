@@ -1,9 +1,11 @@
 import json
+from pathlib import Path
 
+import pytest
 import yaml
 
-from dfine.dataset_converter import convert_dataset
 from dfine.utils.data import resolve_detection_split
+from dfine.utils.dataset_converter import convert_dataset
 
 
 def test_yolo_to_coco_preserves_splits_and_emits_config(tiny_yolo_dataset, tmp_path):
@@ -55,3 +57,14 @@ def test_converter_refuses_to_replace_output_without_permission(tiny_yolo_datase
     else:
         raise AssertionError("expected FileExistsError")
     assert marker.read_text() == "keep"
+
+
+def test_converter_refuses_output_inside_source_dataset(tiny_yolo_dataset):
+    data_path = Path(tiny_yolo_dataset)
+    config = yaml.safe_load(data_path.read_text())
+    root = Path(config["path"])
+    if not root.is_absolute():
+        root = data_path.parent / root
+
+    with pytest.raises(ValueError, match="outside the source dataset"):
+        convert_dataset(tiny_yolo_dataset, root / "converted", "coco")

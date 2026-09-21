@@ -1,4 +1,4 @@
-"""Convert detection datasets between YOLO text and COCO JSON layouts."""
+"""Convert box/polygon detection datasets between YOLO text and COCO JSON layouts."""
 
 from __future__ import annotations
 
@@ -153,8 +153,8 @@ def convert_dataset(
 
     root = _dataset_root(data_path, config)
     output_dir = Path(output).expanduser().resolve()
-    if output_dir == root or output_dir in root.parents:
-        raise ValueError("Conversion output cannot replace the source dataset or its parent")
+    if output_dir == root or output_dir in root.parents or root in output_dir.parents:
+        raise ValueError("Conversion output must be outside the source dataset")
     for split in ("train", "val", "test"):
         if split in config:
             source_images = (root / str(config[split])).resolve()

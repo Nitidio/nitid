@@ -366,8 +366,8 @@ Convert every split declared in a dataset YAML between YOLO text labels and
 COCO JSON annotations:
 
 ```bash
-uv run dfine convert data=data.yaml target=coco output=converted-coco
-uv run dfine convert data=data.yaml target=yolo output=converted-yolo
+uv run nitid convert data=data.yaml target=coco output=converted-coco
+uv run nitid convert data=data.yaml target=yolo output=converted-yolo
 ```
 
 The converter preserves `train`, `val`, and `test` splits, copies images and

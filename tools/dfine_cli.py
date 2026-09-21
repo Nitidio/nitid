@@ -357,7 +357,7 @@ Examples:
 """,
     "convert": """\
 Usage:
-  dfine convert data=DATA target=FORMAT output=PATH [exist_ok=BOOL]
+  nitid convert data=DATA target=FORMAT output=PATH [exist_ok=BOOL]
 
 Required:
   data=PATH           Source data YAML with train/val/test splits
@@ -371,8 +371,8 @@ The command preserves declared splits, copies images and labels, and writes a
 trainable YAML under OUTPUT/configs/datasets/.
 
 Examples:
-  dfine convert data=data.yaml target=coco output=converted-coco
-  dfine convert data=data.yaml target=yolo output=converted-yolo
+  nitid convert data=data.yaml target=coco output=converted-coco
+  nitid convert data=data.yaml target=yolo output=converted-yolo
 """,
     "info": """\
 Usage:
@@ -653,7 +653,7 @@ def _execute(argv: list[str]) -> None:
         if kwargs:
             print(f"ERROR: unsupported convert options: {', '.join(sorted(kwargs))}")
             raise SystemExit(1)
-        from dfine.dataset_converter import convert_dataset
+        from dfine.utils.dataset_converter import convert_dataset
 
         result = convert_dataset(data, output, target, exist_ok=exist_ok)
         split_summary = ", ".join(f"{split}={count}" for split, count in result.splits.items())

@@ -32,7 +32,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
         ("train", ("data=PATH", "task=TASK", "epochs=INT", "nitid train")),
         ("val", ("data=PATH", "task=TASK", "split=NAME", "nitid val")),
         ("export", ("task=TASK", "format=FORMAT", "opset=INT", "nitid export")),
-        ("convert", ("data=DATA", "target=FORMAT", "output=PATH", "dfine convert")),
+        ("convert", ("data=DATA", "target=FORMAT", "output=PATH", "nitid convert")),
         ("info", ("task=TASK", "detailed=BOOL", "nitid info")),
         ("gstreamer-info", ("named decode/encode profiles", "software", "jetson")),
         ("onvif", ("action=discover", "password_env=NAME", "action=uri")),

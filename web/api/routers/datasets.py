@@ -10,7 +10,7 @@ import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from dfine.dataset_converter import TargetFormat, convert_dataset
+from dfine.utils.dataset_converter import TargetFormat, convert_dataset
 from web.api.deps import get_current_user
 from web.api.models.user import User
 
