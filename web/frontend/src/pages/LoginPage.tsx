@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
+import logo from "../assets/nitid-logo.png";
 
 export function LoginPage() {
   const { login, register } = useAuth();
@@ -29,8 +30,8 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>nitid</h1>
-        <p className="auth-subtitle">D-FINE object detection</p>
+        <img className="auth-logo" src={logo} alt="nitid" />
+        <p className="auth-subtitle">Object detection that's actually open source.</p>
         <div className="auth-tabs">
           <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>Login</button>
           <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>Register</button>
@@ -52,7 +53,7 @@ export function LoginPage() {
             minLength={8}
           />
           {error && <p className="error-msg">{error}</p>}
-          <button type="submit" disabled={loading}>
+          <button type="submit" className="btn-primary" disabled={loading}>
             {loading ? "..." : mode === "login" ? "Login" : "Create account"}
           </button>
         </form>

@@ -1,0 +1,45 @@
+/* nitid brand tokens for the web application.
+   The canonical values live in docs/brand.md — change them there too. */
+
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap");
+
+:root {
+  /* Surfaces, from the ground up. */
+  --nitid-bg: #060b1a;
+  --nitid-surface: #0d1530;
+  --nitid-surface-sunken: #080e21;
+  --nitid-surface-hover: #131d3d;
+
+  /* Ink, from loudest to quietest. */
+  --nitid-text: #e8ecf7;
+  --nitid-text-muted: #b9c4dd;
+  --nitid-text-dim: #8794b8;
+  --nitid-text-faint: #6b7ba3;
+
+  /* Borders are the ink colour at low alpha, so they sit on any surface. */
+  --nitid-border: rgba(204, 213, 232, 0.14);
+  --nitid-border-strong: rgba(204, 213, 232, 0.28);
+
+  /* Brand accents. */
+  --nitid-link: #7fb0ff;
+  --nitid-lime: #cfe85b;
+  --nitid-blue: #1266f2;
+  --nitid-blue-hover: #0b52cc;
+  --nitid-violet: #7c22f0;
+  --nitid-violet-light: #a78bfa;
+
+  /* Run status. Running and done borrow the brand blue and lime. */
+  --nitid-status-pending: #f59e0b;
+  --nitid-status-running: var(--nitid-blue);
+  --nitid-status-done: var(--nitid-lime);
+  --nitid-status-failed: #ef4444;
+  --nitid-danger: #ef4444;
+
+  --nitid-font-heading: "Archivo", system-ui, sans-serif;
+  --nitid-font-body: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --nitid-font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --nitid-radius-sm: 4px;
+  --nitid-radius-md: 8px;
+  --nitid-radius-lg: 14px;
+}
