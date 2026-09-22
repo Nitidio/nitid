@@ -22,6 +22,7 @@ nav:
   - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
+      - Brand: brand.md
       - DETRPose architecture: pose_architecture.md
       - Decisions:
           - Overview: adr/index.md
