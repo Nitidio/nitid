@@ -1,6 +1,11 @@
-# nitid
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/nitid-logo-on-dark.png">
+    <img src="docs/assets/brand/nitid-logo-on-light.png" alt="nitid" width="240">
+  </picture>
+</p>
 
-**Ultralytics-style detection, segmentation, pose, and oriented-box models.**
+<p align="center"><strong>Object detection that's actually open source.</strong></p>
 
 [![CI](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml/badge.svg)](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Vaelsys.github.io/nitid/)
@@ -9,7 +14,14 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
 
-nitid gives modern DETR-style vision models a single-entry-point API that mirrors `ultralytics.YOLO`: predict, track, train, validate, export, stream, and CLI.
+Train, validate, export and run vision models. The code and our pretrained
+weights are released under the Apache License 2.0, patent grant included, so you
+can ship them inside your own product without opening your code or paying for a
+license.
+
+*nitid*, from Latin *nitidus*: clear, transparent, precise.
+
+**No AGPL, no surprises.**
 
 ![nitid detection demo](docs/assets/nitid-demo.png)
 
@@ -17,15 +29,44 @@ Example prediction using D-FINE-S on a street image.
 
 ## Why nitid?
 
-- Familiar Ultralytics-style API
+- **Edge first.** The models are designed to run at the edge, on the hardware
+  next to your cameras, not only on a datacenter GPU.
+- **Self-contained checkpoints.** Every checkpoint carries the config and the
+  class names it needs to be reproduced and checked — one file per model.
+- **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
+  conversion step, and the inconsistencies real datasets have are tolerated.
+- **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same
+  checkpoint.
+
+## One library, three tasks, five operations
+
+Object detection, instance segmentation and semantic segmentation, through one
+API: `predict`, `track`, `train`, `val` and `export`. The DETR family moves fast
+— RT-DETR, D-FINE, DEIM — and nitid brings a curated selection into a single
+library, so getting from your dataset to an exported model does not mean
+following every paper.
+
+What comes with it:
+
+- Python API, command line, and a browser-based web interface
 - Automatic download of supported official checkpoints
-- Python API, CLI and web interface
-- ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated video output
-- Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented recording
+- Fine-tuning and validation for boxes, masks and dense semantic maps
+- ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
+  video output
+- Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented
+  recording
 - ONVIF camera discovery, profile selection, and secure RTSP resolution
-- Detection, instance segmentation, semantic segmentation, pose, and oriented bounding boxes
-- Fine-tuning and validation for boxes, masks, dense semantic maps, COCO keypoints, and rotated boxes
-- ONNX, OpenVINO, TorchScript, and TensorRT export where supported by task
+
+Pose estimation and oriented bounding boxes are supported too, outside the three
+headline tasks — see the [quickstart](docs/quickstart.md).
+
+## What "open" means here
+
+The nitid code and our pretrained weights are released under the
+[Apache License 2.0](LICENSE), including its patent grant. You can use them
+commercially, modify them, and ship them in closed products. The public datasets
+used for pretraining keep their own terms: the official checkpoints listed in
+[Official Models](#official-models) are trained on COCO and Objects365.
 
 ## Installation
 
@@ -98,24 +139,8 @@ print(result.semantic.mask.shape)  # [H, W]
 result.save_semantic("class_ids.png")
 ```
 
-Pose estimation returns COCO-style person keypoints:
-
-```python
-pose = NITID("nitid1s", task="pose")
-result = pose.predict("person.jpg", conf=0.25)[0]
-print(result.keypoints.xy.shape)  # [N, 17, 2]
-result.save("pose.jpg")
-```
-
-Oriented bounding box detection returns rotated boxes:
-
-```python
-obb = NITID("nitid1s", task="obb")
-result = obb.predict("aerial.jpg", conf=0.25)[0]
-print(result.obb.xywhr.shape)      # [N, 5]: cx, cy, w, h, angle
-print(result.obb.xyxyxyxy.shape)   # [N, 8]: four polygon corners
-result.save("obb.jpg")
-```
+Pose estimation (`task="pose"`) and oriented bounding boxes (`task="obb"`) work
+the same way; the [quickstart](docs/quickstart.md) has both.
 
 ### Training
 
@@ -295,6 +320,7 @@ See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables
 | [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
 | [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
+| [docs/brand.md](docs/brand.md) | Brand: logo, palette, typography, and what the project announces |
 
 
 ## Development
@@ -317,15 +343,11 @@ uv run mypy dfine/
 
 Integration tests use a session-scoped fixture in `tests/conftest.py` that builds a small D-FINE-S model with random weights at test time — no download required.
 
-### Key differences from Ultralytics YOLO
+### Migrating from YOLO
 
-| Feature | Ultralytics YOLO | nitid DFINE |
-|---------|-----------------|-------------|
-| Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
-| `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, disk size |
-| TensorRT export | Supported | Supported (see Installation) |
-| AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, … | `"detect"`, `"segment"`, `"semantic"`, `"pose"`, or `"obb"` |
+If you are coming from a YOLO codebase, the quickstart has a side-by-side
+mapping of the API and the behaviour that differs:
+[Coming from Ultralytics](docs/quickstart.md#coming-from-ultralytics).
 
 ## Contributing
 

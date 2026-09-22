@@ -2,7 +2,7 @@
 
 This page is the canonical quickstart for nitid. It covers the shortest path to
 first inference, the common train/val/export workflow, and the main differences
-for users coming from Ultralytics YOLO.
+for users coming from a YOLO codebase.
 
 ## Installation
 

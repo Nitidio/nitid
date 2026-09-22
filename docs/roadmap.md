@@ -2,7 +2,8 @@
 
 *Last reviewed: 2026-09-17.*
 
-nitid is an Ultralytics-style library for focused DETR-style vision models. The project is
+nitid is a focused library for DETR-style vision models, released under Apache 2.0
+with its pretrained weights. The project is
 focused on a small number of well-supported workflows: load a model by name,
 predict, track, train, validate, export, inspect results, and deploy against
 real video sources.
