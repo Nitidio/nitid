@@ -26,10 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   validation, visualization, and ONNX/OpenVINO export.
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs, class
   filtering, frame sampling, and annotated video output.
-- GStreamer video and RTSP input, reconnect handling, hardware codec profiles,
-  annotated RTSP publishing, and segmented recording.
-- ONVIF camera discovery, media-profile selection, and secure RTSP URI
-  resolution.
+- GStreamer video and RTSP input, annotated RTSP publishing, and segmented
+  recording.
 - OpenVINO Runtime inference on Intel CPU, integrated GPU, and NPU devices,
   with automatic device selection and compiled-model caching.
 - ONNX and OpenVINO export for every supported task, plus TorchScript and
@@ -42,13 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Atomic, incremented run directories with saved arguments, environment
   snapshots, optional single-file bug reports, and exact output-path
   overrides.
-- A browser application with authentication, image and video inference,
-  model/device selection, background jobs, run history, annotated results,
-  concurrent model-cache protection, and per-run CPU/GPU/NPU telemetry.
 - MkDocs documentation, a Jupyter/Colab tutorial, contributor and security
   guides, issue and pull-request templates, pre-commit hooks, and CI across
   Python 3.10, 3.11, and 3.12.
 - Apache-2.0 licensing.
+- Brand assets under `docs/assets/brand/` and `docs/brand.md`, the source of
+  truth for the palette, typography, logo usage, voice, and what the project
+  announces publicly, plus a matching light/dark theme for the documentation
+  site.
 
 ### Changed
 
@@ -59,12 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   streams, screen capture, NumPy arrays, and tensors.
 - Hardened training defaults and validation behavior for reproducible,
   convergent fine-tuning.
+- Public messaging leads with the Apache 2.0 licensing of both code and
+  weights, and announces three tasks: detection, instance segmentation, and
+  semantic segmentation. Pose and OBB stay supported and documented.
 
 ### Fixed
 
 - Prediction and export preserve the trainable model's structure and state.
-- Concurrent web jobs no longer race while lazily constructing cached models.
-- Web runs honor the selected inference backend and hardware device.
 - OpenVINO parity checks tolerate valid encoder tie-breaking differences.
 
 [Unreleased]: https://github.com/Vaelsys/nitid/compare/v0.1.0...HEAD

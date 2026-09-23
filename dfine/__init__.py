@@ -1,20 +1,9 @@
-"""
-nitid: Ultralytics-style D-FINE detection and instance/semantic segmentation.
+"""Compatibility namespace for existing ``dfine`` imports.
 
-Usage:
-    from dfine import DFINE
-
-    model = DFINE("dfine_l")
-    results = model("image.jpg")
-    model.train(data="coco.yaml", epochs=50)
-    model.export(format="onnx")
+New applications should import :class:`nitid.NITID` from :mod:`nitid`.
 """
 
-from dfine.gstreamer import (
-    GStreamerHardwareProfile,
-    get_hardware_profile,
-    inspect_gstreamer_capabilities,
-)
+from dfine.gstreamer import inspect_gstreamer_capabilities
 from dfine.media import (
     Frame,
     FrameMetadata,
@@ -25,13 +14,6 @@ from dfine.media import (
 )
 from dfine.model import DFINE
 from dfine.nitid import NITID
-from dfine.onvif import (
-    ONVIFCamera,
-    ONVIFDevice,
-    ONVIFError,
-    ONVIFMediaProfile,
-    discover_onvif_devices,
-)
 from dfine.results import OBB, SemanticMask
 from dfine.utils.reporting import BugReport, bugreport
 from dfine.utils.sources import GStreamerFrameSource
@@ -46,17 +28,10 @@ __all__ = [
     "FrameSink",
     "FrameSource",
     "GStreamerVideoSink",
-    "ONVIFCamera",
-    "ONVIFDevice",
-    "ONVIFError",
-    "ONVIFMediaProfile",
     "OBB",
     "SemanticMask",
     "GStreamerFrameSource",
-    "GStreamerHardwareProfile",
     "build_gstreamer_output_pipeline",
-    "get_hardware_profile",
     "inspect_gstreamer_capabilities",
-    "discover_onvif_devices",
     "bugreport",
 ]

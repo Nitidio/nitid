@@ -1,6 +1,6 @@
 """Export to TensorRT for deployment in GStreamer pipeline."""
 
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 

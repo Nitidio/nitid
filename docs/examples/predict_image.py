@@ -1,6 +1,6 @@
 """Predict on a single image — the simplest possible usage."""
 
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 results = model("image.jpg", conf=0.5)
