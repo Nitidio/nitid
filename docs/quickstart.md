@@ -7,18 +7,22 @@ for users coming from a YOLO codebase.
 ## Installation
 
 ```bash
-git clone https://github.com/Vaelsys/nitid.git && cd nitid
-uv sync --extra train
+pip install "nitid[train]"
 ```
+
+Until v0.1.0 is published on PyPI, install from GitHub instead:
+`pip install "nitid[train] @ git+https://github.com/Vaelsys/nitid.git"`.
 
 Add extras only when you need them:
 
 ```bash
-uv sync --extra dev   # for developement
-uv sync --extra web     # web application
-uv sync --extra openvino # OpenVINO IR export and runtime
-uv sync --extra track    # ByteTrack, BoT-SORT, and OC-SORT tracking
+pip install "nitid[track]"     # ByteTrack, BoT-SORT, and OC-SORT tracking
+pip install "nitid[openvino]"  # OpenVINO IR export and runtime
 ```
+
+Working on nitid itself, or running the web application? Those use a source
+checkout with `uv` — see [Development](https://github.com/Vaelsys/nitid#development)
+in the README.
 
 ## First Run
 
@@ -99,7 +103,7 @@ model = NITID("nitid1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 
-# Tracking (requires: uv sync --extra track)
+# Tracking (requires: pip install "nitid[track]")
 for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
     track_ids = result.boxes.id
 
@@ -168,7 +172,7 @@ This requires an OpenCV build compiled with GStreamer. See
 Write annotated one-minute segments from the CLI:
 
 ```bash
-uv run nitid track model=nitid1s task=detect source=video.mp4 \
+nitid track model=nitid1s task=detect source=video.mp4 \
     output=runs/segments segment_duration=60 conf=0.5
 ```
 
@@ -330,7 +334,7 @@ Use the CLI when you want to run nitid from the terminal instead of Python.
 Run prediction and save the annotated image:
 
 ```bash
-uv run nitid predict model=nitid1s task=detect source=image.jpg save=true conf=0.5
+nitid predict model=nitid1s task=detect source=image.jpg save=true conf=0.5
 ```
 
 This automatically downloads the matching checkpoint on first use, runs detection
@@ -343,7 +347,7 @@ runs/detect/exp/image.jpg
 Choose your own output folder name:
 
 ```bash
-uv run nitid predict \
+nitid predict \
     model=nitid1s task=detect \
     source=image.jpg \
     save=true \
@@ -360,8 +364,8 @@ runs/detect/street-test/image.jpg
 Track a video and save annotations with persistent IDs:
 
 ```bash
-uv sync --extra track
-uv run nitid track model=nitid1s task=detect source=video.mp4 conf=0.5 save=true
+pip install "nitid[track]"
+nitid track model=nitid1s task=detect source=video.mp4 conf=0.5 save=true
 ```
 
 The tracked video defaults to `runs/track/exp/video.mp4`.
@@ -369,11 +373,11 @@ The tracked video defaults to `runs/track/exp/video.mp4`.
 Other common CLI commands:
 
 ```bash
-uv run nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50
-uv run nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50 recipe=deim
-uv run nitid val model=nitid1l task=detect data=my_dataset.yml
-uv run nitid export model=nitid1l task=detect format=onnx
-uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
+nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50
+nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50 recipe=deim
+nitid val model=nitid1l task=detect data=my_dataset.yml
+nitid export model=nitid1l task=detect format=onnx
+nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 - `train`: fine-tune a model on a supported dataset YAML.
@@ -385,6 +389,6 @@ By default, `train` writes wrapped epoch checkpoints to `runs/train/exp/`, while
 Show all prediction or tracking options:
 
 ```bash
-uv run nitid predict --help
-uv run nitid track --help
+nitid predict --help
+nitid track --help
 ```
