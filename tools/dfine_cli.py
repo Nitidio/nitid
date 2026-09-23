@@ -26,7 +26,6 @@ COMMANDS = {
     "convert",
     "info",
     "gstreamer-info",
-    "onvif",
     "bugreport",
 }
 REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
@@ -65,7 +64,6 @@ Commands:
   convert  Convert a detection dataset between YOLO and COCO formats
   info     Show model parameters, GFLOPs, and checkpoint size
   gstreamer-info  Show GStreamer and hardware codec profile availability
-  onvif    Discover cameras, list media profiles, or resolve an RTSP URI
   bugreport Create an environment-only log for a GitHub issue
 
 Run "nitid COMMAND --help" for command-specific options and examples.
@@ -401,27 +399,6 @@ Profiles:
   nvidia    NVIDIA desktop CUDA/NVENC
   jetson    NVIDIA Jetson NVMM/V4L2
 """,
-    "onvif": """\
-Usage:
-  nitid onvif action=discover [timeout=SECONDS] [interface=IP]
-  nitid onvif action=profiles host=HOST [username=USER] [password_env=NAME]
-  nitid onvif action=uri host=HOST [profile=TOKEN_OR_NAME] [username=USER]
-
-Options:
-  action=NAME         discover, profiles, or uri (default: discover)
-  host=HOST           Camera host or complete ONVIF device-service URL
-  port=INT            Override the ONVIF HTTP(S) port
-  timeout=FLOAT       Discovery or SOAP timeout in seconds (default: 3 or 5)
-  interface=IP        IPv4 interface address used for multicast discovery
-  username=USER       ONVIF username (default: ONVIF_USERNAME environment variable)
-  password_env=NAME   Environment variable containing the password (default: ONVIF_PASSWORD)
-  profile=VALUE       Profile token or case-insensitive profile name
-  verify_ssl=BOOL     Verify camera HTTPS certificates (default: true)
-  time_offset=FLOAT   Camera clock correction for WS-Security, in seconds
-
-Passwords are intentionally read from the environment instead of command-line
-arguments, which may be visible to other local processes.
-""",
     "bugreport": """\
 Usage:
   nitid bugreport
@@ -531,86 +508,10 @@ def _configure_rtsp_credentials(kwargs: dict) -> None:
     if password is None:
         print(f"ERROR: RTSP password environment variable '{password_env}' is not set")
         raise SystemExit(1)
-    username = kwargs.get("rtsp_username") or os.environ.get("ONVIF_USERNAME")
-    if username is None:
-        print("ERROR: rtsp_username= or ONVIF_USERNAME is required with rtsp_password_env")
+    if kwargs.get("rtsp_username") is None:
+        print("ERROR: rtsp_username= is required with rtsp_password_env")
         raise SystemExit(1)
-    kwargs["rtsp_username"] = username
     kwargs["rtsp_password"] = password
-
-
-def _execute_onvif(kwargs: dict) -> None:
-    """Execute ONVIF discovery and read-only Media1 operations."""
-    from dfine.onvif import ONVIFCamera, discover_onvif_devices
-
-    action = str(kwargs.pop("action", "discover")).lower()
-    if "password" in kwargs:
-        print(
-            "ERROR: use password_env=NAME instead of placing an ONVIF password on the command line"
-        )
-        raise SystemExit(1)
-
-    if action == "discover":
-        timeout = float(kwargs.pop("timeout", 3.0))
-        interface = kwargs.pop("interface", None)
-        if kwargs:
-            print(f"ERROR: unsupported ONVIF discovery options: {', '.join(sorted(kwargs))}")
-            raise SystemExit(1)
-        devices = discover_onvif_devices(timeout=timeout, interface=interface)
-        print(f"Discovered {len(devices)} ONVIF device{'s' if len(devices) != 1 else ''}")
-        for index, device in enumerate(devices):
-            endpoint = device.endpoint_reference or "unknown endpoint"
-            print(f"  [{index}] {device.service_url or 'no service URL'} ({endpoint})")
-        return
-
-    if action not in {"profiles", "uri"}:
-        print("ERROR: ONVIF action must be discover, profiles, or uri")
-        raise SystemExit(1)
-
-    host = kwargs.pop("host", None)
-    if host is None:
-        print(f"ERROR: host= is required for ONVIF action={action}")
-        raise SystemExit(1)
-    username = kwargs.pop("username", os.environ.get("ONVIF_USERNAME"))
-    password_env = str(kwargs.pop("password_env", "ONVIF_PASSWORD"))
-    password = os.environ.get(password_env)
-    port_value = kwargs.pop("port", None)
-    port = int(port_value) if port_value is not None else None
-    timeout = float(kwargs.pop("timeout", 5.0))
-    verify_ssl = kwargs.pop("verify_ssl", True)
-    time_offset = float(kwargs.pop("time_offset", 0.0))
-    profile_selector = kwargs.pop("profile", None)
-    if action == "profiles" and profile_selector is not None:
-        print("ERROR: profile= is valid only for ONVIF action=uri")
-        raise SystemExit(1)
-    if kwargs:
-        print(f"ERROR: unsupported ONVIF options: {', '.join(sorted(kwargs))}")
-        raise SystemExit(1)
-
-    camera = ONVIFCamera(
-        str(host),
-        username=username,
-        password=password,
-        port=port,
-        timeout=timeout,
-        verify_ssl=verify_ssl,
-        time_offset=time_offset,
-    )
-    if action == "profiles":
-        profiles = camera.get_profiles()
-        print(f"Found {len(profiles)} media profile{'s' if len(profiles) != 1 else ''}")
-        for profile in profiles:
-            resolution = (
-                f"{profile.width}x{profile.height}"
-                if profile.width is not None and profile.height is not None
-                else "unknown resolution"
-            )
-            fps = f" {profile.frame_rate:g}fps" if profile.frame_rate is not None else ""
-            encoding = profile.encoding or "unknown codec"
-            print(f"  {profile.token}: {profile.name} — {encoding} {resolution}{fps}")
-        return
-
-    print(camera.get_stream_uri(profile_selector))
 
 
 def _execute(argv: list[str]) -> None:
@@ -675,16 +576,6 @@ def _execute(argv: list[str]) -> None:
             decode = "yes" if status["decode"] else "no"
             encode = "yes" if status["encode"] else "no"
             print(f"  {name:<8} decode={decode:<3} encode={encode:<3} {status['description']}")
-        return
-
-    if command == "onvif":
-        from dfine.onvif import ONVIFError
-
-        try:
-            _execute_onvif(kwargs)
-        except ONVIFError as exc:
-            print(f"ERROR: {exc}")
-            raise SystemExit(1) from None
         return
 
     model_path = kwargs.pop("model", "nitid1l")

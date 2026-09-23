@@ -82,7 +82,7 @@ results = model.predict(
 ```
 
 For CLI use, put the password in an environment variable and pass its name with
-`rtsp_password_env=`, as shown in [CLI usage](cli.md#onvif-cameras). Direct
+`rtsp_password_env=`, as shown in [CLI usage](cli.md#authenticated-rtsp-cameras). Direct
 `rtsp_password=` CLI arguments are rejected because process arguments can be
 visible to other users.
 
@@ -357,7 +357,7 @@ assuming the generic Debian image contains them.
 This backend covers decode, RTSP reconnect, bounded buffering, timestamps,
 discontinuity propagation, annotated RTSP publishing, and segmented recording.
 It also provides validated codec profiles, a software/VA-API container
-baseline, and ONVIF discovery/profile resolution. Vendor-specific
+baseline. Vendor-specific
 NVIDIA/Jetson images remain later deployment stages.
 
 `save=True` continues to use nitid's existing OpenCV output; the GStreamer

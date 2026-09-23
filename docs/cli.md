@@ -285,26 +285,9 @@ validated H.264 RTSP decoder with `hardware_profile=vaapi` and a validated
 output encoder with `output_hardware_profile=vaapi`. Missing elements are an
 error; nitid does not silently switch to software.
 
-## ONVIF cameras
+## Authenticated RTSP cameras
 
-Discover cameras on the local IPv4 network:
-
-```bash
-uv run nitid onvif action=discover timeout=3
-```
-
-List profiles and resolve a profile's RTSP URI:
-
-```bash
-export ONVIF_USERNAME=operator
-export ONVIF_PASSWORD='camera password'
-
-uv run nitid onvif action=profiles host=192.0.2.10
-uv run nitid onvif action=uri host=192.0.2.10 profile='Main Stream'
-```
-
-The URI command does not insert credentials. Feed it to tracking with a
-password environment variable:
+Pass the camera password through an environment variable:
 
 ```bash
 export CAMERA_RTSP_PASSWORD='camera password'
@@ -317,8 +300,8 @@ uv run nitid track \
     reconnect=true
 ```
 
-Direct `password=` and `rtsp_password=` CLI arguments are rejected because
-process arguments may be visible to other users. See [ONVIF cameras](onvif.md).
+A direct `rtsp_password=` CLI argument is rejected because process arguments
+may be visible to other users.
 
 Fine-tune a model:
 

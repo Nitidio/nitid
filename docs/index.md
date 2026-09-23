@@ -32,7 +32,7 @@ API: `predict`, `track`, `train`, `val` and `export`.
 - Python API, command line, and a browser-based web application
 - Automatic download of supported official checkpoints
 - Fine-tuning and validation for boxes, masks and dense semantic maps
-- Tracking, GStreamer/RTSP ingest, and ONVIF camera discovery
+- Tracking and GStreamer/RTSP ingest
 
 Pose estimation and oriented bounding boxes are supported too, outside the three
 headline tasks — see the [quickstart](quickstart.md).

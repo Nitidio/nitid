@@ -35,7 +35,6 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
         ("convert", ("data=DATA", "target=FORMAT", "output=PATH", "nitid convert")),
         ("info", ("task=TASK", "detailed=BOOL", "nitid info")),
         ("gstreamer-info", ("named decode/encode profiles", "software", "jetson")),
-        ("onvif", ("action=discover", "password_env=NAME", "action=uri")),
         ("bugreport", ("environment-only", "nitid bugreport")),
     ],
 )
@@ -397,101 +396,6 @@ def test_gstreamer_info_does_not_load_a_model(monkeypatch, capsys):
     assert "vaapi" in output and "encode=no" in output
 
 
-def test_onvif_discovery_cli(monkeypatch, capsys):
-    from dfine.onvif import ONVIFDevice
-
-    observed = {}
-
-    def discover(timeout, interface=None):
-        observed.update(timeout=timeout, interface=interface)
-        return [
-            ONVIFDevice(
-                "urn:uuid:camera",
-                ("http://192.0.2.10/onvif/device_service",),
-            )
-        ]
-
-    monkeypatch.setattr("dfine.onvif.discover_onvif_devices", discover)
-    main(["nitid", "onvif", "action=discover", "timeout=1.5", "interface=192.0.2.20"])
-
-    assert observed == {"timeout": 1.5, "interface": "192.0.2.20"}
-    output = capsys.readouterr().out
-    assert "Discovered 1 ONVIF device" in output
-    assert "http://192.0.2.10/onvif/device_service" in output
-
-
-def test_onvif_profiles_and_uri_cli_use_environment_password(monkeypatch, capsys):
-    from dfine.onvif import ONVIFMediaProfile
-
-    observed = []
-
-    class FakeCamera:
-        def __init__(self, host, username=None, password=None, **kwargs):
-            observed.append((host, username, password, kwargs))
-
-        def get_profiles(self):
-            return [ONVIFMediaProfile("main", "Main Stream", "H264", 1920, 1080, 25)]
-
-        def get_stream_uri(self, profile=None):
-            observed.append(("profile", profile))
-            return "rtsp://camera/live"
-
-    monkeypatch.setattr("dfine.onvif.ONVIFCamera", FakeCamera)
-    monkeypatch.setenv("CAMERA_SECRET", "not-printed")
-
-    main(
-        [
-            "nitid",
-            "onvif",
-            "action=profiles",
-            "host=camera.local",
-            "username=operator",
-            "password_env=CAMERA_SECRET",
-        ]
-    )
-    assert observed[0][1:3] == ("operator", "not-printed")
-    assert "Main Stream — H264 1920x1080 25fps" in capsys.readouterr().out
-
-    main(
-        [
-            "nitid",
-            "onvif",
-            "action=uri",
-            "host=camera.local",
-            "profile=main",
-            "password_env=CAMERA_SECRET",
-        ]
-    )
-    assert observed[-1] == ("profile", "main")
-    assert capsys.readouterr().out.strip() == "rtsp://camera/live"
-
-
-def test_onvif_cli_rejects_password_argument_and_missing_host(capsys):
-    with pytest.raises(SystemExit) as password_error:
-        main(["nitid", "onvif", "action=profiles", "host=camera", "password=secret"])
-    assert password_error.value.code == 1
-    assert "password_env" in capsys.readouterr().out
-
-    with pytest.raises(SystemExit) as host_error:
-        main(["nitid", "onvif", "action=uri"])
-    assert host_error.value.code == 1
-    assert "host= is required" in capsys.readouterr().out
-
-
-def test_onvif_cli_reports_protocol_errors_without_traceback(monkeypatch, capsys):
-    from dfine.onvif import ONVIFError
-
-    monkeypatch.setattr(
-        "dfine.onvif.discover_onvif_devices",
-        lambda **kwargs: (_ for _ in ()).throw(ONVIFError("multicast blocked")),
-    )
-    with pytest.raises(SystemExit) as error:
-        main(["nitid", "onvif", "action=discover"])
-
-    assert error.value.code == 1
-    assert capsys.readouterr().out.strip() == "ERROR: multicast blocked"
-
-
 def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
     observed = {}
 
@@ -534,6 +438,18 @@ def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
         )
     assert error.value.code == 1
     assert "rtsp_password_env" in capsys.readouterr().out
+
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "nitid",
+                "track",
+                "source=rtsp://camera/live",
+                "rtsp_password_env=CAMERA_RTSP_PASSWORD",
+            ]
+        )
+    assert error.value.code == 1
+    assert "rtsp_username= is required" in capsys.readouterr().out
 
 
 def test_track_cli_requires_source(monkeypatch, capsys):

@@ -49,7 +49,7 @@ validation metrics, export coverage where realistic, tests, and documentation.
   MLflow.
 - Export to ONNX/OpenVINO for all supported tasks, and TorchScript/TensorRT for
   detection and instance segmentation.
-- RTSP/GStreamer/ONVIF camera workflows and annotated video output.
+- RTSP/GStreamer camera workflows and annotated video output.
 - Browser-based web application for model selection and inference runs.
 - Tests and CI that protect supported user flows.
 
@@ -75,7 +75,7 @@ Available today:
 - RiO-DETR OBB model loading, training, validation, inference, visualization,
   and ONNX/OpenVINO export.
 - Tracking with optional tracker dependencies.
-- GStreamer/RTSP and ONVIF camera helpers.
+- GStreamer/RTSP camera helpers.
 - Web application for browser-based inference workflows.
 - Developer tests for model construction, datasets, training, validation,
   export, and result containers.
