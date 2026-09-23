@@ -1,6 +1,6 @@
 # Developer Onboarding
 
-Welcome to **nitid** — an Ultralytics-style wrapper for the [D-FINE](https://github.com/Peterande/D-FINE) real-time object detector. This guide is for developers joining the project. The user-facing docs live in the rest of `docs/`; this page covers the architecture decisions you need to understand before touching the code.
+Welcome to **nitid** — a compact, Apache-2.0 library around the [D-FINE](https://github.com/Peterande/D-FINE) family of real-time detectors. This guide is for developers joining the project. The user-facing docs live in the rest of `docs/`; this page covers the architecture decisions you need to understand before touching the code.
 
 ---
 

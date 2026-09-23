@@ -23,7 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue and PR templates
 - README model comparison table and YOLO benchmark
 - Jupyter/Colab tutorial notebook
+- Brand assets under `docs/assets/brand/` and `docs/brand.md`, the source of truth for the palette,
+  typography, logo usage, voice, and what the project announces publicly
+- Brand theme for the documentation site, with a light/dark palette toggle
 
 ### Changed
 - Integrated the model architectures, losses, and postprocessing into the installable package so
   supported tasks use the same self-contained runtime core
+- Public messaging now leads with the Apache 2.0 licensing of both code and weights instead of the
+  resemblance to Ultralytics, and announces three tasks; pose and OBB stay supported and documented
+- The web application uses the nitid palette through `web/frontend/src/styles/tokens.css`

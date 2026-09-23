@@ -8,7 +8,7 @@ include = ["dfine*", "nitid*", "tools*", "web*"]
 [project]
 name = "nitid"
 version = "0.1.0"
-description = "Ultralytics-style D-FINE detection and instance/semantic segmentation"
+description = "Object detection, instance segmentation and semantic segmentation, Apache 2.0 code and weights"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
