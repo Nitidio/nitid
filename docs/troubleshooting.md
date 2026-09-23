@@ -235,31 +235,6 @@ docker exec nitid_container /app/.venv/bin/dfine --help
 
 See the [macOS Docker setup](macos_docker_setup.md) for the full container workflow.
 
-## Web app shows no models
-
-### What it means
-
-The web app lists checkpoints from the `models/` directory. If that folder is empty, the UI has no model to run.
-
-### Fix
-
-Create the folder and download a model into it:
-
-```bash
-mkdir -p models
-uv run nitid download model=nitid1s task=detect output=models
-```
-
-Then start the backend:
-
-```bash
-uv run uvicorn web.api.main:app --workers 1
-```
-
-Use one worker only. The model cache is process-local, and inference is designed for a single API worker.
-
-See the [web app guide](web_app.md) for the full setup.
-
 ## Still stuck?
 
 Run these checks from the repository root and include the output when asking for help:

@@ -2,8 +2,8 @@
 
 This page is the source of truth for how nitid presents itself: the logo, the
 colours, the typography, and what the project says about itself in public. It
-exists so the README, the documentation site and the web application stay in
-step instead of drifting apart.
+exists so the README and the documentation site stay in step instead of
+drifting apart.
 
 ![nitid](assets/brand/nitid-logo-on-light.png)
 
@@ -30,7 +30,7 @@ use the light variant instead.
 ## Colour
 
 The dark palette is the product palette: it is what nitid looks like on the
-website, in the documentation and in the web application.
+website and in the documentation.
 
 | Role | Hex |
 |------|-----|

@@ -50,7 +50,6 @@ validation metrics, export coverage where realistic, tests, and documentation.
 - Export to ONNX/OpenVINO for all supported tasks, and TorchScript/TensorRT for
   detection and instance segmentation.
 - RTSP/GStreamer camera workflows and annotated video output.
-- Browser-based web application for model selection and inference runs.
 - Tests and CI that protect supported user flows.
 
 ## Not in scope by default
@@ -76,7 +75,6 @@ Available today:
   and ONNX/OpenVINO export.
 - Tracking with optional tracker dependencies.
 - GStreamer/RTSP camera helpers.
-- Web application for browser-based inference workflows.
 - Developer tests for model construction, datasets, training, validation,
   export, and result containers.
 
@@ -115,7 +113,6 @@ pipeline. The known gaps above are documented gaps for v0.1.0, not blockers.
 - [Fine-tuning](fine_tuning.md)
 - [Export](export.md)
 - [API Reference](api_reference.md)
-- [Web App](web_app.md)
 - [Troubleshooting](troubleshooting.md)
 - [Onboarding](onboarding.md)
 - [Decision records](adr/index.md)

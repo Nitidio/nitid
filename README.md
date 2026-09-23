@@ -48,7 +48,7 @@ following every paper.
 
 What comes with it:
 
-- Python API, command line, and a browser-based web interface
+- Python API and command line
 - Automatic download of supported official checkpoints
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
@@ -284,7 +284,6 @@ Segmentation checkpoints are published in the official [D-FINE-seg model reposit
 | [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset formats |
 | [docs/export.md](docs/export.md) | ONNX, OpenVINO, TorchScript, and TensorRT export |
 | [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
-| [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 | [docs/brand.md](docs/brand.md) | Brand: logo, palette, typography, and what the project announces |
 
@@ -327,31 +326,6 @@ required.
   codebase**: architecture, conventions, gotchas
 - [CONTRIBUTING.md](CONTRIBUTING.md) — branch workflow, commit conventions, and
   the PR checklist
-
-### Web application
-
-The browser-based UI runs from a source checkout: upload images or videos, pick
-a model, adjust parameters, and browse annotated results with persistent run
-history per user.
-
-```bash
-# Install web extras
-uv sync --extra web
-
-# Download the recommended checkpoint into models/
-uv run nitid download model=nitid1l task=detect output=models
-
-# Start the API (single worker — inference is not thread-safe)
-uv run uvicorn web.api.main:app --workers 1
-
-# Start the frontend (separate terminal)
-cd web/frontend && npm install && npm run dev
-# → open http://localhost:5173
-```
-
-Register an account on first visit. The API is self-documented at
-`http://localhost:8000/docs`. See [docs/web_app.md](docs/web_app.md) for
-environment variables, the REST API reference, and the data model.
 
 ## Acknowledgements
 

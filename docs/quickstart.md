@@ -20,7 +20,7 @@ pip install "nitid[track]"     # ByteTrack, BoT-SORT, and OC-SORT tracking
 pip install "nitid[openvino]"  # OpenVINO IR export and runtime
 ```
 
-Working on nitid itself, or running the web application? Those use a source
+Working on nitid itself? That uses a source
 checkout with `uv` — see [Development](https://github.com/Vaelsys/nitid#development)
 in the README.
 

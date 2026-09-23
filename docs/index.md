@@ -29,7 +29,7 @@ surprises.**
 Object detection, instance segmentation and semantic segmentation, through one
 API: `predict`, `track`, `train`, `val` and `export`.
 
-- Python API, command line, and a browser-based web application
+- Python API and command line
 - Automatic download of supported official checkpoints
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - Tracking and GStreamer/RTSP ingest
@@ -51,7 +51,6 @@ If you're new to nitid, follow these guides in order:
 - [Quick Start](quickstart.md)
 - [Fine-tuning](fine_tuning.md)
 - [Export](export.md)
-- [Web Application](web_app.md)
 - [API Reference](api_reference.md)
 - [Troubleshooting](troubleshooting.md)
 

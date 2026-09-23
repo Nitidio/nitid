@@ -38,7 +38,6 @@ nav:
   - GStreamer and RTSP: gstreamer.md
   - Fine-tuning: fine_tuning.md
   - Export: export.md
-  - Web App: web_app.md
   - API Reference: api_reference.md
   - Troubleshooting: troubleshooting.md
   - Project:

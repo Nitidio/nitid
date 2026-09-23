@@ -32,4 +32,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supported tasks use the same self-contained runtime core
 - Public messaging now leads with the Apache 2.0 licensing of both code and weights instead of the
   resemblance to Ultralytics, and announces three tasks; pose and OBB stay supported and documented
-- The web application uses the nitid palette through `web/frontend/src/styles/tokens.css`
