@@ -11,8 +11,6 @@ from typing import Any, Iterator
 import cv2
 import numpy as np
 
-from dfine.gstreamer import resolve_hardware_fragment
-
 DEFAULT_GSTREAMER_ENCODER = "x264enc tune=zerolatency speed-preset=veryfast key-int-max=30"
 
 
@@ -153,8 +151,6 @@ def build_gstreamer_output_pipeline(
     segment_duration: float | None = None,
     encoder: str | None = None,
     rtsp_transport: str = "tcp",
-    hardware_profile: str | None = None,
-    _element_available: Callable[[str], bool] | None = None,
 ) -> str:
     """Build an appsrc pipeline for MP4, segmented MP4, or RTSP publishing."""
     if rtsp_transport not in {"tcp", "udp"}:
@@ -163,15 +159,10 @@ def build_gstreamer_output_pipeline(
         raise ValueError("segment_duration must be > 0 when provided")
 
     if pipeline is not None:
-        if (
-            destination is not None
-            or segment_duration is not None
-            or hardware_profile is not None
-            or encoder is not None
-        ):
+        if destination is not None or segment_duration is not None or encoder is not None:
             raise ValueError(
                 "a custom output pipeline cannot be combined with destination, "
-                "segment_duration, encoder, or hardware_profile"
+                "segment_duration, or encoder"
             )
         description = pipeline.strip()
         if not description:
@@ -184,25 +175,10 @@ def build_gstreamer_output_pipeline(
         raise ValueError("destination or pipeline is required for a GStreamer output sink")
     if encoder is not None and not encoder.strip():
         raise ValueError("encoder cannot be empty")
-    if encoder is not None and hardware_profile is not None:
-        raise ValueError("encoder cannot be combined with hardware_profile")
 
     destination_text = str(destination)
-    if hardware_profile is not None:
-        resolver_kwargs: dict[str, Any] = {}
-        if _element_available is not None:
-            resolver_kwargs.update(
-                element_available=_element_available,
-                require_opencv=False,
-            )
-        encoder_fragment = resolve_hardware_fragment(
-            hardware_profile,
-            "encode",
-            **resolver_kwargs,
-        )
-    else:
-        selected_encoder = encoder or DEFAULT_GSTREAMER_ENCODER
-        encoder_fragment = f"videoconvert ! video/x-raw,format=I420 ! {selected_encoder.strip()}"
+    selected_encoder = encoder or DEFAULT_GSTREAMER_ENCODER
+    encoder_fragment = f"videoconvert ! video/x-raw,format=I420 ! {selected_encoder.strip()}"
     if destination_text.lower().startswith("rtsp://"):
         if segment_duration is not None:
             raise ValueError("segment_duration cannot be used with an RTSP destination")
@@ -248,9 +224,7 @@ class GStreamerVideoSink(FrameSink):
         segment_duration: float | None = None,
         encoder: str | None = None,
         rtsp_transport: str = "tcp",
-        hardware_profile: str | None = None,
         _writer_factory: Callable[[str, float, tuple[int, int]], Any] | None = None,
-        _element_available: Callable[[str], bool] | None = None,
     ) -> None:
         if fps is not None and fps <= 0:
             raise ValueError("sink fps must be > 0 when provided")
@@ -260,8 +234,6 @@ class GStreamerVideoSink(FrameSink):
         self.segment_duration = segment_duration
         self.encoder = encoder
         self.rtsp_transport = rtsp_transport
-        self.hardware_profile = hardware_profile
-        self._element_available = _element_available
         self.pipeline: str | None = None
         self.fps: float | None = None
         self.frame_size: tuple[int, int] | None = None
@@ -276,8 +248,6 @@ class GStreamerVideoSink(FrameSink):
             segment_duration=segment_duration,
             encoder=encoder,
             rtsp_transport=rtsp_transport,
-            hardware_profile=hardware_profile,
-            _element_available=_element_available,
         )
 
     @staticmethod
@@ -327,8 +297,6 @@ class GStreamerVideoSink(FrameSink):
             segment_duration=self.segment_duration,
             encoder=self.encoder,
             rtsp_transport=self.rtsp_transport,
-            hardware_profile=self.hardware_profile,
-            _element_available=self._element_available,
         )
         writer = self._writer_factory(self.pipeline, self.fps, self.frame_size)
         if not writer.isOpened():

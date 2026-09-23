@@ -3,11 +3,7 @@
 New applications should import :class:`nitid.NITID` from :mod:`nitid`.
 """
 
-from dfine.gstreamer import (
-    GStreamerHardwareProfile,
-    get_hardware_profile,
-    inspect_gstreamer_capabilities,
-)
+from dfine.gstreamer import inspect_gstreamer_capabilities
 from dfine.media import (
     Frame,
     FrameMetadata,
@@ -35,9 +31,7 @@ __all__ = [
     "OBB",
     "SemanticMask",
     "GStreamerFrameSource",
-    "GStreamerHardwareProfile",
     "build_gstreamer_output_pipeline",
-    "get_hardware_profile",
     "inspect_gstreamer_capabilities",
     "bugreport",
 ]

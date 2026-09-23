@@ -34,7 +34,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
         ("export", ("task=TASK", "format=FORMAT", "opset=INT", "nitid export")),
         ("convert", ("data=DATA", "target=FORMAT", "output=PATH", "nitid convert")),
         ("info", ("task=TASK", "detailed=BOOL", "nitid info")),
-        ("gstreamer-info", ("named decode/encode profiles", "software", "jetson")),
+        ("gstreamer-info", ("OpenCV has GStreamer enabled", "gst-inspect-1.0")),
         ("bugreport", ("environment-only", "nitid bugreport")),
     ],
 )
@@ -270,7 +270,7 @@ def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
     }
 
 
-def test_track_cli_forwards_gstreamer_reconnect_options(monkeypatch):
+def test_track_cli_forwards_gstreamer_source_options(monkeypatch):
     observed = {}
 
     class FakeDFINE:
@@ -291,13 +291,8 @@ def test_track_cli_forwards_gstreamer_reconnect_options(monkeypatch):
             "track",
             "source=rtsp://camera/live",
             "backend=gstreamer",
-            "reconnect=true",
-            "reconnect_initial_delay=0.5",
-            "reconnect_max_delay=10",
-            "reconnect_attempts=4",
             "rtsp_latency=300",
             "rtsp_transport=udp",
-            "hardware_profile=vaapi",
         ]
     )
 
@@ -305,13 +300,8 @@ def test_track_cli_forwards_gstreamer_reconnect_options(monkeypatch):
         "source": "rtsp://camera/live",
         "kwargs": {
             "backend": "gstreamer",
-            "reconnect": True,
-            "reconnect_initial_delay": 0.5,
-            "reconnect_max_delay": 10,
-            "reconnect_attempts": 4,
             "rtsp_latency": 300,
             "rtsp_transport": "udp",
-            "hardware_profile": "vaapi",
             "stream": True,
         },
     }
@@ -346,7 +336,6 @@ def test_track_cli_builds_gstreamer_segment_sink(monkeypatch, capsys):
             "output=runs/segments",
             "segment_duration=60",
             "output_fps=15",
-            "output_hardware_profile=v4l2",
         ]
     )
 
@@ -355,7 +344,6 @@ def test_track_cli_builds_gstreamer_segment_sink(monkeypatch, capsys):
         "pipeline": None,
         "fps": 15,
         "segment_duration": 60,
-        "hardware_profile": "v4l2",
     }
     assert observed["source"] == "video.mp4"
     assert observed["model_kwargs"] == {"sink": observed["model_kwargs"]["sink"], "stream": True}
@@ -370,30 +358,14 @@ def test_output_options_require_a_destination():
 def test_gstreamer_info_does_not_load_a_model(monkeypatch, capsys):
     monkeypatch.setattr(
         "dfine.gstreamer.inspect_gstreamer_capabilities",
-        lambda: {
-            "opencv_gstreamer": True,
-            "gst_inspect": True,
-            "profiles": {
-                "software": {
-                    "description": "Software path",
-                    "decode": True,
-                    "encode": True,
-                },
-                "vaapi": {
-                    "description": "VA-API path",
-                    "decode": True,
-                    "encode": False,
-                },
-            },
-        },
+        lambda: {"opencv_gstreamer": True, "gst_inspect": False},
     )
 
     main(["nitid", "gstreamer-info"])
 
     output = capsys.readouterr().out
     assert "OpenCV GStreamer: yes" in output
-    assert "software decode=yes encode=yes" in output
-    assert "vaapi" in output and "encode=no" in output
+    assert "gst-inspect-1.0: no" in output
 
 
 def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):

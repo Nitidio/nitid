@@ -171,29 +171,21 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 The annotated video is saved under `runs/track/exp/`. Tracking dependencies
 are optional; install them with `pip install "nitid[track]"`.
 
-For resilient RTSP ingest, use an OpenCV build compiled with GStreamer:
+For RTSP ingest through GStreamer, use an OpenCV build compiled with it:
 
 ```python
 for result in model.track(
     "rtsp://camera/live",
     backend="gstreamer",
-    reconnect=True,
     conf=0.5,
     stream=True,
 ):
     ...
 ```
 
-See [docs/gstreamer.md](docs/gstreamer.md) for system requirements, explicit
-pipelines, hardware-decoder examples, and reconnect semantics.
-
-Inspect available codec paths before selecting acceleration:
-
-```bash
-nitid gstreamer-info
-```
-
-Named profiles are `software`, `vaapi`, `v4l2`, `nvidia`, and `jetson`.
+See [docs/gstreamer.md](docs/gstreamer.md) for system requirements and
+explicit pipelines. `nitid gstreamer-info` checks whether your OpenCV build
+has GStreamer enabled.
 
 Annotated tracking can also be published or segmented without buffering
 results in Python:

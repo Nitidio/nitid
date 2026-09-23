@@ -63,7 +63,7 @@ Commands:
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
   convert  Convert a detection dataset between YOLO and COCO formats
   info     Show model parameters, GFLOPs, and checkpoint size
-  gstreamer-info  Show GStreamer and hardware codec profile availability
+  gstreamer-info  Show whether GStreamer is available to OpenCV
   bugreport Create an environment-only log for a GitHub issue
 
 Run "nitid COMMAND --help" for command-specific options and examples.
@@ -87,13 +87,8 @@ Options:
   stream=BOOL         Return results as a generator (default: false)
   backend=NAME        Video backend: opencv or gstreamer (default: opencv)
   gst_pipeline=TEXT   Explicit GStreamer pipeline ending before or at appsink
-  reconnect=BOOL      Reconnect a live GStreamer source after failure (default: false)
-  reconnect_initial_delay=FLOAT  Initial reconnect delay in seconds (default: 1)
-  reconnect_max_delay=FLOAT      Maximum reconnect delay in seconds (default: 30)
-  reconnect_attempts=INT         Retry limit; omitted means unlimited
   rtsp_latency=INT    GStreamer RTSP jitter-buffer latency in ms (default: 200)
   rtsp_transport=NAME RTSP transport: tcp or udp (default: tcp)
-  hardware_profile=NAME  H.264 RTSP decoder: software, vaapi, v4l2, nvidia, jetson
   rtsp_username=USER RTSP username passed as a GStreamer property
   rtsp_password_env=NAME  Environment variable containing the RTSP password
   output=DEST         Annotated MP4 path, segment directory, or RTSP publish URL
@@ -101,7 +96,6 @@ Options:
   output_fps=FLOAT    Override output FPS (default: source FPS)
   segment_duration=FLOAT  Split local output every N seconds
   output_encoder=TEXT GStreamer encoder element and properties (default: x264enc)
-  output_hardware_profile=NAME  Encoder: software, vaapi, v4l2, nvidia, jetson
   output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
   return_probs=BOOL   Retain full-resolution semantic probabilities (default: false)
@@ -138,13 +132,8 @@ Options:
   vid_stride=INT      Process every Nth source frame (default: 1)
   backend=NAME        Video backend: opencv or gstreamer (default: opencv)
   gst_pipeline=TEXT   Explicit GStreamer pipeline ending before or at appsink
-  reconnect=BOOL      Reconnect a live GStreamer source after failure (default: false)
-  reconnect_initial_delay=FLOAT  Initial reconnect delay in seconds (default: 1)
-  reconnect_max_delay=FLOAT      Maximum reconnect delay in seconds (default: 30)
-  reconnect_attempts=INT         Retry limit; omitted means unlimited
   rtsp_latency=INT    GStreamer RTSP jitter-buffer latency in ms (default: 200)
   rtsp_transport=NAME RTSP transport: tcp or udp (default: tcp)
-  hardware_profile=NAME  H.264 RTSP decoder: software, vaapi, v4l2, nvidia, jetson
   rtsp_username=USER RTSP username passed as a GStreamer property
   rtsp_password_env=NAME  Environment variable containing the RTSP password
   output=DEST         Annotated MP4 path, segment directory, or RTSP publish URL
@@ -152,7 +141,6 @@ Options:
   output_fps=FLOAT    Override output FPS (default: source FPS)
   segment_duration=FLOAT  Split local output every N seconds
   output_encoder=TEXT GStreamer encoder element and properties (default: x264enc)
-  output_hardware_profile=NAME  Encoder: software, vaapi, v4l2, nvidia, jetson
   output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
@@ -200,9 +188,8 @@ Examples:
   nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
   nitid track model=nitid1s source=0 classes=[0] stream=true
   nitid track model=nitid1s source=rtsp://camera/stream lost_track_buffer=60
-  nitid track model=nitid1s source=rtsp://camera/stream backend=gstreamer reconnect=true
+  nitid track model=nitid1s source=rtsp://camera/stream backend=gstreamer
   nitid track model=nitid1s source=video.mp4 output=runs/segments segment_duration=60
-  nitid track model=nitid1s source=rtsp://camera/stream backend=gstreamer hardware_profile=vaapi
 """,
     "download": """\
 Usage:
@@ -389,15 +376,8 @@ Example:
 Usage:
   nitid gstreamer-info
 
-Reports whether OpenCV has GStreamer enabled, whether gst-inspect-1.0 is
-available, and which named decode/encode profiles have all required elements.
-
-Profiles:
-  software  libav/x264 CPU path
-  vaapi     Intel/AMD VA-API
-  v4l2      Linux V4L2 memory-to-memory
-  nvidia    NVIDIA desktop CUDA/NVENC
-  jetson    NVIDIA Jetson NVMM/V4L2
+Reports whether OpenCV has GStreamer enabled and whether gst-inspect-1.0 is
+available.
 """,
     "bugreport": """\
 Usage:
@@ -472,7 +452,6 @@ def _configure_output_sink(kwargs: dict) -> str | None:
         "segment_duration": "segment_duration",
         "output_encoder": "encoder",
         "output_rtsp_transport": "rtsp_transport",
-        "output_hardware_profile": "hardware_profile",
     }
     provided_options = [name for name in option_names if name in kwargs]
     sink_options = {
@@ -568,14 +547,6 @@ def _execute(argv: list[str]) -> None:
         capabilities = inspect_gstreamer_capabilities()
         print("OpenCV GStreamer: " + ("yes" if capabilities["opencv_gstreamer"] else "no"))
         print("gst-inspect-1.0: " + ("yes" if capabilities["gst_inspect"] else "no"))
-        print("Profiles:")
-        profiles = capabilities["profiles"]
-        assert isinstance(profiles, dict)
-        for name, status in profiles.items():
-            assert isinstance(status, dict)
-            decode = "yes" if status["decode"] else "no"
-            encode = "yes" if status["encode"] else "no"
-            print(f"  {name:<8} decode={decode:<3} encode={encode:<3} {status['description']}")
         return
 
     model_path = kwargs.pop("model", "nitid1l")

@@ -34,7 +34,7 @@ def test_source_backend_options_are_validated():
     with pytest.raises(TypeError, match="GStreamer backend requires"):
         LoadSource(frame, imgsz=8, device="cpu", backend="gstreamer")
     with pytest.raises(ValueError, match="require backend='gstreamer'"):
-        LoadSource(frame, imgsz=8, device="cpu", reconnect=True)
+        LoadSource(frame, imgsz=8, device="cpu", gst_pipeline="videotestsrc")
 
 
 def test_image_source(tmp_path):
