@@ -70,34 +70,37 @@ used for pretraining keep their own terms: the official checkpoints listed in
 
 ## Installation
 
-Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
+Requires Python 3.10, 3.11 or 3.12.
 
 ```bash
-git clone https://github.com/Vaelsys/nitid.git && cd nitid
-uv sync
+pip install nitid
 ```
 
-For fine-tuning and validation add the `train` extra:
+> nitid is not on PyPI yet — the first release, v0.1.0, is being prepared.
+> Until it lands, install straight from GitHub:
+> `pip install "nitid @ git+https://github.com/Vaelsys/nitid.git"`
+
+Inference and export work out of the box. Other features are optional extras:
+
+| Extra | Adds |
+|:------|:-----|
+| `train` | Fine-tuning and COCO-style validation |
+| `track` | ByteTrack, BoT-SORT, and OC-SORT object tracking |
+| `openvino` | OpenVINO export and runtime for Intel CPU, iGPU, and NPU |
+| `wandb`, `mlflow` | Experiment tracking during training |
 
 ```bash
-uv sync --extra train
+pip install "nitid[train,track]"
 ```
 
-For ByteTrack, BoT-SORT, and OC-SORT object tracking add the `track` extra:
+pip installs the default PyTorch build for your platform. If you need a
+specific CUDA version, install PyTorch first following
+[pytorch.org](https://pytorch.org/get-started/locally/), then install nitid.
+
+TensorRT export needs NVIDIA's package as well:
 
 ```bash
-uv sync --extra track
-```
-
-TensorRT:
-
-``` bash
-pip install --extra-index-url https://pypi.nvidia.com tensorrt>=8.6
-```
-For the web application:
-
-```bash
-uv sync --extra web
+pip install --extra-index-url https://pypi.nvidia.com "tensorrt>=8.6"
 ```
 
 ## Public names
@@ -167,7 +170,7 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 ```
 
 The annotated video is saved under `runs/track/exp/`. Tracking dependencies
-are optional; install them with `uv sync --extra track`.
+are optional; install them with `pip install "nitid[track]"`.
 
 For resilient RTSP ingest, use an OpenCV build compiled with GStreamer:
 
@@ -246,16 +249,16 @@ print(report.path)
 ### Command Line Interface
 
 ```bash
-uv run nitid predict model=nitid1s task=detect source=image.jpg
-uv run nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
-uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
-uv run nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
-uv run nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50
-uv run nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
-uv run nitid val model=nitid1s task=detect data=my_dataset.yml
-uv run nitid export model=nitid1s task=detect format=onnx
-uv run nitid predict model=nitid1s source=image.jpg --report
-uv run nitid bugreport
+nitid predict model=nitid1s task=detect source=image.jpg
+nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
+nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
+nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
+nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50
+nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
+nitid val model=nitid1s task=detect data=my_dataset.yml
+nitid export model=nitid1s task=detect format=onnx
+nitid predict model=nitid1s source=image.jpg --report
+nitid bugreport
 ```
 
 For the full guide:
@@ -267,6 +270,12 @@ For the full guide:
 - GStreamer and RTSP: [docs/gstreamer.md](docs/gstreamer.md)
 - ONVIF cameras: [docs/onvif.md](docs/onvif.md)
 
+
+## Migrating from YOLO
+
+If you are coming from a YOLO codebase, the quickstart has a side-by-side
+mapping of the API and the behaviour that differs:
+[Coming from Ultralytics](docs/quickstart.md#coming-from-ultralytics).
 
 ## Official Models
 
@@ -285,9 +294,63 @@ Segmentation checkpoints are published in the official [D-FINE-seg model reposit
 *Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference.*
 
 
-## Web application
+## Documentation
 
-nitid includes a browser-based UI for running detection without writing code. Upload images or videos, pick a model, adjust parameters, and browse annotated results with persistent run history per user.
+| Doc | Description |
+|-----|-------------|
+| [docs/quickstart.md](docs/quickstart.md) | Full quickstart |
+| [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset formats |
+| [docs/export.md](docs/export.md) | ONNX, OpenVINO, TorchScript, and TensorRT export |
+| [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
+| [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
+| [docs/brand.md](docs/brand.md) | Brand: logo, palette, typography, and what the project announces |
+
+
+## Development
+
+Everything above is for using nitid. To work on nitid itself, use a source
+checkout and [uv](https://github.com/astral-sh/uv), which installs the exact
+dependency versions pinned in `uv.lock` — including CUDA 12.1 PyTorch wheels on
+Linux and Windows.
+
+```bash
+git clone https://github.com/Vaelsys/nitid.git && cd nitid
+uv sync --extra dev --extra train
+```
+
+Inside the checkout, run the CLI and tools through the project environment:
+
+```bash
+uv run nitid predict model=nitid1s task=detect source=image.jpg
+
+# Unit tests (no GPU, no checkpoint needed)
+uv run pytest tests/unit
+
+# All tests (integration tests build a tiny checkpoint automatically)
+uv run pytest
+
+# Lint
+uv run ruff check .
+
+# Type-check
+uv run mypy dfine/
+```
+
+Integration tests use a session-scoped fixture in `tests/conftest.py` that
+builds a small D-FINE-S model with random weights at test time — no download
+required.
+
+- [docs/onboarding.md](docs/onboarding.md) — **start here if you're new to the
+  codebase**: architecture, conventions, gotchas
+- [CONTRIBUTING.md](CONTRIBUTING.md) — branch workflow, commit conventions, and
+  the PR checklist
+
+### Web application
+
+The browser-based UI runs from a source checkout: upload images or videos, pick
+a model, adjust parameters, and browse annotated results with persistent run
+history per user.
 
 ```bash
 # Install web extras
@@ -304,54 +367,9 @@ cd web/frontend && npm install && npm run dev
 # → open http://localhost:5173
 ```
 
-Register an account on first visit. The API is self-documented at `http://localhost:8000/docs`.
-
-See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables, REST API reference, data model, and implementation notes.
-
-
-## Documentation
-
-| Doc | Description |
-|-----|-------------|
-| [docs/onboarding.md](docs/onboarding.md) | **Start here if you're a new developer** — architecture, conventions, gotchas |
-| [docs/quickstart.md](docs/quickstart.md) | Full quickstart |
-| [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset formats |
-| [docs/export.md](docs/export.md) | ONNX, OpenVINO, TorchScript, and TensorRT export |
-| [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
-| [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
-| [docs/brand.md](docs/brand.md) | Brand: logo, palette, typography, and what the project announces |
-
-
-## Development
-
-```bash
-uv sync --extra dev
-
-# Unit tests (no GPU, no checkpoint needed)
-uv run pytest tests/unit
-
-# All tests (integration tests build a tiny checkpoint automatically)
-uv run pytest
-
-# Lint
-uv run ruff check .
-
-# Type-check
-uv run mypy dfine/
-```
-
-Integration tests use a session-scoped fixture in `tests/conftest.py` that builds a small D-FINE-S model with random weights at test time — no download required.
-
-### Migrating from YOLO
-
-If you are coming from a YOLO codebase, the quickstart has a side-by-side
-mapping of the API and the behaviour that differs:
-[Coming from Ultralytics](docs/quickstart.md#coming-from-ultralytics).
-
-## Contributing
-
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, commit conventions, and the PR checklist.
+Register an account on first visit. The API is self-documented at
+`http://localhost:8000/docs`. See [docs/web_app.md](docs/web_app.md) for
+environment variables, the REST API reference, and the data model.
 
 ## Acknowledgements
 
