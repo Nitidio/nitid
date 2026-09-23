@@ -538,39 +538,6 @@ input `hardware_profile=` argument and the sink profile are independent because
 decode and encode support may differ on the same host. Use
 `inspect_gstreamer_capabilities()` or `nitid gstreamer-info` before deployment.
 
-#### ONVIF camera discovery
-
-```python
-from nitid import ONVIFCamera, discover_onvif_devices
-
-devices = discover_onvif_devices(timeout=3, interface=None)
-camera = ONVIFCamera(
-    devices[0].service_url,
-    username="operator",
-    password="secret",
-    timeout=5,
-    verify_ssl=True,
-    time_offset=0,
-)
-```
-
-`discover_onvif_devices()` returns `list[ONVIFDevice]`. Each device exposes
-`endpoint_reference`, `xaddrs`, `scopes`, `types`, and a preferred
-`service_url`.
-
-```python
-profiles = camera.get_profiles()
-profile = camera.select_profile("Main Stream")  # token or name
-uri = camera.get_stream_uri(profile)            # credentials are not inserted
-source = camera.gstreamer_source(profile, hardware_profile="vaapi")
-```
-
-`ONVIFMediaProfile` contains `token`, `name`, `encoding`, `width`, `height`,
-`frame_rate`, and the optional `(width, height)` `resolution` property.
-`gstreamer_source()` returns a `GStreamerFrameSource`, defaults to reconnection,
-and passes credentials as source properties rather than putting secrets in the
-URI. See [ONVIF cameras](onvif.md) for networking and authentication details.
-
 ---
 
 ### `train()`

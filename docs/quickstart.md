@@ -176,24 +176,6 @@ nitid track model=nitid1s task=detect source=video.mp4 \
     output=runs/segments segment_duration=60 conf=0.5
 ```
 
-Discover an ONVIF camera, select a media profile, and hand it directly to the
-tracking pipeline:
-
-```python
-from nitid import NITID, ONVIFCamera, discover_onvif_devices
-
-device = discover_onvif_devices(timeout=3)[0]
-camera = ONVIFCamera(device.service_url, username="operator", password="secret")
-source = camera.gstreamer_source("Main Stream", hardware_profile="vaapi")
-
-model = NITID("nitid1s", task="detect")
-for result in model.track(source, stream=True, conf=0.5):
-    ...
-```
-
-See [ONVIF cameras](onvif.md) for CLI credential handling, network discovery,
-profile selection, and clock troubleshooting.
-
 ## Working with checkpoints
 
 Official model names such as `nitid1s` with `task="detect"`, `task="segment"`,

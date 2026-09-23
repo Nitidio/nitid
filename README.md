@@ -55,7 +55,6 @@ What comes with it:
   video output
 - Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented
   recording
-- ONVIF camera discovery, profile selection, and secure RTSP resolution
 
 Pose estimation and oriented bounding boxes are supported too, outside the three
 headline tasks — see the [quickstart](docs/quickstart.md).
@@ -196,14 +195,6 @@ nitid gstreamer-info
 
 Named profiles are `software`, `vaapi`, `v4l2`, `nvidia`, and `jetson`.
 
-Discover ONVIF cameras and inspect their streams:
-
-```bash
-nitid onvif action=discover timeout=3
-ONVIF_USERNAME=operator ONVIF_PASSWORD=secret \
-  nitid onvif action=profiles host=192.0.2.10
-```
-
 Annotated tracking can also be published or segmented without buffering
 results in Python:
 
@@ -268,7 +259,6 @@ For the full guide:
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
 - GStreamer and RTSP: [docs/gstreamer.md](docs/gstreamer.md)
-- ONVIF cameras: [docs/onvif.md](docs/onvif.md)
 
 
 ## Migrating from YOLO
