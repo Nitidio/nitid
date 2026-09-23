@@ -153,13 +153,12 @@ objects with persistent IDs in `result.boxes.id`. With `save=True`, the
 annotated video defaults to `runs/track/exp/video.mp4`. Prefer `stream=True`
 for video and live sources so results are not retained in memory.
 
-For a live RTSP camera, select GStreamer explicitly and enable reconnection:
+For a live RTSP camera, select GStreamer explicitly:
 
 ```python
 for result in model.track(
     "rtsp://camera/live",
     backend="gstreamer",
-    reconnect=True,
     conf=0.5,
     stream=True,
 ):

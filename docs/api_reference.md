@@ -132,13 +132,8 @@ results = model.predict(
     name="exp",
     backend="opencv", # or "gstreamer" for video/live sources
     gst_pipeline=None, # optional explicit GStreamer pipeline
-    reconnect=False,  # retry a live GStreamer source after failure
-    reconnect_initial_delay=1.0,
-    reconnect_max_delay=30.0,
-    reconnect_attempts=None,
     rtsp_latency=200,
     rtsp_transport="tcp",
-    hardware_profile=None, # software, vaapi, v4l2, nvidia, or jetson
     rtsp_username=None,
     rtsp_password=None, # Python only; CLI reads passwords from an environment variable
     iou=0.85,          # IoU threshold for TTA NMS
@@ -343,13 +338,8 @@ results = model.track(
     verbose=True,
     backend="opencv",
     gst_pipeline=None,
-    reconnect=False,
-    reconnect_initial_delay=1.0,
-    reconnect_max_delay=30.0,
-    reconnect_attempts=None,
     rtsp_latency=200,
     rtsp_transport="tcp",
-    hardware_profile=None,
     rtsp_username=None,
     rtsp_password=None, # Python only; CLI uses rtsp_password_env
     iou=0.85,
@@ -470,8 +460,8 @@ Tracker state belongs to one `model.track()` invocation. It resets when:
 
 - a new `model.track()` call starts;
 - the source ID changes, such as when a source list advances to another video;
-- `FrameMetadata.discontinuity` is true, allowing reconnecting stream sources
-  to prevent identities from leaking across a connection gap.
+- `FrameMetadata.discontinuity` is true, which a custom `FrameSource` can set
+  to prevent identities from leaking across a gap in its frames.
 
 Passing a custom `FrameSink` through `sink=` writes annotated tracked frames
 and closes the sink when iteration finishes or the generator is closed.
@@ -495,17 +485,12 @@ A `FrameSource` yields ordered BGR frames with stable metadata. Both
 camera source. A `FrameSink` receives annotated frames through `sink=`. Sources
 and sinks have explicit `close()` methods and support context-manager use.
 
-`GStreamerFrameSource` is the built-in accelerated/live-stream implementation:
+`GStreamerFrameSource` is the built-in GStreamer/live-stream implementation:
 
 ```python
 from nitid import GStreamerFrameSource
 
-source = GStreamerFrameSource(
-    "rtsp://camera/live",
-    reconnect=True,
-    reconnect_initial_delay=1,
-    reconnect_max_delay=30,
-)
+source = GStreamerFrameSource("rtsp://camera/live", rtsp_transport="tcp")
 for result in model.track(source, stream=True):
     ...
 ```
@@ -533,10 +518,8 @@ The predictor sends `result.plot()` to the sink after tracking, so output
 frames contain persistent IDs. The sink is closed when inference finishes or
 when the streaming generator is explicitly closed.
 
-Set `hardware_profile=` on `GStreamerVideoSink` to select a named encoder. The
-input `hardware_profile=` argument and the sink profile are independent because
-decode and encode support may differ on the same host. Use
-`inspect_gstreamer_capabilities()` or `nitid gstreamer-info` before deployment.
+Use `inspect_gstreamer_capabilities()` or `nitid gstreamer-info` to check that
+the active OpenCV build has GStreamer enabled before deployment.
 
 ---
 

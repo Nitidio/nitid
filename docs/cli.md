@@ -228,23 +228,19 @@ uv run nitid track \
 activation and association thresholds operate afterward. Run
 `uv run nitid track --help` for every supported option and its defaults.
 
-Use the GStreamer backend for a reconnecting RTSP source:
+Use the GStreamer backend for an RTSP source:
 
 ```bash
 uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
-    reconnect=true \
-    reconnect_max_delay=30 \
     conf=0.5
 ```
 
-The first frame after a successful reconnect is marked as a discontinuity,
-which resets the active tracker before it assigns IDs. `reconnect_attempts`
-limits the number of attempts for each connection failure; omit it to keep
-retrying until the process is stopped. See [GStreamer and RTSP](gstreamer.md)
-for installation requirements and explicit pipelines.
+Tracking ends when the stream stops delivering frames. See
+[GStreamer and RTSP](gstreamer.md) for installation requirements and explicit
+pipelines.
 
 Publish annotated tracking to an RTSP server that supports client publishing:
 
@@ -253,7 +249,6 @@ uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/input \
     backend=gstreamer \
-    reconnect=true \
     output=rtsp://media-server/nitid \
     output_rtsp_transport=tcp
 ```
@@ -265,7 +260,6 @@ uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/input \
     backend=gstreamer \
-    reconnect=true \
     output=runs/segments/camera-1 \
     segment_duration=60
 ```
@@ -274,16 +268,11 @@ uv run nitid track \
 Use `output_pipeline=` for a fully custom appsrc pipeline and `output_encoder=`
 to select a platform encoder.
 
-Inspect named hardware profiles on the current host:
+Check that the active OpenCV build has GStreamer enabled:
 
 ```bash
 uv run nitid gstreamer-info
 ```
-
-The command reports input and output availability independently. Select a
-validated H.264 RTSP decoder with `hardware_profile=vaapi` and a validated
-output encoder with `output_hardware_profile=vaapi`. Missing elements are an
-error; nitid does not silently switch to software.
 
 ## Authenticated RTSP cameras
 
@@ -296,8 +285,7 @@ uv run nitid track \
     source=rtsp://192.0.2.10/Streaming/Channels/101 \
     backend=gstreamer \
     rtsp_username=operator \
-    rtsp_password_env=CAMERA_RTSP_PASSWORD \
-    reconnect=true
+    rtsp_password_env=CAMERA_RTSP_PASSWORD
 ```
 
 A direct `rtsp_password=` CLI argument is rejected because process arguments
