@@ -218,11 +218,14 @@ __marimo__/
 *.torchscript
 
 # Training and Inference Outputs
-runs/
-test_input.jpg
-result_*.jpg
-result_*.png
-image.jpg
+/runs/
+/test_input.jpg
+/result_*.jpg
+/result_*.png
+/image.jpg
+/results.jpg
+/nitid_result.jpg
+/plain_dfine_result.jpg
 
 # Local Python configuration
 .python-version
