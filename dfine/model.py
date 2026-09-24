@@ -7,7 +7,7 @@ from __future__ import annotations
 import copy
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generator, Union
+from typing import TYPE_CHECKING, Any, Callable, Generator, TypeVar, Union, cast
 
 import numpy as np
 import torch.nn as nn
@@ -20,6 +20,21 @@ if TYPE_CHECKING:
 
 Source = Union[str, Path, int, np.ndarray, list, FrameSource]
 ModelCallback = Callable[..., object]
+_T = TypeVar("_T")
+
+
+class _DefaultTrainOption:
+    def __repr__(self) -> str:
+        return "default"
+
+
+_TRAIN_DEFAULT = _DefaultTrainOption()
+
+
+def _resolve_train_option(value: _T | _DefaultTrainOption, default: _T) -> _T:
+    if value is _TRAIN_DEFAULT:
+        return default
+    return cast(_T, value)
 
 
 class DFINE:
@@ -118,13 +133,8 @@ class DFINE:
         verbose: bool = True,
         backend: str = "opencv",
         gst_pipeline: str | None = None,
-        reconnect: bool = False,
-        reconnect_initial_delay: float = 1.0,
-        reconnect_max_delay: float = 30.0,
-        reconnect_attempts: int | None = None,
         rtsp_latency: int = 200,
         rtsp_transport: str = "tcp",
-        hardware_profile: str | None = None,
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
         iou: float = 0.85,
@@ -154,13 +164,8 @@ class DFINE:
             verbose=verbose,
             backend=backend,
             gst_pipeline=gst_pipeline,
-            reconnect=reconnect,
-            reconnect_initial_delay=reconnect_initial_delay,
-            reconnect_max_delay=reconnect_max_delay,
-            reconnect_attempts=reconnect_attempts,
             rtsp_latency=rtsp_latency,
             rtsp_transport=rtsp_transport,
-            hardware_profile=hardware_profile,
             rtsp_username=rtsp_username,
             rtsp_password=rtsp_password,
             iou=iou,
@@ -185,13 +190,8 @@ class DFINE:
         verbose: bool = True,
         backend: str = "opencv",
         gst_pipeline: str | None = None,
-        reconnect: bool = False,
-        reconnect_initial_delay: float = 1.0,
-        reconnect_max_delay: float = 30.0,
-        reconnect_attempts: int | None = None,
         rtsp_latency: int = 200,
         rtsp_transport: str = "tcp",
-        hardware_profile: str | None = None,
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
         iou: float = 0.85,
@@ -224,13 +224,8 @@ class DFINE:
             verbose=verbose,
             backend=backend,
             gst_pipeline=gst_pipeline,
-            reconnect=reconnect,
-            reconnect_initial_delay=reconnect_initial_delay,
-            reconnect_max_delay=reconnect_max_delay,
-            reconnect_attempts=reconnect_attempts,
             rtsp_latency=rtsp_latency,
             rtsp_transport=rtsp_transport,
-            hardware_profile=hardware_profile,
             rtsp_username=rtsp_username,
             rtsp_password=rtsp_password,
             iou=iou,
@@ -242,24 +237,24 @@ class DFINE:
     def train(
         self,
         data: str,
-        epochs: int = 50,
+        epochs: int | _DefaultTrainOption = _TRAIN_DEFAULT,
         imgsz: int = 640,
-        batch: int = 16,
-        lr0: float = 1e-4,
-        backbone_lr: float | None = None,
-        lrf: float = 0.01,
-        cos_lr: bool = False,
-        warmup_epochs: float = 0.0,
-        warmup_momentum: float = 0.8,
-        warmup_bias_lr: float = 0.1,
-        optimizer: str = "AdamW",
-        momentum: float = 0.9,
-        weight_decay: float = 1e-4,
-        clip_grad: float = 0.1,
+        batch: int | _DefaultTrainOption = _TRAIN_DEFAULT,
+        lr0: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        backbone_lr: float | None | _DefaultTrainOption = _TRAIN_DEFAULT,
+        lrf: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        cos_lr: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_epochs: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_momentum: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_bias_lr: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        optimizer: str | _DefaultTrainOption = _TRAIN_DEFAULT,
+        momentum: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        weight_decay: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        clip_grad: float | _DefaultTrainOption = _TRAIN_DEFAULT,
         resume: bool = False,
-        amp: bool = False,
-        ema: bool = False,
-        ema_decay: float = 0.9999,
+        amp: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        ema: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        ema_decay: float | _DefaultTrainOption = _TRAIN_DEFAULT,
         device: str | None = None,
         project: str = "runs/train",
         name: str = "exp",
@@ -293,6 +288,7 @@ class DFINE:
         mixup: float = 0.0,
         close_mosaic: int = 10,
         time: float | None = None,
+        recipe: str = "default",
         verbose: bool = True,
         callbacks: object | None = None,
         wandb: bool | dict[str, Any] = False,
@@ -305,7 +301,39 @@ class DFINE:
             )
         from dfine.nn.transfer import adapt_model_to_classes
         from dfine.trainer import DFINETrainer
+        from dfine.training_recipes import (
+            apply_training_recipe_to_config,
+            default_train_options,
+            resolve_training_recipe,
+            training_recipe_policy,
+        )
         from dfine.utils.data import load_data_yaml, normalize_names
+
+        resolved_recipe = resolve_training_recipe(
+            recipe, task=str(getattr(self, "_task", "detect"))
+        )
+        train_defaults = default_train_options(recipe=resolved_recipe, config=self._cfg)
+        recipe_policy = training_recipe_policy(recipe=resolved_recipe, config=self._cfg)
+        resolved_epochs = _resolve_train_option(epochs, train_defaults.epochs)
+        resolved_batch = _resolve_train_option(batch, train_defaults.batch)
+        resolved_lr0 = _resolve_train_option(lr0, train_defaults.lr0)
+        resolved_backbone_lr = _resolve_train_option(backbone_lr, train_defaults.backbone_lr)
+        resolved_lrf = _resolve_train_option(lrf, train_defaults.lrf)
+        resolved_cos_lr = _resolve_train_option(cos_lr, train_defaults.cos_lr)
+        resolved_warmup_epochs = _resolve_train_option(warmup_epochs, train_defaults.warmup_epochs)
+        resolved_warmup_momentum = _resolve_train_option(
+            warmup_momentum, train_defaults.warmup_momentum
+        )
+        resolved_warmup_bias_lr = _resolve_train_option(
+            warmup_bias_lr, train_defaults.warmup_bias_lr
+        )
+        resolved_optimizer = _resolve_train_option(optimizer, train_defaults.optimizer)
+        resolved_momentum = _resolve_train_option(momentum, train_defaults.momentum)
+        resolved_weight_decay = _resolve_train_option(weight_decay, train_defaults.weight_decay)
+        resolved_clip_grad = _resolve_train_option(clip_grad, train_defaults.clip_grad)
+        resolved_amp = _resolve_train_option(amp, train_defaults.amp)
+        resolved_ema = _resolve_train_option(ema, train_defaults.ema)
+        resolved_ema_decay = _resolve_train_option(ema_decay, train_defaults.ema_decay)
 
         data_config = load_data_yaml(data)
         dataset_names = {0: "object"} if single_cls else normalize_names(data_config)
@@ -345,7 +373,7 @@ class DFINE:
             dataset_names,
         )
         self._model = transfer.model
-        self._cfg = transfer.config
+        self._cfg = apply_training_recipe_to_config(transfer.config, recipe=resolved_recipe)
         self._names = dataset_names
         self._invalidate_deployed_cache()
         if transfer.changed and self.verbose:
@@ -367,24 +395,24 @@ class DFINE:
         try:
             metrics = trainer.train(
                 data=data,
-                epochs=epochs,
+                epochs=resolved_epochs,
                 imgsz=imgsz,
-                batch=batch,
-                lr0=lr0,
-                backbone_lr=backbone_lr,
-                lrf=lrf,
-                cos_lr=cos_lr,
-                warmup_epochs=warmup_epochs,
-                warmup_momentum=warmup_momentum,
-                warmup_bias_lr=warmup_bias_lr,
-                optimizer=optimizer,
-                momentum=momentum,
-                weight_decay=weight_decay,
-                clip_grad=clip_grad,
+                batch=resolved_batch,
+                lr0=resolved_lr0,
+                backbone_lr=resolved_backbone_lr,
+                lrf=resolved_lrf,
+                cos_lr=resolved_cos_lr,
+                warmup_epochs=resolved_warmup_epochs,
+                warmup_momentum=resolved_warmup_momentum,
+                warmup_bias_lr=resolved_warmup_bias_lr,
+                optimizer=resolved_optimizer,
+                momentum=resolved_momentum,
+                weight_decay=resolved_weight_decay,
+                clip_grad=resolved_clip_grad,
                 resume=resume,
-                amp=amp,
-                ema=ema,
-                ema_decay=ema_decay,
+                amp=resolved_amp,
+                ema=resolved_ema,
+                ema_decay=resolved_ema_decay,
                 project=project,
                 name=name,
                 save_dir=save_dir,
@@ -417,6 +445,14 @@ class DFINE:
                 mixup=mixup,
                 close_mosaic=close_mosaic,
                 time_limit=time,
+                recipe=resolved_recipe.name,
+                scheduler=recipe_policy.scheduler,
+                warmup_iter=recipe_policy.warmup_iter,
+                flat_epochs=recipe_policy.flat_epochs,
+                no_aug_epochs=recipe_policy.no_aug_epochs,
+                lr_gamma=recipe_policy.lr_gamma,
+                collate_mixup_prob=recipe_policy.collate_mixup_prob,
+                collate_mixup_epochs=recipe_policy.collate_mixup_epochs,
                 verbose=verbose,
                 callbacks=callbacks,
                 wandb=wandb,

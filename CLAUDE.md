@@ -4,13 +4,16 @@ This file provides repository guidance to coding agents.
 
 ## Project overview
 
-nitid provides an Ultralytics-style API for D-FINE object detection and instance segmentation. The public entry point is `DFINE`; model construction, losses, and postprocessing are implemented in the `dfine` package.
+nitid provides a unified API for detection, segmentation, pose, and oriented
+bounding boxes. The public entry point is `NITID` from the `nitid` package;
+model construction, losses, and postprocessing are implemented internally in
+the `dfine` package.
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-detector = DFINE("dfine_s", task="detect")
-segmenter = DFINE("dfine_s", task="segment")
+detector = NITID("nitid1s", task="detect")
+segmenter = NITID("nitid1s", task="segment")
 ```
 
 ## Commands
@@ -26,7 +29,8 @@ uv run mypy dfine nitid tools
 
 ## Architecture
 
-- `dfine/model.py`: the public `DFINE` class and task/checkpoint validation.
+- `dfine/model.py`: the internal D-FINE model class and task/checkpoint validation.
+- `dfine/nitid.py`: the public `NITID` class and model-name mapping.
 - `dfine/predictor.py`: detection and instance-mask inference.
 - `dfine/trainer.py`: detection and segmentation fine-tuning.
 - `dfine/validator.py`: COCO bounding-box and mask evaluation.
@@ -38,7 +42,10 @@ uv run mypy dfine nitid tools
 - `dfine/nn/configs.py`: supported model-size configurations.
 - `dfine/utils/data.py`: COCO and YOLO detection/segmentation datasets.
 
-`DFINE("dfine_s", task="detect")` and `DFINE("dfine_s", task="segment")` resolve separate pretrained registries. Explicit checkpoint paths must contain a self-contained `config`, `model`, and `names`, and their embedded task must match the requested task.
+`NITID("nitid1s", task="detect")` and `NITID("nitid1s", task="segment")`
+resolve separate pretrained registries. Explicit checkpoint paths must contain
+a self-contained `config`, `model`, and `names`, and their embedded task must
+match the requested task.
 
 ## Checkpoint conversion
 

@@ -63,7 +63,6 @@ jobs:
         run: |
           uv run pytest \
             --cov=dfine \
-            --cov=web \
             --cov-report=xml \
             tests/unit tests/integration
 
@@ -94,7 +93,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run mypy
-        run: uv run mypy dfine/ tools/ scripts/
+        run: uv run mypy dfine/ nitid/ tools/ scripts/
 
   package:
     name: Installed wheel acceptance

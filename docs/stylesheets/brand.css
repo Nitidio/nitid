@@ -1,0 +1,75 @@
+/* nitid brand tokens for the documentation site.
+   The canonical values live in docs/brand.md — change them there too. */
+
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&display=swap");
+
+:root {
+  --nitid-bg: #060b1a;
+  --nitid-surface: #0d1530;
+  --nitid-surface-sunken: #080e21;
+  --nitid-text: #e8ecf7;
+  --nitid-text-muted: #b9c4dd;
+  --nitid-text-dim: #8794b8;
+  --nitid-text-faint: #6b7ba3;
+  --nitid-link: #7fb0ff;
+  --nitid-lime: #cfe85b;
+  --nitid-blue: #1266f2;
+  --nitid-blue-hover: #0b52cc;
+  --nitid-violet: #7c22f0;
+  --nitid-navy: #05254b;
+
+  --md-primary-fg-color: var(--nitid-navy);
+  --md-primary-fg-color--light: var(--nitid-surface);
+  --md-primary-fg-color--dark: #041a36;
+  --md-accent-fg-color: var(--nitid-blue);
+  --md-accent-fg-color--transparent: rgba(18, 102, 242, 0.1);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: var(--nitid-bg);
+  --md-default-bg-color--light: var(--nitid-surface);
+  --md-default-bg-color--lighter: var(--nitid-surface-sunken);
+  --md-default-fg-color: var(--nitid-text);
+  --md-default-fg-color--light: var(--nitid-text-muted);
+  --md-default-fg-color--lighter: var(--nitid-text-dim);
+  --md-default-fg-color--lightest: var(--nitid-text-faint);
+
+  --md-typeset-color: var(--nitid-text);
+  --md-typeset-a-color: var(--nitid-link);
+  --md-accent-fg-color: var(--nitid-lime);
+
+  --md-code-bg-color: var(--nitid-surface-sunken);
+  --md-code-fg-color: var(--nitid-text-muted);
+  --md-footer-bg-color: #040a16;
+  --md-footer-bg-color--dark: var(--nitid-surface-sunken);
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4 {
+  font-family: "Archivo", var(--md-text-font-family), system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+[data-md-color-scheme="slate"] .md-typeset h1 {
+  color: var(--nitid-text);
+}
+
+/* The primary action keeps the brand blue in both schemes. */
+.md-typeset .md-button--primary {
+  background-color: var(--nitid-blue);
+  border-color: var(--nitid-blue);
+  color: #fff;
+}
+.md-typeset .md-button--primary:hover {
+  background-color: var(--nitid-blue-hover);
+  border-color: var(--nitid-blue-hover);
+}
+
+/* The lime accent is a highlight, never a surface: keep it for marks,
+   selections and the active navigation item. */
+[data-md-color-scheme="slate"] .md-nav__link--active {
+  color: var(--nitid-lime);
+}

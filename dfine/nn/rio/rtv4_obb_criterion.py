@@ -1,4 +1,8 @@
 # mypy: ignore-errors
+# Adapted from RiO-DETR / RT-DETRv2-OBB (Apache-2.0).
+# Source: https://github.com/RicePasteM/RiO-DETR
+# Modified for native integration into nitid in 2026.
+# Upstream copyright notices are retained below; see THIRD_PARTY_NOTICES.md.
 """
 RT-DETRv4: Painlessly Furthering Real-Time Object Detection with Vision Foundation Models
 Copyright (c) 2025 The RT-DETRv4 Authors. All Rights Reserved.

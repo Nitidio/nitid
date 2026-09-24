@@ -1,9 +1,31 @@
 site_name: nitid
-site_description: Ultralytics-style D-FINE-family vision library
+site_description: Object detection that's actually open source — Apache 2.0 code and weights
 repo_url: https://github.com/Vaelsys/nitid
 
 theme:
   name: material
+  logo: assets/brand/nitid-mark.svg
+  favicon: assets/brand/nitid-mark.svg
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - content.code.copy
+    - navigation.top
+
+extra_css:
+  - stylesheets/brand.css
 
 markdown_extensions:
   - admonition
@@ -14,14 +36,13 @@ nav:
   - Quick Start: quickstart.md
   - Command Line: cli.md
   - GStreamer and RTSP: gstreamer.md
-  - ONVIF Cameras: onvif.md
   - Fine-tuning: fine_tuning.md
   - Export: export.md
-  - Web App: web_app.md
   - API Reference: api_reference.md
   - Troubleshooting: troubleshooting.md
   - Project:
       - Roadmap: roadmap.md
+      - Brand: brand.md
       - DETRPose architecture: pose_architecture.md
       - Decisions:
           - Overview: adr/index.md
@@ -29,5 +50,4 @@ nav:
           - "ADR-0003: Native RiO-DETR OBB integration": adr/0003-native-rio-detr-obb-integration.md
   - Contributing:
       - Onboarding: onboarding.md
-      - Project Recap: project_recap.md
       - macOS Docker Setup: macos_docker_setup.md

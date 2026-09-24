@@ -206,11 +206,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# nitid web application runtime data
-web/storage/
+# Downloaded checkpoints
 /models/
-web/frontend/node_modules/
-web/frontend/dist/
 
 # D-FINE Weights and Model Exports
 *.pth
@@ -221,11 +218,14 @@ web/frontend/dist/
 *.torchscript
 
 # Training and Inference Outputs
-runs/
-test_input.jpg
-result_*.jpg
-result_*.png
-image.jpg
+/runs/
+/test_input.jpg
+/result_*.jpg
+/result_*.png
+/image.jpg
+/results.jpg
+/nitid_result.jpg
+/plain_dfine_result.jpg
 
 # Local Python configuration
 .python-version

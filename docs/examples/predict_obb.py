@@ -1,6 +1,6 @@
 """Run oriented bounding-box prediction and inspect rotated boxes."""
 
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="obb")
 results = model.predict("aerial.jpg", conf=0.25)

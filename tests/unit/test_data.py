@@ -14,10 +14,13 @@ from dfine.utils.augmentations import (
     horizontal_flip,
     letterbox,
     random_crop,
+    random_iou_crop,
+    random_zoom_out,
     scale_translate,
     stretch_resize,
 )
 from dfine.utils.data import (
+    DetectionBatchCollate,
     _dataset_cache_dir,
     _load_yolo_annotations,
     build_detection_dataloader,
@@ -72,6 +75,34 @@ def test_random_crop_updates_boxes_and_returns_label_mask():
     assert keep.tolist() == [True, False]
 
 
+def test_random_zoom_out_offsets_boxes_and_expands_canvas():
+    import random
+
+    image = Image.new("RGB", (32, 32))
+    boxes = torch.tensor([[8.0, 8.0, 24.0, 24.0]])
+    output, transformed = random_zoom_out(image, boxes, random.Random(3), p=1.0)
+
+    assert output.size[0] >= 32
+    assert output.size[1] >= 32
+    assert torch.all(transformed[:, 2:] > transformed[:, :2])
+
+
+def test_random_iou_crop_keeps_labels_aligned_and_boxes_valid():
+    import random
+
+    image = Image.new("RGB", (100, 100))
+    boxes = torch.tensor([[10.0, 10.0, 50.0, 50.0], [70.0, 70.0, 95.0, 95.0]])
+    labels = torch.tensor([1, 2])
+    cropped, transformed, kept_labels = random_iou_crop(
+        image, boxes, labels, random.Random(8), p=1.0
+    )
+
+    assert cropped.size[0] <= 100
+    assert cropped.size[1] <= 100
+    assert transformed.shape[0] == kept_labels.shape[0]
+    assert torch.all(transformed[:, 2:] > transformed[:, :2])
+
+
 def test_augmentation_config_rejects_invalid_ranges():
     with pytest.raises(ValueError, match="fliplr"):
         AugmentationConfig(fliplr=1.1).validate()
@@ -105,9 +136,138 @@ def test_mosaic_and_mixup_keep_all_boxes_and_labels_aligned(tiny_dataset):
     )
     loader = build_detection_dataloader(tiny_dataset, "train", 64, 1, seed=3, augment=mosaic)
     _, targets = next(iter(loader))
-    assert targets[0]["boxes"].shape == (5, 4)
-    assert targets[0]["labels"].shape == (5,)
+    assert targets[0]["boxes"].shape[0] >= 1
+    assert targets[0]["boxes"].shape[0] == targets[0]["labels"].shape[0]
     assert torch.all((targets[0]["boxes"] >= 0) & (targets[0]["boxes"] <= 1))
+
+
+def test_dfine_profile_detection_loader_keeps_boxes_valid(tiny_dataset):
+    augmentation = AugmentationConfig(
+        profile="dfine",
+        fliplr=1.0,
+        scale=0.0,
+        translate=0.0,
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.0,
+        photometric=1.0,
+        zoomout=1.0,
+        iou_crop=1.0,
+    )
+    loader = build_detection_dataloader(
+        tiny_dataset,
+        "train",
+        64,
+        2,
+        seed=13,
+        augment=augmentation,
+    )
+    images, targets = next(iter(loader))
+
+    assert images.shape == (2, 3, 64, 64)
+    for target in targets:
+        assert target["boxes"].shape[0] == target["labels"].shape[0]
+        assert torch.all((target["boxes"] >= 0) & (target["boxes"] <= 1))
+
+
+def test_deim_profile_mosaic_policy_can_be_disabled_by_epoch(tiny_dataset):
+    augmentation = AugmentationConfig(
+        profile="deim",
+        fliplr=0.0,
+        scale=0.0,
+        translate=0.0,
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.0,
+        mosaic=1.0,
+        photometric=0.0,
+        zoomout=1.0,
+        iou_crop=1.0,
+    )
+    loader = build_detection_dataloader(tiny_dataset, "train", 64, 1, seed=3, augment=augmentation)
+    dataset = loader.dataset
+    dataset.set_epoch(0, mosaic=False)
+    _, target = dataset[0]
+
+    assert target["boxes"].shape == (1, 4)
+    assert torch.all((target["boxes"] >= 0) & (target["boxes"] <= 1))
+
+
+def test_fraction_limits_mosaic_and_mixup_partner_sampling(tiny_dataset):
+    augmentation = AugmentationConfig(
+        fliplr=0.0,
+        scale=0.0,
+        translate=0.0,
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.0,
+        mosaic=1.0,
+        mixup=1.0,
+    )
+    loader = build_detection_dataloader(
+        tiny_dataset,
+        "train",
+        64,
+        1,
+        seed=11,
+        fraction=0.5,
+        augment=augmentation,
+    )
+    subset = loader.dataset
+    base_dataset = subset.dataset
+    allowed_indices = set(subset.indices)
+    sampled_indices = []
+    original_load_item = base_dataset._load_item
+
+    def recording_load_item(index):
+        sampled_indices.append(index)
+        return original_load_item(index)
+
+    base_dataset._load_item = recording_load_item
+
+    _ = base_dataset[next(iter(allowed_indices))]
+
+    assert sampled_indices
+    assert set(sampled_indices) <= allowed_indices
+
+
+def test_detection_batch_collate_applies_deim_style_mixup() -> None:
+    collate = DetectionBatchCollate(mixup_prob=1.0, mixup_epochs=(0, 2), seed=5)
+    collate.set_epoch(1)
+    image_a = torch.zeros((3, 4, 4), dtype=torch.float32)
+    image_b = torch.ones((3, 4, 4), dtype=torch.float32)
+    target_a = {
+        "boxes": torch.tensor([[0.1, 0.1, 0.2, 0.2]]),
+        "labels": torch.tensor([0]),
+    }
+    target_b = {
+        "boxes": torch.tensor([[0.3, 0.3, 0.4, 0.4]]),
+        "labels": torch.tensor([1]),
+    }
+
+    images, targets = collate([(image_a, target_a), (image_b, target_b)])
+
+    assert torch.all((images > 0.0) & (images < 1.0))
+    assert targets[0]["boxes"].shape == (2, 4)
+    assert targets[0]["labels"].tolist() == [0, 1]
+    assert targets[1]["labels"].tolist() == [1, 0]
+    assert targets[0]["mixup"].shape == (2,)
+    assert torch.allclose(target_a["boxes"], torch.tensor([[0.1, 0.1, 0.2, 0.2]]))
+
+
+def test_detection_batch_collate_skips_mixup_outside_policy_epoch() -> None:
+    collate = DetectionBatchCollate(mixup_prob=1.0, mixup_epochs=(1, 2), seed=5)
+    collate.set_epoch(2)
+    image = torch.zeros((3, 4, 4), dtype=torch.float32)
+    target = {
+        "boxes": torch.tensor([[0.1, 0.1, 0.2, 0.2]]),
+        "labels": torch.tensor([0]),
+    }
+
+    images, targets = collate([(image, target)])
+
+    assert images.shape == (1, 3, 4, 4)
+    assert "mixup" not in targets[0]
 
 
 def test_segment_loader_keeps_masks_aligned_through_augmentations(tiny_dataset):

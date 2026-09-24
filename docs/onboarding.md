@@ -1,12 +1,12 @@
 # Developer Onboarding
 
-Welcome to **nitid** — an Ultralytics-style wrapper for the [D-FINE](https://github.com/Peterande/D-FINE) real-time object detector. This guide is for developers joining the project. The user-facing docs live in the rest of `docs/`; this page covers the architecture decisions you need to understand before touching the code.
+Welcome to **nitid** — a compact, Apache-2.0 library around the [D-FINE](https://github.com/Peterande/D-FINE) family of real-time detectors. This guide is for developers joining the project. The user-facing docs live in the rest of `docs/`; this page covers the architecture decisions you need to understand before touching the code.
 
 ---
 
 ## 1. Get the repo running
 
-Prerequisites: Python 3.10+, [`uv`](https://github.com/astral-sh/uv), Node.js 18+ (only for web frontend).
+Prerequisites: Python 3.10+, [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
 git clone https://github.com/Vaelsys/nitid.git && cd nitid
@@ -26,8 +26,12 @@ uv run mypy dfine/
 ## 2. Project layout
 
 ```
-dfine/              Core model Python package
-  model.py          DFINE class (single public entry point)
+nitid/              Public Python package — import NITID from here
+  cli.py                  `nitid` CLI entry point (`dfine` is a back-compat alias)
+  convert_checkpoint.py   Maintainer utility for raw upstream checkpoints
+dfine/              Internal implementation and compatibility namespace
+  nitid.py          NITID public class and model-name mapping
+  model.py          D-FINE backend class and checkpoint validation
   predictor.py      Inference worker
   trainer.py        Fine-tuning worker
   validator.py      COCO evaluation worker
@@ -35,9 +39,6 @@ dfine/              Core model Python package
   results.py        Results + Boxes + Masks + Keypoints return types
   nn/               Integrated detection, segmentation, semantic, and pose architectures/losses
   utils/            sources.py (LoadSource), plotting, misc helpers
-nitid/              Product namespace for distribution entry points
-  cli.py                  `dfine` CLI entry point
-  convert_checkpoint.py   Maintainer utility for raw upstream checkpoints
 tools/
   visualize_augmentations.py  Source-checkout maintainer utility
 configs/
@@ -46,9 +47,6 @@ tests/
   unit/             Pure Python — no GPU or downloaded checkpoint
   integration/      Use tiny_checkpoint fixture (see §5)
   conftest.py       Session-scoped fixture that builds a tiny model at test time
-web/
-  api/              FastAPI backend (routers, services, schemas, models)
-  frontend/         React 18 + Vite SPA (TypeScript)
 docs/               All documentation lives here
 ```
 
@@ -159,41 +157,16 @@ The 300 queries are D-FINE's fixed-size output head. After postprocessing only t
 
 ---
 
-## 9. Web application (only if you work on `web/`)
-
-The web app is fully optional and lives in `web/`. Users who only use the Python/CLI API never touch it.
-
-```bash
-uv sync --extra web                          # Python deps
-cd web/frontend && npm install               # JS deps
-
-# Two terminals from the project root:
-uv run uvicorn web.api.main:app --workers 1  # API at :8000
-cd web/frontend && npm run dev               # SPA at :5173
-```
-
-**Architecture:**
-- `web/api/` — FastAPI routers + SQLAlchemy models + Pydantic schemas. Inference runs as a `BackgroundTask` with its own `SessionLocal()` (not the request session, which closes on response).
-- `web/frontend/` — React 18 + Vite SPA, TypeScript. Talks to the API over HTTP via axios.
-- SQLite at `web/storage/nitid.db` (git-ignored). Created automatically on first start.
-- Model cache: `_model_cache` in `services/inference.py` — a process-level dict keyed by absolute checkpoint path. Avoids reloading 100–200 MB weights on every request.
-
-**Non-obvious constraint:** Always `--workers 1`. DFINE model inference is not thread-safe. Multiple workers would also create separate caches and double memory.
-
-Full REST API reference is at `http://localhost:8000/docs` once the server is running, and in [`web_app.md`](web_app.md).
-
----
-
-## 10. Getting a real checkpoint (for manual testing)
+## 9. Getting a real checkpoint (for manual testing)
 
 The integration tests use synthetic tiny models — they never need to download a
 real checkpoint. For manual testing, prefer official model names:
 
 ```bash
-uv run dfine predict model=nitid1s task=detect source=image.jpg conf=0.5
-uv run dfine predict model=nitid1s task=segment source=image.jpg conf=0.5
-uv run dfine predict model=nitid1s task=pose source=image.jpg conf=0.25
-uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
+uv run nitid predict model=nitid1s task=detect source=image.jpg conf=0.5
+uv run nitid predict model=nitid1s task=segment source=image.jpg conf=0.5
+uv run nitid predict model=nitid1s task=pose source=image.jpg conf=0.25
+uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 If you are maintaining support for a new upstream checkpoint, use the conversion
@@ -210,7 +183,7 @@ uv run python -m nitid.convert_checkpoint \
 
 ---
 
-## 11. Where things can go wrong
+## 10. Where things can go wrong
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -229,5 +202,4 @@ uv run python -m nitid.convert_checkpoint \
 | [`api_reference.md`](api_reference.md) | Full `DFINE` class API with all parameters |
 | [`fine_tuning.md`](fine_tuning.md) | Dataset format, AMP, EMA, all training parameters |
 | [`export.md`](export.md) | ONNX, TorchScript, TensorRT — options and constraints |
-| [`web_app.md`](web_app.md) | Web app setup, REST API, data model, implementation notes. | 
 | [`macos_docker_setup.md`](macos_docker_setup.md) | Setup docker for linux enviroment in MacOS Apple silicon |

@@ -1,13 +1,12 @@
-"""
-Command-line interface for Nitid's D-FINE workflows.
+"""Nitid command-line interface.
 
 Usage:
-    dfine predict  model=dfine_l weights=obj2coco source=image.jpg conf=0.5
-    dfine track    model=dfine_s source=video.mp4 conf=0.5 save=true
-    dfine download model=dfine_l weights=coco
-    dfine train    model=dfine_l data=coco.yaml epochs=50
-    dfine val      model=dfine_l data=coco.yaml
-    dfine export   model=dfine_l format=onnx
+    nitid predict  model=nitid1l weights=obj2coco source=image.jpg conf=0.5
+    nitid track    model=nitid1s source=video.mp4 conf=0.5 save=true
+    nitid download model=nitid1l weights=coco
+    nitid train    model=nitid1l data=coco.yaml epochs=50
+    nitid val      model=nitid1l data=coco.yaml
+    nitid export   model=nitid1l format=onnx
 """
 
 from __future__ import annotations
@@ -24,9 +23,9 @@ COMMANDS = {
     "train",
     "val",
     "export",
+    "convert",
     "info",
     "gstreamer-info",
-    "onvif",
     "bugreport",
 }
 REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
@@ -50,10 +49,10 @@ TRACKER_OPTIONS = {
 }
 
 GENERAL_HELP = """\
-nitid D-FINE CLI
+Nitid CLI
 
 Usage:
-  dfine COMMAND [key=value ...] [--report]
+  nitid COMMAND [key=value ...] [--report]
 
 Commands:
   predict  Run detection, instance segmentation, or semantic segmentation
@@ -62,25 +61,25 @@ Commands:
   train    Fine-tune detection, instance-, or semantic-segmentation models
   val      Evaluate detection/instance mAP or semantic mIoU
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
+  convert  Convert a detection dataset between YOLO and COCO formats
   info     Show model parameters, GFLOPs, and checkpoint size
-  gstreamer-info  Show GStreamer and hardware codec profile availability
-  onvif    Discover cameras, list media profiles, or resolve an RTSP URI
+  gstreamer-info  Show whether GStreamer is available to OpenCV
   bugreport Create an environment-only log for a GitHub issue
 
-Run "dfine COMMAND --help" for command-specific options and examples.
+Run "nitid COMMAND --help" for command-specific options and examples.
 Add --report to train, predict, track, val, or export to capture output and environment details.
 """
 
 COMMAND_HELP = {
     "predict": """\
 Usage:
-  dfine predict model=MODEL source=SOURCE [key=value ...]
+  nitid predict model=MODEL source=SOURCE [key=value ...]
 
 Required:
   source=SOURCE       Image, directory, video, URL, webcam index, or stream URL
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   conf=FLOAT          Confidence threshold (default: 0.5)
@@ -88,13 +87,8 @@ Options:
   stream=BOOL         Return results as a generator (default: false)
   backend=NAME        Video backend: opencv or gstreamer (default: opencv)
   gst_pipeline=TEXT   Explicit GStreamer pipeline ending before or at appsink
-  reconnect=BOOL      Reconnect a live GStreamer source after failure (default: false)
-  reconnect_initial_delay=FLOAT  Initial reconnect delay in seconds (default: 1)
-  reconnect_max_delay=FLOAT      Maximum reconnect delay in seconds (default: 30)
-  reconnect_attempts=INT         Retry limit; omitted means unlimited
   rtsp_latency=INT    GStreamer RTSP jitter-buffer latency in ms (default: 200)
   rtsp_transport=NAME RTSP transport: tcp or udp (default: tcp)
-  hardware_profile=NAME  H.264 RTSP decoder: software, vaapi, v4l2, nvidia, jetson
   rtsp_username=USER RTSP username passed as a GStreamer property
   rtsp_password_env=NAME  Environment variable containing the RTSP password
   output=DEST         Annotated MP4 path, segment directory, or RTSP publish URL
@@ -102,7 +96,6 @@ Options:
   output_fps=FLOAT    Override output FPS (default: source FPS)
   segment_duration=FLOAT  Split local output every N seconds
   output_encoder=TEXT GStreamer encoder element and properties (default: x264enc)
-  output_hardware_profile=NAME  Encoder: software, vaapi, v4l2, nvidia, jetson
   output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
   return_probs=BOOL   Retain full-resolution semantic probabilities (default: false)
@@ -116,20 +109,20 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
-  dfine predict model=dfine_l source=image.jpg
-  dfine predict model=dfine_l weights=coco source=image.jpg save=true
-  dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
-  dfine predict model=dfine_l source=video.mp4 conf=0.3 stream=true
+  nitid predict model=nitid1l source=image.jpg
+  nitid predict model=nitid1l weights=coco source=image.jpg save=true
+  nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
+  nitid predict model=nitid1l source=video.mp4 conf=0.3 stream=true
 """,
     "track": """\
 Usage:
-  dfine track model=MODEL source=SOURCE [key=value ...]
+  nitid track model=MODEL source=SOURCE [key=value ...]
 
 Required:
   source=SOURCE       Video, webcam index, or stream URL
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   weights=NAME        default, obj2coco, or coco (default: default)
   tracker=NAME        bytetrack (default), botsort, or ocsort
   conf=FLOAT          Detection confidence threshold (default: 0.1)
@@ -139,13 +132,8 @@ Options:
   vid_stride=INT      Process every Nth source frame (default: 1)
   backend=NAME        Video backend: opencv or gstreamer (default: opencv)
   gst_pipeline=TEXT   Explicit GStreamer pipeline ending before or at appsink
-  reconnect=BOOL      Reconnect a live GStreamer source after failure (default: false)
-  reconnect_initial_delay=FLOAT  Initial reconnect delay in seconds (default: 1)
-  reconnect_max_delay=FLOAT      Maximum reconnect delay in seconds (default: 30)
-  reconnect_attempts=INT         Retry limit; omitted means unlimited
   rtsp_latency=INT    GStreamer RTSP jitter-buffer latency in ms (default: 200)
   rtsp_transport=NAME RTSP transport: tcp or udp (default: tcp)
-  hardware_profile=NAME  H.264 RTSP decoder: software, vaapi, v4l2, nvidia, jetson
   rtsp_username=USER RTSP username passed as a GStreamer property
   rtsp_password_env=NAME  Environment variable containing the RTSP password
   output=DEST         Annotated MP4 path, segment directory, or RTSP publish URL
@@ -153,7 +141,6 @@ Options:
   output_fps=FLOAT    Override output FPS (default: source FPS)
   segment_duration=FLOAT  Split local output every N seconds
   output_encoder=TEXT GStreamer encoder element and properties (default: x264enc)
-  output_hardware_profile=NAME  Encoder: software, vaapi, v4l2, nvidia, jetson
   output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
@@ -195,23 +182,22 @@ OC-SORT options:
 Install tracking support first with: uv sync --extra track
 
 Examples:
-  dfine track model=dfine_s source=video.mp4
-  dfine track model=dfine_s source=video.mp4 tracker=botsort
-  dfine track model=dfine_s source=video.mp4 tracker=ocsort
-  dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
-  dfine track model=dfine_s source=0 classes=[0] stream=true
-  dfine track model=dfine_s source=rtsp://camera/stream lost_track_buffer=60
-  dfine track model=dfine_s source=rtsp://camera/stream backend=gstreamer reconnect=true
-  dfine track model=dfine_s source=video.mp4 output=runs/segments segment_duration=60
-  dfine track model=dfine_s source=rtsp://camera/stream backend=gstreamer hardware_profile=vaapi
+  nitid track model=nitid1s source=video.mp4
+  nitid track model=nitid1s source=video.mp4 tracker=botsort
+  nitid track model=nitid1s source=video.mp4 tracker=ocsort
+  nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
+  nitid track model=nitid1s source=0 classes=[0] stream=true
+  nitid track model=nitid1s source=rtsp://camera/stream lost_track_buffer=60
+  nitid track model=nitid1s source=rtsp://camera/stream backend=gstreamer
+  nitid track model=nitid1s source=video.mp4 output=runs/segments segment_duration=60
 """,
     "download": """\
 Usage:
-  dfine download [model=MODEL] [key=value ...]
+  nitid download [model=MODEL] [key=value ...]
 
 Options:
-  model=NAME          dfine_n (segmentation only), dfine_s, dfine_m, dfine_l, or dfine_x
-                      (default: dfine_l)
+  model=NAME          nitid1n (segmentation only), nitid1s, nitid1m, nitid1l, or nitid1x
+                      (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   output=PATH         Output directory or .pth file (default: current directory)
@@ -221,22 +207,22 @@ The command downloads the official raw checkpoint and converts it to nitid's
 wrapped .pth format. The filename includes the resolved weight variant.
 
 Examples:
-  dfine download model=dfine_s
-  dfine download model=dfine_s task=segment
-  dfine download model=dfine_s task=semantic
-  dfine download model=dfine_s weights=coco
-  dfine download model=dfine_m output=models
-  dfine download model=dfine_l output=models/custom.pth force=true
+  nitid download model=nitid1s
+  nitid download model=nitid1s task=segment
+  nitid download model=nitid1s task=semantic
+  nitid download model=nitid1s weights=coco
+  nitid download model=nitid1m output=models
+  nitid download model=nitid1l output=models/custom.pth force=true
 """,
     "train": """\
 Usage:
-  dfine train model=MODEL data=DATA [key=value ...]
+  nitid train model=MODEL data=DATA [key=value ...]
 
 Required:
   data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   epochs=INT          Number of training epochs (default: 50)
@@ -291,19 +277,19 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
-  dfine train model=dfine_l data=coco.yaml epochs=50 batch=16 mlflow=true
-  dfine train model=dfine_s task=segment data=instances.yaml epochs=50
-  dfine train model=dfine_s task=semantic data=semantic.yaml epochs=50
+  nitid train model=nitid1l data=coco.yaml epochs=50 batch=16 mlflow=true
+  nitid train model=nitid1s task=segment data=instances.yaml epochs=50
+  nitid train model=nitid1s task=semantic data=semantic.yaml epochs=50
 """,
     "val": """\
 Usage:
-  dfine val model=MODEL data=DATA [key=value ...]
+  nitid val model=MODEL data=DATA [key=value ...]
 
 Required:
   data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   imgsz=INT           Square validation image size (default: 640)
@@ -319,16 +305,16 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
-  dfine val model=dfine_l data=coco.yaml split=val batch=16
-  dfine val model=dfine_s task=segment data=instances.yaml
-  dfine val model=semantic_last.pth task=semantic data=semantic.yaml
+  nitid val model=nitid1l data=coco.yaml split=val batch=16
+  nitid val model=nitid1s task=segment data=instances.yaml
+  nitid val model=semantic_last.pth task=semantic data=semantic.yaml
 """,
     "export": """\
 Usage:
-  dfine export model=MODEL [key=value ...]
+  nitid export model=MODEL [key=value ...]
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
@@ -348,63 +334,54 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
-  dfine export model=dfine_l format=onnx
-  dfine export model=dfine_s task=segment format=onnx
-  dfine export model=semantic_best.pth task=semantic format=onnx
-  dfine export model=dfine_l weights=coco format=openvino
-  dfine export model=dfine_l format=tensorrt half=true
+  nitid export model=nitid1l format=onnx
+  nitid export model=nitid1s task=segment format=onnx
+  nitid export model=semantic_best.pth task=semantic format=onnx
+  nitid export model=nitid1l weights=coco format=openvino
+  nitid export model=nitid1l format=tensorrt half=true
+""",
+    "convert": """\
+Usage:
+  nitid convert data=DATA target=FORMAT output=PATH [exist_ok=BOOL]
+
+Required:
+  data=PATH           Source data YAML with train/val/test splits
+  target=FORMAT       coco or yolo
+  output=PATH         Destination dataset directory
+
+Options:
+  exist_ok=BOOL       Replace an existing destination (default: false)
+
+The command preserves declared splits, copies images and labels, and writes a
+trainable YAML under OUTPUT/configs/datasets/.
+
+Examples:
+  nitid convert data=data.yaml target=coco output=converted-coco
+  nitid convert data=data.yaml target=yolo output=converted-yolo
 """,
     "info": """\
 Usage:
-  dfine info model=MODEL [key=value ...]
+  nitid info model=MODEL [key=value ...]
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: dfine_l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   detailed=BOOL       Include per-layer parameter counts (default: false)
 
 Example:
-  dfine info model=dfine_l weights=obj2coco detailed=true
+  nitid info model=nitid1l weights=obj2coco detailed=true
 """,
     "gstreamer-info": """\
 Usage:
-  dfine gstreamer-info
+  nitid gstreamer-info
 
-Reports whether OpenCV has GStreamer enabled, whether gst-inspect-1.0 is
-available, and which named decode/encode profiles have all required elements.
-
-Profiles:
-  software  libav/x264 CPU path
-  vaapi     Intel/AMD VA-API
-  v4l2      Linux V4L2 memory-to-memory
-  nvidia    NVIDIA desktop CUDA/NVENC
-  jetson    NVIDIA Jetson NVMM/V4L2
-""",
-    "onvif": """\
-Usage:
-  dfine onvif action=discover [timeout=SECONDS] [interface=IP]
-  dfine onvif action=profiles host=HOST [username=USER] [password_env=NAME]
-  dfine onvif action=uri host=HOST [profile=TOKEN_OR_NAME] [username=USER]
-
-Options:
-  action=NAME         discover, profiles, or uri (default: discover)
-  host=HOST           Camera host or complete ONVIF device-service URL
-  port=INT            Override the ONVIF HTTP(S) port
-  timeout=FLOAT       Discovery or SOAP timeout in seconds (default: 3 or 5)
-  interface=IP        IPv4 interface address used for multicast discovery
-  username=USER       ONVIF username (default: ONVIF_USERNAME environment variable)
-  password_env=NAME   Environment variable containing the password (default: ONVIF_PASSWORD)
-  profile=VALUE       Profile token or case-insensitive profile name
-  verify_ssl=BOOL     Verify camera HTTPS certificates (default: true)
-  time_offset=FLOAT   Camera clock correction for WS-Security, in seconds
-
-Passwords are intentionally read from the environment instead of command-line
-arguments, which may be visible to other local processes.
+Reports whether OpenCV has GStreamer enabled and whether gst-inspect-1.0 is
+available.
 """,
     "bugreport": """\
 Usage:
-  dfine bugreport
+  nitid bugreport
 
 Creates an environment-only log containing OS, Python, package, PyTorch,
 CUDA, cuDNN, and GPU information. Attach the resulting file to a GitHub issue.
@@ -475,7 +452,6 @@ def _configure_output_sink(kwargs: dict) -> str | None:
         "segment_duration": "segment_duration",
         "output_encoder": "encoder",
         "output_rtsp_transport": "rtsp_transport",
-        "output_hardware_profile": "hardware_profile",
     }
     provided_options = [name for name in option_names if name in kwargs]
     sink_options = {
@@ -511,86 +487,10 @@ def _configure_rtsp_credentials(kwargs: dict) -> None:
     if password is None:
         print(f"ERROR: RTSP password environment variable '{password_env}' is not set")
         raise SystemExit(1)
-    username = kwargs.get("rtsp_username") or os.environ.get("ONVIF_USERNAME")
-    if username is None:
-        print("ERROR: rtsp_username= or ONVIF_USERNAME is required with rtsp_password_env")
+    if kwargs.get("rtsp_username") is None:
+        print("ERROR: rtsp_username= is required with rtsp_password_env")
         raise SystemExit(1)
-    kwargs["rtsp_username"] = username
     kwargs["rtsp_password"] = password
-
-
-def _execute_onvif(kwargs: dict) -> None:
-    """Execute ONVIF discovery and read-only Media1 operations."""
-    from dfine.onvif import ONVIFCamera, discover_onvif_devices
-
-    action = str(kwargs.pop("action", "discover")).lower()
-    if "password" in kwargs:
-        print(
-            "ERROR: use password_env=NAME instead of placing an ONVIF password on the command line"
-        )
-        raise SystemExit(1)
-
-    if action == "discover":
-        timeout = float(kwargs.pop("timeout", 3.0))
-        interface = kwargs.pop("interface", None)
-        if kwargs:
-            print(f"ERROR: unsupported ONVIF discovery options: {', '.join(sorted(kwargs))}")
-            raise SystemExit(1)
-        devices = discover_onvif_devices(timeout=timeout, interface=interface)
-        print(f"Discovered {len(devices)} ONVIF device{'s' if len(devices) != 1 else ''}")
-        for index, device in enumerate(devices):
-            endpoint = device.endpoint_reference or "unknown endpoint"
-            print(f"  [{index}] {device.service_url or 'no service URL'} ({endpoint})")
-        return
-
-    if action not in {"profiles", "uri"}:
-        print("ERROR: ONVIF action must be discover, profiles, or uri")
-        raise SystemExit(1)
-
-    host = kwargs.pop("host", None)
-    if host is None:
-        print(f"ERROR: host= is required for ONVIF action={action}")
-        raise SystemExit(1)
-    username = kwargs.pop("username", os.environ.get("ONVIF_USERNAME"))
-    password_env = str(kwargs.pop("password_env", "ONVIF_PASSWORD"))
-    password = os.environ.get(password_env)
-    port_value = kwargs.pop("port", None)
-    port = int(port_value) if port_value is not None else None
-    timeout = float(kwargs.pop("timeout", 5.0))
-    verify_ssl = kwargs.pop("verify_ssl", True)
-    time_offset = float(kwargs.pop("time_offset", 0.0))
-    profile_selector = kwargs.pop("profile", None)
-    if action == "profiles" and profile_selector is not None:
-        print("ERROR: profile= is valid only for ONVIF action=uri")
-        raise SystemExit(1)
-    if kwargs:
-        print(f"ERROR: unsupported ONVIF options: {', '.join(sorted(kwargs))}")
-        raise SystemExit(1)
-
-    camera = ONVIFCamera(
-        str(host),
-        username=username,
-        password=password,
-        port=port,
-        timeout=timeout,
-        verify_ssl=verify_ssl,
-        time_offset=time_offset,
-    )
-    if action == "profiles":
-        profiles = camera.get_profiles()
-        print(f"Found {len(profiles)} media profile{'s' if len(profiles) != 1 else ''}")
-        for profile in profiles:
-            resolution = (
-                f"{profile.width}x{profile.height}"
-                if profile.width is not None and profile.height is not None
-                else "unknown resolution"
-            )
-            fps = f" {profile.frame_rate:g}fps" if profile.frame_rate is not None else ""
-            encoding = profile.encoding or "unknown codec"
-            print(f"  {profile.token}: {profile.name} — {encoding} {resolution}{fps}")
-        return
-
-    print(camera.get_stream_uri(profile_selector))
 
 
 def _execute(argv: list[str]) -> None:
@@ -605,7 +505,7 @@ def _execute(argv: list[str]) -> None:
         return
 
     if command == "download":
-        model_name = kwargs.pop("model", "dfine_l")
+        model_name = kwargs.pop("model", "nitid1l")
         task = kwargs.pop("task", "detect")
         weights = kwargs.pop("weights", "default")
         output = kwargs.pop("output", None)
@@ -622,39 +522,40 @@ def _execute(argv: list[str]) -> None:
         print(f"Downloaded wrapped checkpoint to {path}")
         return
 
+    if command == "convert":
+        data = kwargs.pop("data", None)
+        target = kwargs.pop("target", None)
+        output = kwargs.pop("output", None)
+        exist_ok = bool(kwargs.pop("exist_ok", False))
+        if data is None or target is None or output is None:
+            print("ERROR: data=, target=, and output= are required for convert")
+            raise SystemExit(1)
+        if kwargs:
+            print(f"ERROR: unsupported convert options: {', '.join(sorted(kwargs))}")
+            raise SystemExit(1)
+        from dfine.utils.dataset_converter import convert_dataset
+
+        result = convert_dataset(data, output, target, exist_ok=exist_ok)
+        split_summary = ", ".join(f"{split}={count}" for split, count in result.splits.items())
+        print(f"Converted to {result.target_format}: {split_summary}")
+        print(f"Dataset config saved to {result.config_path}")
+        return
+
     if command == "gstreamer-info":
         from dfine.gstreamer import inspect_gstreamer_capabilities
 
         capabilities = inspect_gstreamer_capabilities()
         print("OpenCV GStreamer: " + ("yes" if capabilities["opencv_gstreamer"] else "no"))
         print("gst-inspect-1.0: " + ("yes" if capabilities["gst_inspect"] else "no"))
-        print("Profiles:")
-        profiles = capabilities["profiles"]
-        assert isinstance(profiles, dict)
-        for name, status in profiles.items():
-            assert isinstance(status, dict)
-            decode = "yes" if status["decode"] else "no"
-            encode = "yes" if status["encode"] else "no"
-            print(f"  {name:<8} decode={decode:<3} encode={encode:<3} {status['description']}")
         return
 
-    if command == "onvif":
-        from dfine.onvif import ONVIFError
-
-        try:
-            _execute_onvif(kwargs)
-        except ONVIFError as exc:
-            print(f"ERROR: {exc}")
-            raise SystemExit(1) from None
-        return
-
-    model_path = kwargs.pop("model", "dfine_l")
+    model_path = kwargs.pop("model", "nitid1l")
     task = kwargs.pop("task", "detect")
     weights = kwargs.pop("weights", "default")
 
-    from dfine import DFINE
+    from nitid import NITID
 
-    model = DFINE(model_path, task=task, weights=weights)
+    model = NITID(model_path, task=task, weights=weights)
 
     if command in {"predict", "track"}:
         source = kwargs.pop("source", None)

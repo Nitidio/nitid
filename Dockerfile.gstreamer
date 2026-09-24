@@ -15,14 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gstreamer1.0-plugins-ugly \
     gstreamer1.0-rtsp \
     gstreamer1.0-tools \
-    gstreamer1.0-vaapi \
     libgl1 \
     libglib2.0-0 \
-    mesa-va-drivers \
     python3 \
     python3-opencv \
     python3-venv \
-    vainfo \
     v4l-utils \
     && rm -rf /var/lib/apt/lists/*
 

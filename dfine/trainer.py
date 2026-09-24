@@ -17,7 +17,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from tqdm.auto import tqdm
@@ -86,6 +86,97 @@ class ModelEMA:
                     ema_p.data.copy_(model_p.data)
             for ema_buf, model_buf in zip(self.ema.buffers(), model.buffers()):
                 ema_buf.copy_(model_buf)
+
+
+class FlatCosineLRScheduler:
+    """Iteration-based warmup, flat, cosine, and no-augmentation LR schedule."""
+
+    step_per_iteration = True
+
+    def __init__(
+        self,
+        optimizer: torch.optim.Optimizer,
+        *,
+        lr_gamma: float,
+        iter_per_epoch: int,
+        total_epochs: int,
+        warmup_iter: int,
+        flat_epochs: int,
+        no_aug_epochs: int,
+    ) -> None:
+        if lr_gamma < 0:
+            raise ValueError("lr_gamma must be >= 0")
+        self.base_lrs = [
+            float(group.get("initial_lr", group["lr"])) for group in optimizer.param_groups
+        ]
+        self.min_lrs = [base_lr * lr_gamma for base_lr in self.base_lrs]
+        self.total_iter = max(int(iter_per_epoch) * max(int(total_epochs), 1), 1)
+        self.warmup_iter = max(int(warmup_iter), 0)
+        self.flat_iter = max(int(iter_per_epoch) * max(int(flat_epochs), 0), self.warmup_iter)
+        self.no_aug_iter = max(int(iter_per_epoch) * max(int(no_aug_epochs), 0), 0)
+        self.last_iter = -1
+        self._last_lr = list(self.base_lrs)
+
+    def step(self, current_iter: int | None = None, optimizer: torch.optim.Optimizer | None = None):
+        if current_iter is None:
+            current_iter = self.last_iter + 1
+        if optimizer is None:
+            raise ValueError("optimizer is required for FlatCosineLRScheduler.step()")
+        self.last_iter = int(current_iter)
+        self._last_lr = [
+            self._schedule(self.last_iter, base_lr, min_lr)
+            for base_lr, min_lr in zip(self.base_lrs, self.min_lrs)
+        ]
+        for group, lr in zip(optimizer.param_groups, self._last_lr):
+            group["lr"] = lr
+        return optimizer
+
+    def get_last_lr(self) -> list[float]:
+        return list(self._last_lr)
+
+    def state_dict(self) -> dict[str, object]:
+        return {
+            "base_lrs": self.base_lrs,
+            "min_lrs": self.min_lrs,
+            "total_iter": self.total_iter,
+            "warmup_iter": self.warmup_iter,
+            "flat_iter": self.flat_iter,
+            "no_aug_iter": self.no_aug_iter,
+            "last_iter": self.last_iter,
+            "_last_lr": self._last_lr,
+        }
+
+    def load_state_dict(self, state_dict: Mapping[str, object]) -> None:
+        base_lrs = state_dict.get("base_lrs", self.base_lrs)
+        if isinstance(base_lrs, list):
+            self.base_lrs = [float(value) for value in base_lrs]
+        min_lrs = state_dict.get("min_lrs", self.min_lrs)
+        if isinstance(min_lrs, list):
+            self.min_lrs = [float(value) for value in min_lrs]
+        self.total_iter = _as_int(state_dict.get("total_iter", self.total_iter), self.total_iter)
+        self.warmup_iter = _as_int(
+            state_dict.get("warmup_iter", self.warmup_iter), self.warmup_iter
+        )
+        self.flat_iter = _as_int(state_dict.get("flat_iter", self.flat_iter), self.flat_iter)
+        self.no_aug_iter = _as_int(
+            state_dict.get("no_aug_iter", self.no_aug_iter), self.no_aug_iter
+        )
+        self.last_iter = _as_int(state_dict.get("last_iter", self.last_iter), self.last_iter)
+        last_lr = state_dict.get("_last_lr", self._last_lr)
+        if isinstance(last_lr, list):
+            self._last_lr = [float(value) for value in last_lr]
+
+    def _schedule(self, current_iter: int, init_lr: float, min_lr: float) -> float:
+        if self.warmup_iter > 0 and current_iter <= self.warmup_iter:
+            return init_lr * (current_iter / float(self.warmup_iter)) ** 2
+        if current_iter <= self.flat_iter:
+            return init_lr
+        if current_iter >= self.total_iter - self.no_aug_iter:
+            return min_lr
+
+        cosine_span = max(self.total_iter - self.flat_iter - self.no_aug_iter, 1)
+        cosine_decay = 0.5 * (1 + math.cos(math.pi * (current_iter - self.flat_iter) / cosine_span))
+        return min_lr + (init_lr - min_lr) * cosine_decay
 
 
 class DFINETrainer:
@@ -161,6 +252,7 @@ class DFINETrainer:
             "loss_bbox",
             "loss_giou",
             "loss_vfl",
+            "loss_mal",
             "loss_fgl",
             "loss_mask_bce",
             "loss_mask_dice",
@@ -226,7 +318,15 @@ class DFINETrainer:
         mixup: float,
         close_mosaic: int,
         time_limit: float | None,
+        recipe: str,
         verbose: bool,
+        scheduler: str = "auto",
+        warmup_iter: int = 0,
+        flat_epochs: int = 0,
+        no_aug_epochs: int = 0,
+        lr_gamma: float | None = None,
+        collate_mixup_prob: float = 0.0,
+        collate_mixup_epochs: tuple[int, int] = (0, 0),
         callbacks: object | None = None,
         wandb: bool | Mapping[str, Any] = False,
         mlflow: bool | Mapping[str, Any] = False,
@@ -236,6 +336,7 @@ class DFINETrainer:
 
         Args:
             data:       Path to the data YAML (ultralytics-style).
+            recipe:     Training recipe. ``"default"`` preserves the task's normal path.
             epochs:     Number of training epochs.
             imgsz:      Input image size (square).
             batch:      Batch size.
@@ -338,6 +439,14 @@ class DFINETrainer:
                     "mixup": mixup,
                     "close_mosaic": close_mosaic,
                     "time": time_limit,
+                    "recipe": recipe,
+                    "scheduler": scheduler,
+                    "warmup_iter": warmup_iter,
+                    "flat_epochs": flat_epochs,
+                    "no_aug_epochs": no_aug_epochs,
+                    "lr_gamma": lr_gamma,
+                    "collate_mixup_prob": collate_mixup_prob,
+                    "collate_mixup_epochs": collate_mixup_epochs,
                 },
             )
             data = str(resolved["data"])
@@ -392,6 +501,25 @@ class DFINETrainer:
             time_limit = (
                 resolved["time"] if resolved["time"] is None else _as_float(resolved["time"])
             )
+            recipe = str(resolved["recipe"])
+            scheduler = str(resolved["scheduler"])
+            warmup_iter = _as_int(resolved["warmup_iter"])
+            flat_epochs = _as_int(resolved["flat_epochs"])
+            no_aug_epochs = _as_int(resolved["no_aug_epochs"])
+            lr_gamma = (
+                resolved["lr_gamma"]
+                if resolved["lr_gamma"] is None
+                else _as_float(resolved["lr_gamma"])
+            )
+            collate_mixup_prob = _as_float(resolved["collate_mixup_prob"])
+            mixup_epochs_value = resolved["collate_mixup_epochs"]
+            if isinstance(mixup_epochs_value, (list, tuple)) and len(mixup_epochs_value) == 2:
+                collate_mixup_epochs = (
+                    _as_int(mixup_epochs_value[0]),
+                    _as_int(mixup_epochs_value[1]),
+                )
+            else:
+                collate_mixup_epochs = (0, 0)
 
         self._validate_train_options(
             patience=patience,
@@ -402,9 +530,24 @@ class DFINETrainer:
             clip_grad=clip_grad,
             time=time_limit,
         )
+        from dfine.tasks import normalize_task
         from dfine.utils.augmentations import AugmentationConfig
 
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        augmentation_profile: Literal["legacy", "dfine", "deim"] = "legacy"
+        photometric = 0.0
+        zoomout = 0.0
+        iou_crop = 0.0
+        if task == "detect":
+            augmentation_profile = "deim" if recipe == "deim" else "dfine"
+            photometric = 0.5
+            zoomout = 1.0
+            iou_crop = 0.8
+            if recipe == "deim" and mosaic == 0.0:
+                mosaic = 0.5
+
         augmentation = AugmentationConfig(
+            profile=augmentation_profile,
             enabled=augment,
             fliplr=fliplr,
             scale=scale,
@@ -416,11 +559,11 @@ class DFINETrainer:
             mosaic=mosaic,
             mixup=mixup,
             close_mosaic=close_mosaic,
+            photometric=photometric,
+            zoomout=zoomout,
+            iou_crop=iou_crop,
         )
         augmentation.validate()
-        from dfine.tasks import normalize_task
-
-        task = normalize_task(str(self.cfg.get("task", "detect")))
         if task == "obb":
             if imgsz < 256:
                 raise ValueError("OBB training requires imgsz >= 256 for the RiO-DETR decoder")
@@ -447,6 +590,8 @@ class DFINETrainer:
             single_cls=single_cls,
             fraction=fraction,
             augment=augmentation,
+            collate_mixup_prob=collate_mixup_prob,
+            collate_mixup_epochs=collate_mixup_epochs,
         )
         opt = self._build_optimizer(
             optimizer,
@@ -457,11 +602,22 @@ class DFINETrainer:
         )
         warmup_epoch_count = max(float(warmup_epochs), 0.0)
         decay_epochs = max(epochs - int(warmup_epoch_count), 1)
-        scheduler = self._build_scheduler(opt, epochs=decay_epochs, lrf=lrf, cos_lr=cos_lr)
+        scheduler_obj = self._build_scheduler(
+            opt,
+            epochs=decay_epochs,
+            lrf=lrf,
+            cos_lr=cos_lr,
+            schedule=scheduler,
+            iter_per_epoch=len(dataloader),
+            warmup_iter=warmup_iter,
+            flat_epochs=flat_epochs,
+            no_aug_epochs=no_aug_epochs,
+            lr_gamma=lr_gamma,
+        )
         criterion = self._build_criterion()
         self.dataloader = dataloader
         self.optimizer = opt
-        self.scheduler = scheduler
+        self.scheduler = scheduler_obj
         self.criterion = criterion
 
         # AMP: only meaningful on CUDA
@@ -533,6 +689,14 @@ class DFINETrainer:
             mixup=mixup,
             close_mosaic=close_mosaic,
             time=time_limit,
+            recipe=recipe,
+            scheduler=scheduler,
+            warmup_iter=warmup_iter,
+            flat_epochs=flat_epochs,
+            no_aug_epochs=no_aug_epochs,
+            lr_gamma=lr_gamma,
+            collate_mixup_prob=collate_mixup_prob,
+            collate_mixup_epochs=collate_mixup_epochs,
             verbose=verbose,
         )
         self.train_args["save_dir"] = str(save_dir)
@@ -549,7 +713,7 @@ class DFINETrainer:
             ) = self._restore_training_state(
                 resume_state=resume_state,
                 optimizer=opt,
-                scheduler=scheduler,
+                scheduler=scheduler_obj,
                 scaler=scaler,
                 ema_model=ema_model,
                 epochs=epochs,
@@ -698,6 +862,7 @@ class DFINETrainer:
                     opt.zero_grad()
                     if ema_model is not None:
                         ema_model.update(self.model)
+                    self._step_iteration_scheduler(scheduler_obj, ni + 1, opt)
 
                 epoch_loss += loss.item()
                 batch_count += 1
@@ -723,8 +888,10 @@ class DFINETrainer:
                         postfix[key] = f"{value:.4f}"
                     progress.set_postfix(postfix)
 
-            if epoch + 1 > warmup_epoch_count:
-                scheduler.step()
+            if epoch + 1 > warmup_epoch_count and not self._scheduler_steps_per_iteration(
+                scheduler_obj
+            ):
+                scheduler_obj.step()
             epoch_time = time.perf_counter() - epoch_start
             train_loss = epoch_loss / max(batch_count, 1)
             train_stats = {key: total / max(batch_count, 1) for key, total in loss_sums.items()}
@@ -786,7 +953,7 @@ class DFINETrainer:
                 epochs_without_improvement += 1
             training_state = self._serialize_training_state(
                 optimizer=opt,
-                scheduler=scheduler,
+                scheduler=scheduler_obj,
                 scaler=scaler,
                 ema_model=ema_model,
                 history=history,
@@ -986,6 +1153,8 @@ class DFINETrainer:
         single_cls: bool = False,
         fraction: float = 1.0,
         augment=None,
+        collate_mixup_prob: float = 0.0,
+        collate_mixup_epochs: tuple[int, int] = (0, 0),
     ):
         from dfine.tasks import normalize_task
         from dfine.utils.data import (
@@ -1039,6 +1208,8 @@ class DFINETrainer:
             fraction=fraction,
             augment=augment,
             task=task,
+            collate_mixup_prob=collate_mixup_prob,
+            collate_mixup_epochs=collate_mixup_epochs,
         )
 
     @staticmethod
@@ -1048,6 +1219,10 @@ class DFINETrainer:
             dataset = dataset.dataset
         if hasattr(dataset, "set_epoch"):
             dataset.set_epoch(epoch, mosaic=mosaic_open)
+        collate_fn = getattr(dataloader, "collate_fn", None)
+        set_collate_epoch = getattr(collate_fn, "set_epoch", None)
+        if callable(set_collate_epoch):
+            set_collate_epoch(epoch)
 
     def _build_optimizer(
         self,
@@ -1244,12 +1419,30 @@ class DFINETrainer:
         epochs: int,
         lrf: float,
         cos_lr: bool = False,
+        *,
+        schedule: str = "auto",
+        iter_per_epoch: int = 1,
+        warmup_iter: int = 0,
+        flat_epochs: int = 0,
+        no_aug_epochs: int = 0,
+        lr_gamma: float | None = None,
     ):
         base_scheduler: object
         epochs = max(int(epochs), 1)
         base_lr = float(opt.param_groups[0]["lr"])
+        schedule_name = schedule.lower()
 
-        if cos_lr:
+        if schedule_name == "flatcosine":
+            base_scheduler = FlatCosineLRScheduler(
+                opt,
+                lr_gamma=lrf if lr_gamma is None else lr_gamma,
+                iter_per_epoch=iter_per_epoch,
+                total_epochs=epochs,
+                warmup_iter=warmup_iter,
+                flat_epochs=flat_epochs,
+                no_aug_epochs=no_aug_epochs,
+            )
+        elif cos_lr:
             base_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 opt,
                 T_max=epochs,
@@ -1260,6 +1453,16 @@ class DFINETrainer:
                 opt, start_factor=1.0, end_factor=lrf, total_iters=epochs
             )
         return base_scheduler
+
+    @staticmethod
+    def _scheduler_steps_per_iteration(scheduler: object) -> bool:
+        return bool(getattr(scheduler, "step_per_iteration", False))
+
+    def _step_iteration_scheduler(self, scheduler: object, iteration: int, optimizer) -> None:
+        if self._scheduler_steps_per_iteration(scheduler):
+            step = getattr(scheduler, "step")
+            if callable(step):
+                step(iteration, optimizer)
 
     def _build_criterion(self):
         from dfine.nn.criterion import build_criterion

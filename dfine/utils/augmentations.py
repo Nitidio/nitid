@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import torch
@@ -16,6 +17,7 @@ from PIL import Image
 class AugmentationConfig:
     """Resolved training augmentation settings (probabilities are in ``[0, 1]``)."""
 
+    profile: Literal["legacy", "dfine", "deim"] = "legacy"
     enabled: bool = True
     fliplr: float = 0.5
     scale: float = 0.5
@@ -27,9 +29,14 @@ class AugmentationConfig:
     mosaic: float = 0.0
     mixup: float = 0.0
     close_mosaic: int = 10
+    photometric: float = 0.0
+    zoomout: float = 0.0
+    iou_crop: float = 0.0
 
     def validate(self) -> None:
-        for name in ("fliplr", "crop", "mosaic", "mixup"):
+        if self.profile not in {"legacy", "dfine", "deim"}:
+            raise ValueError("augmentation profile must be legacy, dfine, or deim")
+        for name in ("fliplr", "crop", "mosaic", "mixup", "photometric", "zoomout", "iou_crop"):
             value = float(getattr(self, name))
             if not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must be in the range [0, 1]")
@@ -297,6 +304,116 @@ def color_jitter_hsv(
         if cfg.hsv_v
         else image
     )
+
+
+def random_photometric_distort(
+    image: Image.Image,
+    rng: random.Random,
+    p: float = 0.5,
+) -> Image.Image:
+    """Approximate D-FINE/torchvision photometric distortion for PIL images."""
+    if p <= 0.0 or rng.random() >= p:
+        return image
+    transforms = [
+        lambda img: F.adjust_brightness(img, rng.uniform(0.875, 1.125)),
+        lambda img: F.adjust_contrast(img, rng.uniform(0.5, 1.5)),
+        lambda img: F.adjust_saturation(img, rng.uniform(0.5, 1.5)),
+        lambda img: F.adjust_hue(img, rng.uniform(-0.05, 0.05)),
+    ]
+    rng.shuffle(transforms)
+    for transform in transforms:
+        image = transform(image)
+    return image
+
+
+def random_zoom_out(
+    image: Image.Image,
+    boxes: torch.Tensor,
+    rng: random.Random,
+    p: float = 1.0,
+    fill: tuple[int, int, int] = (0, 0, 0),
+    max_scale: float = 4.0,
+) -> tuple[Image.Image, torch.Tensor]:
+    """Place the image on a larger canvas, matching D-FINE's zoom-out role."""
+    if p <= 0.0 or rng.random() >= p:
+        return image, boxes
+    width, height = image.size
+    scale = rng.uniform(1.0, max_scale)
+    new_w, new_h = max(width, round(width * scale)), max(height, round(height * scale))
+    left = rng.randint(0, max(new_w - width, 0))
+    top = rng.randint(0, max(new_h - height, 0))
+    canvas = Image.new("RGB", (new_w, new_h), fill)
+    canvas.paste(image, (left, top))
+    result = boxes.clone()
+    if result.numel():
+        result[:, [0, 2]] += left
+        result[:, [1, 3]] += top
+    return canvas, result
+
+
+def random_iou_crop(
+    image: Image.Image,
+    boxes: torch.Tensor,
+    labels: torch.Tensor,
+    rng: random.Random,
+    p: float = 0.8,
+    trials: int = 40,
+) -> tuple[Image.Image, torch.Tensor, torch.Tensor]:
+    """SSD/torchvision-style random IoU crop for detection boxes."""
+    if p <= 0.0 or rng.random() >= p or boxes.numel() == 0:
+        return image, boxes, labels
+    width, height = image.size
+    thresholds = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, None]
+    threshold = thresholds[rng.randrange(len(thresholds))]
+    if threshold is None:
+        return image, boxes, labels
+
+    for _ in range(trials):
+        crop_w = rng.uniform(0.3, 1.0) * width
+        crop_h = rng.uniform(0.3, 1.0) * height
+        aspect = crop_w / max(crop_h, 1e-6)
+        if not 0.5 <= aspect <= 2.0:
+            continue
+        left = rng.uniform(0, width - crop_w)
+        top = rng.uniform(0, height - crop_h)
+        crop = torch.tensor([left, top, left + crop_w, top + crop_h], dtype=boxes.dtype)
+        centers = (boxes[:, :2] + boxes[:, 2:]) / 2
+        keep = (
+            (centers[:, 0] > crop[0])
+            & (centers[:, 0] < crop[2])
+            & (centers[:, 1] > crop[1])
+            & (centers[:, 1] < crop[3])
+        )
+        if not keep.any():
+            continue
+        cropped_boxes = boxes[keep].clone()
+        ious, _ = box_iou_xyxy(cropped_boxes, crop[None, :])
+        if float(ious.max().item()) < threshold:
+            continue
+        cropped_boxes[:, [0, 2]] -= crop[0]
+        cropped_boxes[:, [1, 3]] -= crop[1]
+        cropped_boxes = _clip_boxes(cropped_boxes, round(crop_w), round(crop_h))
+        kept_labels = labels[keep]
+        valid = _valid_boxes(cropped_boxes)
+        if valid.any():
+            return (
+                image.crop((int(crop[0]), int(crop[1]), int(crop[2]), int(crop[3]))),
+                cropped_boxes[valid],
+                kept_labels[valid],
+            )
+    return image, boxes, labels
+
+
+def box_iou_xyxy(boxes1: torch.Tensor, boxes2: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Pairwise IoU for absolute xyxy boxes."""
+    area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(min=0) * (boxes1[:, 3] - boxes1[:, 1]).clamp(min=0)
+    area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(min=0) * (boxes2[:, 3] - boxes2[:, 1]).clamp(min=0)
+    lt = torch.maximum(boxes1[:, None, :2], boxes2[:, :2])
+    rb = torch.minimum(boxes1[:, None, 2:], boxes2[:, 2:])
+    wh = (rb - lt).clamp(min=0)
+    inter = wh[:, :, 0] * wh[:, :, 1]
+    union = area1[:, None] + area2 - inter
+    return inter / union.clamp(min=1e-6), union
 
 
 def sanitize(

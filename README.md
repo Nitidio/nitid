@@ -1,6 +1,11 @@
-# nitid
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/nitid-logo-on-dark.png">
+    <img src="docs/assets/brand/nitid-logo-on-light.png" alt="nitid" width="240">
+  </picture>
+</p>
 
-**Ultralytics-style detection, segmentation, pose, and oriented-box models.**
+<p align="center"><strong>Object detection that's actually open source.</strong></p>
 
 [![CI](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml/badge.svg)](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Vaelsys.github.io/nitid/)
@@ -9,7 +14,14 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
 
-nitid gives modern DETR-style vision models a single-entry-point API that mirrors `ultralytics.YOLO`: predict, track, train, validate, export, stream, and CLI.
+Train, validate, export and run vision models. The code and our pretrained
+weights are released under the Apache License 2.0, patent grant included, so you
+can ship them inside your own product without opening your code or paying for a
+license.
+
+*nitid*, from Latin *nitidus*: clear, transparent, precise.
+
+**No AGPL, no surprises.**
 
 ![nitid detection demo](docs/assets/nitid-demo.png)
 
@@ -17,48 +29,85 @@ Example prediction using D-FINE-S on a street image.
 
 ## Why nitid?
 
-- Familiar Ultralytics-style API
+- **Edge first.** The models are designed to run at the edge, on the hardware
+  next to your cameras, not only on a datacenter GPU.
+- **Self-contained checkpoints.** Every checkpoint carries the config and the
+  class names it needs to be reproduced and checked — one file per model.
+- **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
+  conversion step, and the inconsistencies real datasets have are tolerated.
+- **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same
+  checkpoint.
+
+## One library, three tasks, five operations
+
+Object detection, instance segmentation and semantic segmentation, through one
+API: `predict`, `track`, `train`, `val` and `export`. The DETR family moves fast
+— RT-DETR, D-FINE, DEIM — and nitid brings a curated selection into a single
+library, so getting from your dataset to an exported model does not mean
+following every paper.
+
+What comes with it:
+
+- Python API and command line
 - Automatic download of supported official checkpoints
-- Python API, CLI and web interface
-- ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated video output
-- Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented recording
-- ONVIF camera discovery, profile selection, and secure RTSP resolution
-- Detection, instance segmentation, semantic segmentation, pose, and oriented bounding boxes
-- Fine-tuning and validation for boxes, masks, dense semantic maps, COCO keypoints, and rotated boxes
-- ONNX, OpenVINO, TorchScript, and TensorRT export where supported by task
+- Fine-tuning and validation for boxes, masks and dense semantic maps
+- ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
+  video output
+- Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented
+  recording
+
+Pose estimation and oriented bounding boxes are supported too, outside the three
+headline tasks — see the [quickstart](docs/quickstart.md).
+
+## What "open" means here
+
+The nitid code and our pretrained weights are released under the
+[Apache License 2.0](LICENSE), including its patent grant. You can use them
+commercially, modify them, and ship them in closed products. The public datasets
+used for pretraining keep their own terms: the official checkpoints listed in
+[Official Models](#official-models) are trained on COCO and Objects365.
 
 ## Installation
 
-Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
+Requires Python 3.10, 3.11 or 3.12.
 
 ```bash
-git clone https://github.com/Vaelsys/nitid.git && cd nitid
-uv sync
+pip install nitid
 ```
 
-For fine-tuning and validation add the `train` extra:
+> nitid is not on PyPI yet — the first release, v0.1.0, is being prepared.
+> Until it lands, install straight from GitHub:
+> `pip install "nitid @ git+https://github.com/Vaelsys/nitid.git"`
+
+Inference and export work out of the box. Other features are optional extras:
+
+| Extra | Adds |
+|:------|:-----|
+| `train` | Fine-tuning and COCO-style validation |
+| `track` | ByteTrack, BoT-SORT, and OC-SORT object tracking |
+| `openvino` | OpenVINO export and runtime for Intel CPU, iGPU, and NPU |
+| `wandb`, `mlflow` | Experiment tracking during training |
 
 ```bash
-uv sync --extra train
+pip install "nitid[train,track]"
 ```
 
-For ByteTrack, BoT-SORT, and OC-SORT object tracking add the `track` extra:
+pip installs the default PyTorch build for your platform. If you need a
+specific CUDA version, install PyTorch first following
+[pytorch.org](https://pytorch.org/get-started/locally/), then install nitid.
+
+TensorRT export needs NVIDIA's package as well:
 
 ```bash
-uv sync --extra track
+pip install --extra-index-url https://pypi.nvidia.com "tensorrt>=8.6"
 ```
 
-TensorRT:
+## Public names
 
-``` bash
-pip install --extra-index-url https://pypi.nvidia.com tensorrt>=8.6
-```
-For the web application:
-
-```bash
-uv sync --extra web
-```
-
+Use `nitid` for the Python package and command, and `NITID` for the public
+model class. Existing `from dfine import ...` imports and the `dfine` command
+remain supported compatibility aliases for the 0.1 release series. New code
+should use the Nitid names shown below.
 
 ## Quick Start
 
@@ -67,7 +116,7 @@ The canonical quickstart lives in [docs/quickstart.md](docs/quickstart.md); use 
 ### Inference
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
@@ -92,30 +141,21 @@ print(result.semantic.mask.shape)  # [H, W]
 result.save_semantic("class_ids.png")
 ```
 
-Pose estimation returns COCO-style person keypoints:
-
-```python
-pose = NITID("nitid1s", task="pose")
-result = pose.predict("person.jpg", conf=0.25)[0]
-print(result.keypoints.xy.shape)  # [N, 17, 2]
-result.save("pose.jpg")
-```
-
-Oriented bounding box detection returns rotated boxes:
-
-```python
-obb = NITID("nitid1s", task="obb")
-result = obb.predict("aerial.jpg", conf=0.25)[0]
-print(result.obb.xywhr.shape)      # [N, 5]: cx, cy, w, h, angle
-print(result.obb.xyxyxyxy.shape)   # [N, 8]: four polygon corners
-result.save("obb.jpg")
-```
+Pose estimation (`task="pose"`) and oriented bounding boxes (`task="obb"`) work
+the same way; the [quickstart](docs/quickstart.md) has both.
 
 ### Training
 
 ```python
 metrics = model.train(data="configs/datasets/my_dataset.yml", epochs=50)
 print(metrics["mAP50"], metrics["mAP50-95"])
+
+# Detection-only DEIM recipe for faster convergence experiments.
+deim_metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    recipe="deim",
+)
 ```
 
 See [fine-tuning](docs/fine_tuning.md) for COCO, YOLO, semantic-mask, pose, and OBB dataset formats.
@@ -129,45 +169,29 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 ```
 
 The annotated video is saved under `runs/track/exp/`. Tracking dependencies
-are optional; install them with `uv sync --extra track`.
+are optional; install them with `pip install "nitid[track]"`.
 
-For resilient RTSP ingest, use an OpenCV build compiled with GStreamer:
+For RTSP ingest through GStreamer, use an OpenCV build compiled with it:
 
 ```python
 for result in model.track(
     "rtsp://camera/live",
     backend="gstreamer",
-    reconnect=True,
     conf=0.5,
     stream=True,
 ):
     ...
 ```
 
-See [docs/gstreamer.md](docs/gstreamer.md) for system requirements, explicit
-pipelines, hardware-decoder examples, and reconnect semantics.
-
-Inspect available codec paths before selecting acceleration:
-
-```bash
-dfine gstreamer-info
-```
-
-Named profiles are `software`, `vaapi`, `v4l2`, `nvidia`, and `jetson`.
-
-Discover ONVIF cameras and inspect their streams:
-
-```bash
-dfine onvif action=discover timeout=3
-ONVIF_USERNAME=operator ONVIF_PASSWORD=secret \
-  dfine onvif action=profiles host=192.0.2.10
-```
+See [docs/gstreamer.md](docs/gstreamer.md) for system requirements and
+explicit pipelines. `nitid gstreamer-info` checks whether your OpenCV build
+has GStreamer enabled.
 
 Annotated tracking can also be published or segmented without buffering
 results in Python:
 
 ```bash
-dfine track model=nitid1s task=detect source=video.mp4 \
+nitid track model=nitid1s task=detect source=video.mp4 \
   output=runs/segments segment_duration=60
 ```
 
@@ -195,7 +219,7 @@ Capture Python API output, environment details, and failure tracebacks in one
 attachable log:
 
 ```python
-from dfine import NITID, bugreport
+from nitid import NITID, bugreport
 
 with bugreport("prediction") as report:
     model = NITID("nitid1s", task="detect")
@@ -208,15 +232,16 @@ print(report.path)
 ### Command Line Interface
 
 ```bash
-uv run dfine predict model=nitid1s task=detect source=image.jpg
-uv run dfine predict model=semantic_best.pth task=semantic source=image.jpg save=true
-uv run dfine predict model=nitid1s task=obb source=aerial.jpg conf=0.25
-uv run dfine track model=nitid1s source=video.mp4 conf=0.5 save=true
-uv run dfine train model=nitid1s task=detect data=my_dataset.yml epochs=50
-uv run dfine val model=nitid1s task=detect data=my_dataset.yml
-uv run dfine export model=nitid1s task=detect format=onnx
-uv run dfine predict model=nitid1s source=image.jpg --report
-uv run dfine bugreport
+nitid predict model=nitid1s task=detect source=image.jpg
+nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
+nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
+nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
+nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50
+nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
+nitid val model=nitid1s task=detect data=my_dataset.yml
+nitid export model=nitid1s task=detect format=onnx
+nitid predict model=nitid1s source=image.jpg --report
+nitid bugreport
 ```
 
 For the full guide:
@@ -226,8 +251,13 @@ For the full guide:
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
 - GStreamer and RTSP: [docs/gstreamer.md](docs/gstreamer.md)
-- ONVIF cameras: [docs/onvif.md](docs/onvif.md)
 
+
+## Migrating from YOLO
+
+If you are coming from a YOLO codebase, the quickstart has a side-by-side
+mapping of the API and the behaviour that differs:
+[Coming from Ultralytics](docs/quickstart.md#coming-from-ultralytics).
 
 ## Official Models
 
@@ -246,47 +276,34 @@ Segmentation checkpoints are published in the official [D-FINE-seg model reposit
 *Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference.*
 
 
-## Web application
-
-nitid includes a browser-based UI for running detection without writing code. Upload images or videos, pick a model, adjust parameters, and browse annotated results with persistent run history per user.
-
-```bash
-# Install web extras
-uv sync --extra web
-
-# Download the recommended checkpoint into models/
-uv run dfine download model=nitid1l task=detect output=models
-
-# Start the API (single worker — inference is not thread-safe)
-uv run uvicorn web.api.main:app --workers 1
-
-# Start the frontend (separate terminal)
-cd web/frontend && npm install && npm run dev
-# → open http://localhost:5173
-```
-
-Register an account on first visit. The API is self-documented at `http://localhost:8000/docs`.
-
-See [docs/web_app.md](docs/web_app.md) for the full guide: environment variables, REST API reference, data model, and implementation notes.
-
-
 ## Documentation
 
 | Doc | Description |
 |-----|-------------|
-| [docs/onboarding.md](docs/onboarding.md) | **Start here if you're a new developer** — architecture, conventions, gotchas |
 | [docs/quickstart.md](docs/quickstart.md) | Full quickstart |
 | [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset formats |
 | [docs/export.md](docs/export.md) | ONNX, OpenVINO, TorchScript, and TensorRT export |
 | [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
-| [docs/web_app.md](docs/web_app.md) | Web application: setup, UI guide, REST API, data model |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
+| [docs/brand.md](docs/brand.md) | Brand: logo, palette, typography, and what the project announces |
 
 
 ## Development
 
+Everything above is for using nitid. To work on nitid itself, use a source
+checkout and [uv](https://github.com/astral-sh/uv), which installs the exact
+dependency versions pinned in `uv.lock` — including CUDA 12.1 PyTorch wheels on
+Linux and Windows.
+
 ```bash
-uv sync --extra dev
+git clone https://github.com/Vaelsys/nitid.git && cd nitid
+uv sync --extra dev --extra train
+```
+
+Inside the checkout, run the CLI and tools through the project environment:
+
+```bash
+uv run nitid predict model=nitid1s task=detect source=image.jpg
 
 # Unit tests (no GPU, no checkpoint needed)
 uv run pytest tests/unit
@@ -301,21 +318,14 @@ uv run ruff check .
 uv run mypy dfine/
 ```
 
-Integration tests use a session-scoped fixture in `tests/conftest.py` that builds a small D-FINE-S model with random weights at test time — no download required.
+Integration tests use a session-scoped fixture in `tests/conftest.py` that
+builds a small D-FINE-S model with random weights at test time — no download
+required.
 
-### Key differences from Ultralytics YOLO
-
-| Feature | Ultralytics YOLO | nitid DFINE |
-|---------|-----------------|-------------|
-| Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
-| `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, disk size |
-| TensorRT export | Supported | Supported (see Installation) |
-| AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, … | `"detect"`, `"segment"`, `"semantic"`, `"pose"`, or `"obb"` |
-
-## Contributing
-
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, commit conventions, and the PR checklist.
+- [docs/onboarding.md](docs/onboarding.md) — **start here if you're new to the
+  codebase**: architecture, conventions, gotchas
+- [CONTRIBUTING.md](CONTRIBUTING.md) — branch workflow, commit conventions, and
+  the PR checklist
 
 ## Acknowledgements
 
