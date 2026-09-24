@@ -44,6 +44,40 @@ def test_train_runs(tiny_checkpoint, tiny_dataset, tmp_path):
     assert model._model.decoder.num_classes == 2
 
 
+def test_deim_detection_recipe_trains_with_mal(tiny_checkpoint, tiny_dataset, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    metrics = model.train(
+        data=tiny_dataset,
+        recipe="deim",
+        epochs=1,
+        imgsz=64,
+        batch=2,
+        val=False,
+        plots=False,
+        project=str(tmp_path),
+        name="deim",
+        verbose=False,
+    )
+    checkpoint = torch.load(
+        tmp_path / "deim" / "last.pth",
+        map_location="cpu",
+        weights_only=False,
+    )
+    criterion_config = checkpoint["config"]["DFINECriterion"]
+    train_args = checkpoint["training_state"]["train_args"]
+
+    assert "loss_mal" in metrics["history"][0]
+    assert "loss_vfl" not in metrics["history"][0]
+    assert criterion_config["losses"][0] == "mal"
+    assert "loss_mal" in criterion_config["weight_dict"]
+    assert "loss_vfl" not in criterion_config["weight_dict"]
+    assert train_args["recipe"] == "deim"
+    assert train_args["scheduler"] == "flatcosine"
+    assert train_args["collate_mixup_prob"] == pytest.approx(0.5)
+
+
 def test_segment_train_and_validation_run_end_to_end(
     tiny_segment_checkpoint, tiny_dataset, tmp_path
 ):
@@ -428,6 +462,7 @@ def test_train_args_match_serialized_training_state(tiny_checkpoint, tiny_datase
         "mixup",
         "close_mosaic",
         "time",
+        "recipe",
     }
 
 

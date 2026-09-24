@@ -7,7 +7,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from dfine.trainer import DFINETrainer, ModelEMA
+from dfine.trainer import DFINETrainer, FlatCosineLRScheduler, ModelEMA
 
 
 @pytest.fixture
@@ -127,6 +127,26 @@ def test_set_dataset_epoch_controls_mosaic(trainer):
     assert dataset.calls == [(7, False)]
 
 
+def test_set_dataset_epoch_updates_collate_epoch(trainer):
+    class Dataset:
+        def set_epoch(self, epoch, mosaic=True):
+            pass
+
+    class Collate:
+        def __init__(self):
+            self.calls = []
+
+        def set_epoch(self, epoch):
+            self.calls.append(epoch)
+
+    collate = Collate()
+    loader = type("Loader", (), {"dataset": Dataset(), "collate_fn": collate})()
+
+    trainer._set_dataset_epoch(loader, 4, mosaic_open=True)
+
+    assert collate.calls == [4]
+
+
 def test_freeze_parameter_pattern(trainer):
     frozen = trainer._apply_freeze("l.weight")
 
@@ -204,6 +224,62 @@ def test_cosine_scheduler_end_lr(trainer):
         scheduler.step()
     final_lr = opt.param_groups[0]["lr"]
     assert final_lr == pytest.approx(lr0 * lrf, rel=1e-3)
+
+
+def test_build_scheduler_flat_cosine_iter_policy(trainer):
+    opt = trainer._build_optimizer("AdamW", lr=1e-3)
+    scheduler = trainer._build_scheduler(
+        opt,
+        epochs=10,
+        lrf=0.5,
+        schedule="flatcosine",
+        iter_per_epoch=2,
+        warmup_iter=2,
+        flat_epochs=3,
+        no_aug_epochs=1,
+    )
+
+    assert isinstance(scheduler, FlatCosineLRScheduler)
+    assert scheduler.step_per_iteration is True
+
+    scheduler.step(0, opt)
+    assert opt.param_groups[0]["lr"] == pytest.approx(0.0)
+    scheduler.step(2, opt)
+    assert opt.param_groups[0]["lr"] == pytest.approx(1e-3)
+    scheduler.step(6, opt)
+    assert opt.param_groups[0]["lr"] == pytest.approx(1e-3)
+    scheduler.step(19, opt)
+    assert opt.param_groups[0]["lr"] == pytest.approx(5e-4)
+
+
+def test_flat_cosine_scheduler_state_roundtrip(trainer):
+    opt = trainer._build_optimizer("AdamW", lr=1e-3)
+    scheduler = FlatCosineLRScheduler(
+        opt,
+        lr_gamma=0.25,
+        iter_per_epoch=2,
+        total_epochs=4,
+        warmup_iter=1,
+        flat_epochs=1,
+        no_aug_epochs=1,
+    )
+    scheduler.step(3, opt)
+    restored = FlatCosineLRScheduler(
+        opt,
+        lr_gamma=1.0,
+        iter_per_epoch=1,
+        total_epochs=1,
+        warmup_iter=0,
+        flat_epochs=0,
+        no_aug_epochs=0,
+    )
+
+    restored.load_state_dict(scheduler.state_dict())
+
+    assert restored.last_iter == 3
+    assert restored.total_iter == 8
+    assert restored.min_lrs == pytest.approx([2.5e-4, 2.5e-4])
+    assert restored.get_last_lr() == pytest.approx(scheduler.get_last_lr())
 
 
 def test_warmup_cosine_scheduler_progression(trainer):
@@ -574,3 +650,220 @@ def test_public_train_runs_error_callbacks_and_reraises_original(monkeypatch, ti
 
     assert caught.value is original_error
     assert handled == [original_error]
+
+
+def test_public_train_applies_default_detection_recipe_options(monkeypatch, tiny_model):
+    from dfine.model import DFINE
+
+    captured = {}
+
+    class CapturingTrainer:
+        def __init__(self, **kwargs):
+            pass
+
+        def train(self, **kwargs):
+            captured.update(kwargs)
+            return {"ok": True}
+
+        def _handle_train_error(self, error):
+            raise AssertionError("unexpected training error") from error
+
+    monkeypatch.setattr("dfine.trainer.DFINETrainer", CapturingTrainer)
+    monkeypatch.setattr("dfine.utils.data.load_data_yaml", lambda _path: {"names": {0: "object"}})
+
+    class UnchangedTransfer:
+        changed = False
+        mapped_proposal_scorer = ()
+        initialized = ()
+
+        def __init__(self, model, config):
+            self.model = model
+            self.config = config
+
+    monkeypatch.setattr(
+        "dfine.nn.transfer.adapt_model_to_classes",
+        lambda model, cfg, *_args: UnchangedTransfer(model, cfg),
+    )
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {
+        "task": "detect",
+        "HGNetv2": {"name": "B0"},
+        "HybridEncoder": {"hidden_dim": 256},
+    }
+    model._backend = "torch"
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
+    model._task = "detect"
+    model.verbose = False
+
+    metrics = model.train(data="dataset.yaml")
+
+    assert metrics == {"ok": True}
+    assert captured["recipe"] == "default"
+    assert captured["epochs"] == 132
+    assert captured["batch"] == 32
+    assert captured["lr0"] == pytest.approx(2e-4)
+    assert captured["backbone_lr"] == pytest.approx(1e-4)
+    assert captured["lrf"] == pytest.approx(1.0)
+    assert captured["amp"] is True
+    assert captured["ema"] is True
+
+
+def test_public_train_keeps_explicit_options_over_recipe_defaults(monkeypatch, tiny_model):
+    from dfine.model import DFINE
+
+    captured = {}
+
+    class CapturingTrainer:
+        def __init__(self, **kwargs):
+            pass
+
+        def train(self, **kwargs):
+            captured.update(kwargs)
+            return {"ok": True}
+
+        def _handle_train_error(self, error):
+            raise AssertionError("unexpected training error") from error
+
+    monkeypatch.setattr("dfine.trainer.DFINETrainer", CapturingTrainer)
+    monkeypatch.setattr("dfine.utils.data.load_data_yaml", lambda _path: {"names": {0: "object"}})
+
+    class UnchangedTransfer:
+        changed = False
+        mapped_proposal_scorer = ()
+        initialized = ()
+
+        def __init__(self, model, config):
+            self.model = model
+            self.config = config
+
+    monkeypatch.setattr(
+        "dfine.nn.transfer.adapt_model_to_classes",
+        lambda model, cfg, *_args: UnchangedTransfer(model, cfg),
+    )
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {
+        "task": "detect",
+        "HGNetv2": {"name": "B0"},
+        "HybridEncoder": {"hidden_dim": 256},
+    }
+    model._backend = "torch"
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
+    model._task = "detect"
+    model.verbose = False
+
+    model.train(
+        data="dataset.yaml",
+        epochs=3,
+        batch=2,
+        backbone_lr=None,
+        amp=False,
+        ema=False,
+    )
+
+    assert captured["epochs"] == 3
+    assert captured["batch"] == 2
+    assert captured["backbone_lr"] is None
+    assert captured["amp"] is False
+    assert captured["ema"] is False
+
+
+def test_public_train_runs_deim_detection_recipe_policy(monkeypatch, tiny_model):
+    from dfine.model import DFINE
+
+    captured = {}
+
+    class CapturingTrainer:
+        def __init__(self, **kwargs):
+            captured["trainer_init"] = kwargs
+
+        def train(self, **kwargs):
+            captured["train_kwargs"] = kwargs
+            return {"ok": True}
+
+        def _handle_train_error(self, error):
+            raise AssertionError("unexpected training error") from error
+
+    monkeypatch.setattr("dfine.trainer.DFINETrainer", CapturingTrainer)
+    monkeypatch.setattr("dfine.utils.data.load_data_yaml", lambda _path: {"names": {0: "object"}})
+
+    class UnchangedTransfer:
+        changed = False
+        mapped_proposal_scorer = ()
+        initialized = ()
+
+        def __init__(self, model, config):
+            self.model = model
+            self.config = config
+
+    monkeypatch.setattr(
+        "dfine.nn.transfer.adapt_model_to_classes",
+        lambda model, cfg, *_args: UnchangedTransfer(model, cfg),
+    )
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {
+        "task": "detect",
+        "HGNetv2": {"name": "B0"},
+        "HybridEncoder": {"hidden_dim": 256},
+        "DFINECriterion": {
+            "weight_dict": {"loss_vfl": 1, "loss_bbox": 5, "loss_giou": 2},
+            "losses": ["vfl", "boxes"],
+            "gamma": 2.0,
+        },
+    }
+    model._backend = "torch"
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
+    model._task = "detect"
+    model.verbose = False
+
+    metrics = model.train(data="dataset.yaml", recipe="deim")
+
+    assert metrics == {"ok": True}
+    trainer_config = captured["trainer_init"]["cfg"]
+    assert trainer_config["DFINECriterion"]["losses"] == ["mal", "boxes"]
+    assert "loss_mal" in trainer_config["DFINECriterion"]["weight_dict"]
+    assert "loss_vfl" not in trainer_config["DFINECriterion"]["weight_dict"]
+    train_kwargs = captured["train_kwargs"]
+    assert train_kwargs["recipe"] == "deim"
+    assert train_kwargs["scheduler"] == "flatcosine"
+    assert train_kwargs["warmup_iter"] == 2000
+    assert train_kwargs["flat_epochs"] == 64
+    assert train_kwargs["lr_gamma"] == pytest.approx(0.5)
+    assert train_kwargs["collate_mixup_prob"] == pytest.approx(0.5)
+    assert train_kwargs["collate_mixup_epochs"] == (4, 64)
+
+
+def test_public_train_rejects_deim_for_non_detection_tasks(tiny_model):
+    from dfine.model import DFINE
+
+    model = object.__new__(DFINE)
+    model._model = tiny_model
+    model._cfg = {"task": "pose"}
+    model._backend = "torch"
+    model._device_str = "cpu"
+    model._names = {}
+    model._callbacks = {}
+    model._deployed_model = None
+    model._deployed_model_device = None
+    model._openvino_cache = {}
+    model._task = "pose"
+
+    with pytest.raises(ValueError, match="detection-only"):
+        model.train(data="missing.yaml", recipe="deim")

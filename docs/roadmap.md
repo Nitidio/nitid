@@ -2,7 +2,8 @@
 
 *Last reviewed: 2026-09-17.*
 
-nitid is an Ultralytics-style library for focused DETR-style vision models. The project is
+nitid is a focused library for DETR-style vision models, released under Apache 2.0
+with its pretrained weights. The project is
 focused on a small number of well-supported workflows: load a model by name,
 predict, track, train, validate, export, inspect results, and deploy against
 real video sources.
@@ -12,7 +13,7 @@ real video sources.
 The public API should stay compact:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 detector = NITID("nitid1s", task="detect")
 segmenter = NITID("nitid1s", task="segment")
@@ -48,8 +49,7 @@ validation metrics, export coverage where realistic, tests, and documentation.
   MLflow.
 - Export to ONNX/OpenVINO for all supported tasks, and TorchScript/TensorRT for
   detection and instance segmentation.
-- RTSP/GStreamer/ONVIF camera workflows and annotated video output.
-- Browser-based web application for model selection and inference runs.
+- RTSP/GStreamer camera workflows and annotated video output.
 - Tests and CI that protect supported user flows.
 
 ## Not in scope by default
@@ -74,8 +74,7 @@ Available today:
 - RiO-DETR OBB model loading, training, validation, inference, visualization,
   and ONNX/OpenVINO export.
 - Tracking with optional tracker dependencies.
-- GStreamer/RTSP and ONVIF camera helpers.
-- Web application for browser-based inference workflows.
+- GStreamer/RTSP camera helpers.
 - Developer tests for model construction, datasets, training, validation,
   export, and result containers.
 
@@ -114,7 +113,6 @@ pipeline. The known gaps above are documented gaps for v0.1.0, not blockers.
 - [Fine-tuning](fine_tuning.md)
 - [Export](export.md)
 - [API Reference](api_reference.md)
-- [Web App](web_app.md)
 - [Troubleshooting](troubleshooting.md)
 - [Onboarding](onboarding.md)
 - [Decision records](adr/index.md)

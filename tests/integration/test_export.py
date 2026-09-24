@@ -30,10 +30,30 @@ def _torch_deploy_outputs(model, images):
 
 
 def _sort_instances(*arrays):
+    """
+    Put instances in a canonical order so two runtimes can be compared row by row.
+
+    Top-k returns the same instances in whatever order each runtime produced
+    them, so the rows have to be realigned before they mean anything. Ordering
+    on the box alone is not enough: the rows that share a query — same box,
+    different class — stay in emission order, which leaves the label, score and
+    mask rows compared against each other misaligned. Sorting on the label
+    first makes the key a total order, and the box coordinates are rounded so
+    that the ~1e-5 differences between runtimes cannot reorder the rows they
+    are meant to be matching.
+    """
     import numpy as np
 
-    boxes = arrays[1]
-    order = np.lexsort((boxes[0, :, 3], boxes[0, :, 2], boxes[0, :, 1], boxes[0, :, 0]))
+    labels, boxes = arrays[0], arrays[1]
+    order = np.lexsort(
+        (
+            boxes[0, :, 3].round(3),
+            boxes[0, :, 2].round(3),
+            boxes[0, :, 1].round(3),
+            boxes[0, :, 0].round(3),
+            labels[0],
+        )
+    )
     return tuple(array[:, order] for array in arrays)
 
 
@@ -119,6 +139,20 @@ def test_export_segment_onnxruntime_matches_torch_deploy(tiny_segment_checkpoint
     actual = _sort_instances(*actual)
     expected_np = tuple(value.detach().cpu().numpy() for value in expected)
     expected_np = _sort_instances(*expected_np)
+
+    # Guard the precondition that makes this comparison meaningful. If the
+    # fixture's random weights ever collapse the decoder's queries onto one
+    # another, every top-k score ties, the two runtimes are free to keep
+    # different queries, and this test either fails at random or passes while
+    # comparing 300 copies of a single box. tests/conftest.py seeds the draw to
+    # keep that from happening; fail here, clearly, if that ever stops holding.
+    distinct_boxes = len(np.unique(expected_np[1][0].round(3), axis=0))
+    assert distinct_boxes > 1, (
+        f"the segmentation fixture produced {distinct_boxes} distinct box(es) across "
+        "300 instances: its decoder queries have collapsed, so top-k selection is "
+        "tied and export parity cannot be compared. Check _FIXTURE_SEED in "
+        "tests/conftest.py."
+    )
     assert sorted(actual[0].reshape(-1).tolist()) == sorted(expected_np[0].reshape(-1).tolist())
     for actual_value, expected_value in zip(actual[1:], expected_np[1:]):
         np.testing.assert_allclose(

@@ -19,7 +19,7 @@ Use the public `bugreport()` context manager to capture Python API operations in
 the same single-file format as the CLI's `--report` flag:
 
 ```python
-from dfine import NITID, bugreport
+from nitid import NITID, bugreport
 
 with bugreport("training") as report:
     model = NITID("nitid1s", task="detect")
@@ -50,7 +50,7 @@ with `bugreport("training", report_dir="reports")`.
 ## `NITID`
 
 ```python
-from dfine import NITID
+from nitid import NITID
 ```
 
 The recommended public class. Instantiate with a path to a nitid-wrapped `.pth`
@@ -81,7 +81,7 @@ but new code should prefer `NITID(...)`.
 ### Intel NPU / integrated GPU inference (OpenVINO backend)
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", backend="openvino", device="NPU")   # Intel NPU
 model = NITID("nitid1s", backend="openvino", device="GPU")   # Intel integrated GPU
@@ -132,13 +132,8 @@ results = model.predict(
     name="exp",
     backend="opencv", # or "gstreamer" for video/live sources
     gst_pipeline=None, # optional explicit GStreamer pipeline
-    reconnect=False,  # retry a live GStreamer source after failure
-    reconnect_initial_delay=1.0,
-    reconnect_max_delay=30.0,
-    reconnect_attempts=None,
     rtsp_latency=200,
     rtsp_transport="tcp",
-    hardware_profile=None, # software, vaapi, v4l2, nvidia, or jetson
     rtsp_username=None,
     rtsp_password=None, # Python only; CLI reads passwords from an environment variable
     iou=0.85,          # IoU threshold for TTA NMS
@@ -343,13 +338,8 @@ results = model.track(
     verbose=True,
     backend="opencv",
     gst_pipeline=None,
-    reconnect=False,
-    reconnect_initial_delay=1.0,
-    reconnect_max_delay=30.0,
-    reconnect_attempts=None,
     rtsp_latency=200,
     rtsp_transport="tcp",
-    hardware_profile=None,
     rtsp_username=None,
     rtsp_password=None, # Python only; CLI uses rtsp_password_env
     iou=0.85,
@@ -470,8 +460,8 @@ Tracker state belongs to one `model.track()` invocation. It resets when:
 
 - a new `model.track()` call starts;
 - the source ID changes, such as when a source list advances to another video;
-- `FrameMetadata.discontinuity` is true, allowing reconnecting stream sources
-  to prevent identities from leaking across a connection gap.
+- `FrameMetadata.discontinuity` is true, which a custom `FrameSource` can set
+  to prevent identities from leaking across a gap in its frames.
 
 Passing a custom `FrameSink` through `sink=` writes annotated tracked frames
 and closes the sink when iteration finishes or the generator is closed.
@@ -481,7 +471,7 @@ and closes the sink when iteration finishes or the generator is closed.
 The public media types can be imported directly:
 
 ```python
-from dfine import (
+from nitid import (
     Frame,
     FrameMetadata,
     FrameSink,
@@ -495,17 +485,12 @@ A `FrameSource` yields ordered BGR frames with stable metadata. Both
 camera source. A `FrameSink` receives annotated frames through `sink=`. Sources
 and sinks have explicit `close()` methods and support context-manager use.
 
-`GStreamerFrameSource` is the built-in accelerated/live-stream implementation:
+`GStreamerFrameSource` is the built-in GStreamer/live-stream implementation:
 
 ```python
-from dfine import GStreamerFrameSource
+from nitid import GStreamerFrameSource
 
-source = GStreamerFrameSource(
-    "rtsp://camera/live",
-    reconnect=True,
-    reconnect_initial_delay=1,
-    reconnect_max_delay=30,
-)
+source = GStreamerFrameSource("rtsp://camera/live", rtsp_transport="tcp")
 for result in model.track(source, stream=True):
     ...
 ```
@@ -533,43 +518,8 @@ The predictor sends `result.plot()` to the sink after tracking, so output
 frames contain persistent IDs. The sink is closed when inference finishes or
 when the streaming generator is explicitly closed.
 
-Set `hardware_profile=` on `GStreamerVideoSink` to select a named encoder. The
-input `hardware_profile=` argument and the sink profile are independent because
-decode and encode support may differ on the same host. Use
-`inspect_gstreamer_capabilities()` or `dfine gstreamer-info` before deployment.
-
-#### ONVIF camera discovery
-
-```python
-from dfine import ONVIFCamera, discover_onvif_devices
-
-devices = discover_onvif_devices(timeout=3, interface=None)
-camera = ONVIFCamera(
-    devices[0].service_url,
-    username="operator",
-    password="secret",
-    timeout=5,
-    verify_ssl=True,
-    time_offset=0,
-)
-```
-
-`discover_onvif_devices()` returns `list[ONVIFDevice]`. Each device exposes
-`endpoint_reference`, `xaddrs`, `scopes`, `types`, and a preferred
-`service_url`.
-
-```python
-profiles = camera.get_profiles()
-profile = camera.select_profile("Main Stream")  # token or name
-uri = camera.get_stream_uri(profile)            # credentials are not inserted
-source = camera.gstreamer_source(profile, hardware_profile="vaapi")
-```
-
-`ONVIFMediaProfile` contains `token`, `name`, `encoding`, `width`, `height`,
-`frame_rate`, and the optional `(width, height)` `resolution` property.
-`gstreamer_source()` returns a `GStreamerFrameSource`, defaults to reconnection,
-and passes credentials as source properties rather than putting secrets in the
-URI. See [ONVIF cameras](onvif.md) for networking and authentication details.
+Use `inspect_gstreamer_capabilities()` or `nitid gstreamer-info` to check that
+the active OpenCV build has GStreamer enabled before deployment.
 
 ---
 
@@ -580,6 +530,7 @@ Fine-tune on a custom dataset. See [fine_tuning.md](fine_tuning.md).
 ```python
 metrics = model.train(
     data="configs/datasets/my_dataset.yml",
+    recipe="default",    # default task-native training, or "deim" for detection
     epochs=50,
     imgsz=640,
     batch=16,
@@ -617,7 +568,9 @@ Training controls added to the public API:
 
 | Argument | Type / default | Meaning |
 |---|---|---|
-| `batch` | `int = 16` | Explicit positive batch size. |
+| `recipe` | `str = "default"` | Training recipe. Use `"default"` for the task-native path or `"deim"` for detection-only DEIM training. |
+| `batch` | recipe/task dependent | Explicit positive batch size. |
+| `epochs`, `lr0`, `lrf` | recipe/task dependent | Omitted detection values follow the selected recipe and model size. Explicit values override the recipe. |
 | `optimizer` | `str = "AdamW"` | Auto, Adam, AdamW, SGD, RAdam, NAdam, or RMSprop; Auto predictably selects AdamW. |
 | `momentum` | `float = 0.9` | SGD momentum or Adam-family beta1. |
 | `weight_decay` | `float = 1e-4` | Non-bias weight decay. |
@@ -638,13 +591,13 @@ Training controls added to the public API:
 | `fraction` | `float = 1.0` | Deterministically use a fraction in `(0, 1]`. |
 | `accumulate` | `int = 1` | Batches accumulated per optimizer step. |
 | `multi_scale` | `bool = False` | Random per-batch resizing around `imgsz`. |
-| `augment` | `bool = True` | Enable deterministic box-aware training transforms. |
+| `augment` | `bool = True` | Enable recipe-aware box transforms for detection and task-native transforms for other tasks. |
 | `fliplr` | `float = 0.5` | Horizontal-flip probability. |
 | `scale` | `float = 0.5` | Random isotropic scale gain. |
 | `translate` | `float = 0.1` | Random translation gain. |
 | `crop` | `float = 0.0` | Crop probability and maximum edge fraction. |
 | `hsv_h`, `hsv_s`, `hsv_v` | `0.015`, `0.7`, `0.4` | Hue, saturation, and brightness jitter gains. |
-| `mosaic`, `mixup` | `float = 0.0` | Experimental probabilities. Not supported for semantic, pose, or OBB. |
+| `mosaic`, `mixup` | `float = 0.0` (`mosaic=0.5` in DEIM when omitted) | Detection probabilities. `recipe="deim"` also enables recipe-controlled batch MixUp. Not supported for semantic, pose, or OBB. |
 | `close_mosaic` | `int = 10` | Turn mosaic off for the final N epochs. |
 | `time` | `float \| None = None` | Training duration in hours; when set, it overrides `epochs`. |
 | `save_dir` | `str \| Path \| None = None` | Exact requested run directory. |

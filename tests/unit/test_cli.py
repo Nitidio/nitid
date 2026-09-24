@@ -11,7 +11,7 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
 @pytest.mark.parametrize(
     ("command", "expected_text"),
     [
-        ("predict", ("source=SOURCE", "conf=FLOAT", "save=BOOL", "dfine predict")),
+        ("predict", ("source=SOURCE", "conf=FLOAT", "save=BOOL", "nitid predict")),
         (
             "track",
             (
@@ -22,29 +22,29 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
                 "track_activation_threshold=FLOAT",
                 "enable_cmc=BOOL",
                 "direction_consistency_weight=FLOAT",
-                "dfine track",
+                "nitid track",
             ),
         ),
         (
             "download",
-            ("model=NAME", "task=TASK", "weights=NAME", "force=BOOL", "dfine download"),
+            ("model=NAME", "task=TASK", "weights=NAME", "force=BOOL", "nitid download"),
         ),
-        ("train", ("data=PATH", "task=TASK", "epochs=INT", "dfine train")),
-        ("val", ("data=PATH", "task=TASK", "split=NAME", "dfine val")),
-        ("export", ("task=TASK", "format=FORMAT", "opset=INT", "dfine export")),
-        ("info", ("task=TASK", "detailed=BOOL", "dfine info")),
-        ("gstreamer-info", ("named decode/encode profiles", "software", "jetson")),
-        ("onvif", ("action=discover", "password_env=NAME", "action=uri")),
-        ("bugreport", ("environment-only", "dfine bugreport")),
+        ("train", ("data=PATH", "task=TASK", "epochs=INT", "nitid train")),
+        ("val", ("data=PATH", "task=TASK", "split=NAME", "nitid val")),
+        ("export", ("task=TASK", "format=FORMAT", "opset=INT", "nitid export")),
+        ("convert", ("data=DATA", "target=FORMAT", "output=PATH", "nitid convert")),
+        ("info", ("task=TASK", "detailed=BOOL", "nitid info")),
+        ("gstreamer-info", ("OpenCV has GStreamer enabled", "gst-inspect-1.0")),
+        ("bugreport", ("environment-only", "nitid bugreport")),
     ],
 )
 def test_command_help_exits_successfully_without_loading_model(
     command, expected_text, capsys, monkeypatch
 ):
-    monkeypatch.setitem(sys.modules, "dfine", None)
+    monkeypatch.setitem(sys.modules, "nitid", None)
 
     with pytest.raises(SystemExit) as exc_info:
-        main(["dfine", command, "--help"])
+        main(["nitid", command, "--help"])
 
     assert exc_info.value.code == 0
     output = capsys.readouterr().out
@@ -58,25 +58,33 @@ def test_every_command_has_help_text():
 
 def test_short_help_flag_is_supported(capsys):
     with pytest.raises(SystemExit) as exc_info:
-        main(["dfine", "predict", "-h"])
+        main(["nitid", "predict", "-h"])
 
     assert exc_info.value.code == 0
-    assert "Usage:\n  dfine predict" in capsys.readouterr().out
+    assert "Usage:\n  nitid predict" in capsys.readouterr().out
 
 
 def test_general_help_exits_successfully(capsys):
     with pytest.raises(SystemExit) as exc_info:
-        main(["dfine", "--help"])
+        main(["nitid", "--help"])
 
     assert exc_info.value.code == 0
     output = capsys.readouterr().out
-    assert "nitid D-FINE CLI" in output
-    assert "dfine COMMAND --help" in output
+    assert "Nitid CLI" in output
+    assert "nitid COMMAND --help" in output
+
+
+def test_legacy_dfine_command_uses_canonical_help(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["dfine", "--help"])
+
+    assert exc_info.value.code == 0
+    assert "Usage:\n  nitid COMMAND" in capsys.readouterr().out
 
 
 def test_unknown_command_exits_with_error(capsys):
     with pytest.raises(SystemExit) as exc_info:
-        main(["dfine", "unknown"])
+        main(["nitid", "unknown"])
 
     assert exc_info.value.code == 1
     output = capsys.readouterr().out
@@ -86,7 +94,7 @@ def test_unknown_command_exits_with_error(capsys):
 
 def test_train_cli_parses_list_controls():
     command, args = parse_args(
-        ["dfine", "train", "data=data.yml", "classes=[0,2]", "freeze=[backbone,decoder]"]
+        ["nitid", "train", "data=data.yml", "classes=[0,2]", "freeze=[backbone,decoder]"]
     )
 
     assert command == "train"
@@ -106,13 +114,13 @@ def test_cli_passes_weights_to_model_constructor(monkeypatch):
             return []
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    fake_module.NITID = FakeDFINE
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
-    main(["dfine", "predict", "model=dfine_s", "weights=coco", "source=image.jpg"])
+    main(["nitid", "predict", "model=nitid1s", "weights=coco", "source=image.jpg"])
 
     assert observed == {
-        "model": "dfine_s",
+        "model": "nitid1s",
         "task": "detect",
         "weights": "coco",
         "source": "image.jpg",
@@ -135,14 +143,14 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
             return iter([Result("runs/track/exp/video.mp4"), Result("runs/track/exp/video.mp4")])
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    fake_module.NITID = FakeDFINE
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
     main(
         [
-            "dfine",
+            "nitid",
             "track",
-            "model=dfine_s",
+            "model=nitid1s",
             "source=video.mp4",
             "conf=0.5",
             "save=true",
@@ -152,7 +160,7 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
     )
 
     assert observed == {
-        "model": "dfine_s",
+        "model": "nitid1s",
         "task": "detect",
         "weights": "default",
         "source": "video.mp4",
@@ -182,10 +190,10 @@ def test_cli_passes_segment_task_to_model(monkeypatch):
             return []
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    fake_module.NITID = FakeDFINE
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
-    main(["dfine", "predict", "model=dfine_s", "task=segment", "source=image.jpg"])
+    main(["nitid", "predict", "model=nitid1s", "task=segment", "source=image.jpg"])
 
     assert observed["task"] == "segment"
 
@@ -202,12 +210,12 @@ def test_cli_passes_semantic_prediction_options(monkeypatch):
             return []
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    fake_module.NITID = FakeDFINE
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
     main(
         [
-            "dfine",
+            "nitid",
             "predict",
             "model=semantic.pth",
             "task=semantic",
@@ -232,12 +240,12 @@ def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
             return []
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    fake_module.NITID = FakeDFINE
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
     main(
         [
-            "dfine",
+            "nitid",
             "track",
             "source=0",
             "tracker=botsort",
@@ -262,7 +270,7 @@ def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
     }
 
 
-def test_track_cli_forwards_gstreamer_reconnect_options(monkeypatch):
+def test_track_cli_forwards_gstreamer_source_options(monkeypatch):
     observed = {}
 
     class FakeDFINE:
@@ -274,22 +282,17 @@ def test_track_cli_forwards_gstreamer_reconnect_options(monkeypatch):
             return []
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    fake_module.NITID = FakeDFINE
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
     main(
         [
-            "dfine",
+            "nitid",
             "track",
             "source=rtsp://camera/live",
             "backend=gstreamer",
-            "reconnect=true",
-            "reconnect_initial_delay=0.5",
-            "reconnect_max_delay=10",
-            "reconnect_attempts=4",
             "rtsp_latency=300",
             "rtsp_transport=udp",
-            "hardware_profile=vaapi",
         ]
     )
 
@@ -297,13 +300,8 @@ def test_track_cli_forwards_gstreamer_reconnect_options(monkeypatch):
         "source": "rtsp://camera/live",
         "kwargs": {
             "backend": "gstreamer",
-            "reconnect": True,
-            "reconnect_initial_delay": 0.5,
-            "reconnect_max_delay": 10,
-            "reconnect_attempts": 4,
             "rtsp_latency": 300,
             "rtsp_transport": "udp",
-            "hardware_profile": "vaapi",
             "stream": True,
         },
     }
@@ -325,19 +323,19 @@ def test_track_cli_builds_gstreamer_segment_sink(monkeypatch, capsys):
             return []
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
+    fake_module.NITID = FakeDFINE
     fake_module.GStreamerVideoSink = FakeSink
     monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
     main(
         [
-            "dfine",
+            "nitid",
             "track",
             "source=video.mp4",
             "output=runs/segments",
             "segment_duration=60",
             "output_fps=15",
-            "output_hardware_profile=v4l2",
         ]
     )
 
@@ -346,7 +344,6 @@ def test_track_cli_builds_gstreamer_segment_sink(monkeypatch, capsys):
         "pipeline": None,
         "fps": 15,
         "segment_duration": 60,
-        "hardware_profile": "v4l2",
     }
     assert observed["source"] == "video.mp4"
     assert observed["model_kwargs"] == {"sink": observed["model_kwargs"]["sink"], "stream": True}
@@ -361,125 +358,14 @@ def test_output_options_require_a_destination():
 def test_gstreamer_info_does_not_load_a_model(monkeypatch, capsys):
     monkeypatch.setattr(
         "dfine.gstreamer.inspect_gstreamer_capabilities",
-        lambda: {
-            "opencv_gstreamer": True,
-            "gst_inspect": True,
-            "profiles": {
-                "software": {
-                    "description": "Software path",
-                    "decode": True,
-                    "encode": True,
-                },
-                "vaapi": {
-                    "description": "VA-API path",
-                    "decode": True,
-                    "encode": False,
-                },
-            },
-        },
+        lambda: {"opencv_gstreamer": True, "gst_inspect": False},
     )
 
-    main(["dfine", "gstreamer-info"])
+    main(["nitid", "gstreamer-info"])
 
     output = capsys.readouterr().out
     assert "OpenCV GStreamer: yes" in output
-    assert "software decode=yes encode=yes" in output
-    assert "vaapi" in output and "encode=no" in output
-
-
-def test_onvif_discovery_cli(monkeypatch, capsys):
-    from dfine.onvif import ONVIFDevice
-
-    observed = {}
-
-    def discover(timeout, interface=None):
-        observed.update(timeout=timeout, interface=interface)
-        return [
-            ONVIFDevice(
-                "urn:uuid:camera",
-                ("http://192.0.2.10/onvif/device_service",),
-            )
-        ]
-
-    monkeypatch.setattr("dfine.onvif.discover_onvif_devices", discover)
-    main(["dfine", "onvif", "action=discover", "timeout=1.5", "interface=192.0.2.20"])
-
-    assert observed == {"timeout": 1.5, "interface": "192.0.2.20"}
-    output = capsys.readouterr().out
-    assert "Discovered 1 ONVIF device" in output
-    assert "http://192.0.2.10/onvif/device_service" in output
-
-
-def test_onvif_profiles_and_uri_cli_use_environment_password(monkeypatch, capsys):
-    from dfine.onvif import ONVIFMediaProfile
-
-    observed = []
-
-    class FakeCamera:
-        def __init__(self, host, username=None, password=None, **kwargs):
-            observed.append((host, username, password, kwargs))
-
-        def get_profiles(self):
-            return [ONVIFMediaProfile("main", "Main Stream", "H264", 1920, 1080, 25)]
-
-        def get_stream_uri(self, profile=None):
-            observed.append(("profile", profile))
-            return "rtsp://camera/live"
-
-    monkeypatch.setattr("dfine.onvif.ONVIFCamera", FakeCamera)
-    monkeypatch.setenv("CAMERA_SECRET", "not-printed")
-
-    main(
-        [
-            "dfine",
-            "onvif",
-            "action=profiles",
-            "host=camera.local",
-            "username=operator",
-            "password_env=CAMERA_SECRET",
-        ]
-    )
-    assert observed[0][1:3] == ("operator", "not-printed")
-    assert "Main Stream — H264 1920x1080 25fps" in capsys.readouterr().out
-
-    main(
-        [
-            "dfine",
-            "onvif",
-            "action=uri",
-            "host=camera.local",
-            "profile=main",
-            "password_env=CAMERA_SECRET",
-        ]
-    )
-    assert observed[-1] == ("profile", "main")
-    assert capsys.readouterr().out.strip() == "rtsp://camera/live"
-
-
-def test_onvif_cli_rejects_password_argument_and_missing_host(capsys):
-    with pytest.raises(SystemExit) as password_error:
-        main(["dfine", "onvif", "action=profiles", "host=camera", "password=secret"])
-    assert password_error.value.code == 1
-    assert "password_env" in capsys.readouterr().out
-
-    with pytest.raises(SystemExit) as host_error:
-        main(["dfine", "onvif", "action=uri"])
-    assert host_error.value.code == 1
-    assert "host= is required" in capsys.readouterr().out
-
-
-def test_onvif_cli_reports_protocol_errors_without_traceback(monkeypatch, capsys):
-    from dfine.onvif import ONVIFError
-
-    monkeypatch.setattr(
-        "dfine.onvif.discover_onvif_devices",
-        lambda **kwargs: (_ for _ in ()).throw(ONVIFError("multicast blocked")),
-    )
-    with pytest.raises(SystemExit) as error:
-        main(["dfine", "onvif", "action=discover"])
-
-    assert error.value.code == 1
-    assert capsys.readouterr().out.strip() == "ERROR: multicast blocked"
+    assert "gst-inspect-1.0: no" in output
 
 
 def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
@@ -494,13 +380,13 @@ def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
             return []
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    fake_module.NITID = FakeDFINE
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
     monkeypatch.setenv("CAMERA_RTSP_PASSWORD", "secret-value")
 
     main(
         [
-            "dfine",
+            "nitid",
             "track",
             "source=rtsp://camera/live",
             "backend=gstreamer",
@@ -516,7 +402,7 @@ def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
     with pytest.raises(SystemExit) as error:
         main(
             [
-                "dfine",
+                "nitid",
                 "track",
                 "source=rtsp://camera/live",
                 "rtsp_password=visible",
@@ -525,6 +411,18 @@ def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
     assert error.value.code == 1
     assert "rtsp_password_env" in capsys.readouterr().out
 
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "nitid",
+                "track",
+                "source=rtsp://camera/live",
+                "rtsp_password_env=CAMERA_RTSP_PASSWORD",
+            ]
+        )
+    assert error.value.code == 1
+    assert "rtsp_username= is required" in capsys.readouterr().out
+
 
 def test_track_cli_requires_source(monkeypatch, capsys):
     class FakeDFINE:
@@ -532,11 +430,11 @@ def test_track_cli_requires_source(monkeypatch, capsys):
             pass
 
     fake_module = types.ModuleType("dfine")
-    fake_module.DFINE = FakeDFINE
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
+    fake_module.NITID = FakeDFINE
+    monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
     with pytest.raises(SystemExit) as error:
-        main(["dfine", "track", "model=dfine_s"])
+        main(["nitid", "track", "model=nitid1s"])
 
     assert error.value.code == 1
     assert "source= is required for track" in capsys.readouterr().out
