@@ -188,9 +188,8 @@ def test_gstreamer_pipeline_builder_validates_configuration(tmp_path):
         build_gstreamer_pipeline(tmp_path / "missing.mp4")
 
 
-def test_gstreamer_source_reconnects_and_marks_discontinuity():
-    image_a = np.full((4, 6, 3), 10, dtype=np.uint8)
-    image_b = np.full((4, 6, 3), 20, dtype=np.uint8)
+def test_gstreamer_source_ends_when_a_live_stream_drops():
+    image = np.zeros((4, 6, 3), dtype=np.uint8)
 
     class FakeCapture:
         def __init__(self, reads):
@@ -209,76 +208,16 @@ def test_gstreamer_source_reconnects_and_marks_discontinuity():
         def release(self):
             self.released = True
 
-    captures = [
-        FakeCapture([(True, image_a), (False, None)]),
-        FakeCapture([(True, image_b)]),
-    ]
-    sleeps = []
-    source = GStreamerFrameSource(
-        "rtsp://camera/live",
-        reconnect=True,
-        reconnect_initial_delay=0.25,
-        _capture_factory=lambda pipeline: captures.pop(0),
-        _sleep=sleeps.append,
-    )
+    capture = FakeCapture([(True, image), (False, None), (True, image)])
+    source = GStreamerFrameSource("rtsp://camera/live", _capture_factory=lambda pipeline: capture)
 
-    iterator = iter(source)
-    first = next(iterator)
-    recovered = next(iterator)
-    iterator.close()
+    frames = list(source)
 
-    assert first.metadata.frame_index == 0
-    assert not first.metadata.discontinuity
-    assert recovered.metadata.frame_index == 1
-    assert recovered.metadata.discontinuity
-    assert recovered.metadata.fps == 25.0
-    assert sleeps == [0.25]
-    assert not captures
+    assert [frame.metadata.frame_index for frame in frames] == [0]
+    assert capture.released
 
 
-def test_gstreamer_source_retries_initial_connection_with_bounded_backoff():
-    image = np.zeros((4, 6, 3), dtype=np.uint8)
-
-    class FakeCapture:
-        def __init__(self, opened, reads=()):
-            self.opened = opened
-            self.reads = iter(reads)
-            self.released = False
-
-        def isOpened(self):
-            return self.opened and not self.released
-
-        def read(self):
-            return next(self.reads, (False, None))
-
-        def get(self, prop):
-            return 0.0
-
-        def release(self):
-            self.released = True
-
-    captures = [FakeCapture(False), FakeCapture(False), FakeCapture(True, [(True, image)])]
-    sleeps = []
-    source = GStreamerFrameSource(
-        "rtsp://camera/live",
-        reconnect=True,
-        reconnect_initial_delay=0.1,
-        reconnect_max_delay=0.15,
-        reconnect_attempts=3,
-        _capture_factory=lambda pipeline: captures.pop(0),
-        _sleep=sleeps.append,
-    )
-
-    iterator = iter(source)
-    frame = next(iterator)
-    iterator.close()
-
-    assert frame.metadata.frame_index == 0
-    assert not frame.metadata.discontinuity
-    assert sleeps == [0.1, 0.15]
-
-
-def test_gstreamer_source_reports_exhausted_reconnect_attempts():
+def test_gstreamer_source_reports_a_source_that_cannot_open():
     class ClosedCapture:
         def isOpened(self):
             return False
@@ -287,16 +226,10 @@ def test_gstreamer_source_reports_exhausted_reconnect_attempts():
             pass
 
     source = GStreamerFrameSource(
-        "rtsp://camera/live",
-        reconnect=True,
-        reconnect_initial_delay=0,
-        reconnect_max_delay=0,
-        reconnect_attempts=2,
-        _capture_factory=lambda pipeline: ClosedCapture(),
-        _sleep=lambda delay: None,
+        "rtsp://camera/live", _capture_factory=lambda pipeline: ClosedCapture()
     )
 
-    with pytest.raises(RuntimeError, match=r"after 2 attempt\(s\)"):
+    with pytest.raises(RuntimeError, match="Failed to open GStreamer source"):
         list(source)
 
 

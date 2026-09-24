@@ -5,13 +5,12 @@ nitid can decode video through a GStreamer pipeline while preserving the same
 The backend is opt-in:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 for result in model.track(
     "rtsp://camera/live",
     backend="gstreamer",
-    reconnect=True,
     conf=0.5,
     stream=True,
 ):
@@ -19,11 +18,10 @@ for result in model.track(
 ```
 
 ```bash
-uv run dfine track \
+uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/live \
     backend=gstreamer \
-    reconnect=true \
     conf=0.5
 ```
 
@@ -49,14 +47,18 @@ OpenCV build compiled against the host GStreamer libraries. nitid raises a
 clear runtime error instead of silently falling back to another backend.
 
 A typical Debian/Ubuntu runtime needs GStreamer core plus the base, good, bad,
-ugly, libav, and RTSP plugin sets. The exact packages and hardware plugins
-depend on the target distribution and accelerator.
+ugly, libav, and RTSP plugin sets. The exact packages depend on the target
+distribution.
+
+`nitid gstreamer-info` reports whether the active OpenCV build has GStreamer
+enabled and whether `gst-inspect-1.0` is available.
 
 ## Input forms
 
 ### RTSP
 
-An RTSP URL produces a TCP pipeline with a 200 ms jitter buffer by default:
+An RTSP URL produces a TCP pipeline with a 200 ms jitter buffer, decoded with
+`decodebin`, by default:
 
 ```python
 results = model.predict(
@@ -82,7 +84,7 @@ results = model.predict(
 ```
 
 For CLI use, put the password in an environment variable and pass its name with
-`rtsp_password_env=`, as shown in [CLI usage](cli.md#onvif-cameras). Direct
+`rtsp_password_env=`, as shown in [CLI usage](cli.md#authenticated-rtsp-cameras). Direct
 `rtsp_password=` CLI arguments are rejected because process arguments can be
 visible to other users.
 
@@ -92,9 +94,9 @@ visible to other users.
 results = model.predict("video.mp4", backend="gstreamer", stream=True)
 ```
 
-End-of-stream on a recorded file completes normally and is never reconnected.
-Recorded-file pipelines apply backpressure instead of dropping decoded frames,
-so every source frame selected by `vid_stride` reaches inference.
+End-of-stream on a recorded file completes normally. Recorded-file pipelines
+apply backpressure instead of dropping decoded frames, so every source frame
+selected by `vid_stride` reaches inference.
 
 ### Webcam
 
@@ -124,7 +126,6 @@ results = model.track(
     "camera-1",
     backend="gstreamer",
     gst_pipeline=pipeline,
-    reconnect=True,
     stream=True,
 )
 ```
@@ -132,27 +133,6 @@ results = model.track(
 If the supplied pipeline already contains `appsink`, it must emit three-channel
 BGR frames. Pipelines are parsed by GStreamer directly; they are not executed
 through a shell.
-
-## Reconnection semantics
-
-Reconnection is available for live stream and webcam modes:
-
-| Option | Default | Meaning |
-|---|---:|---|
-| `reconnect` | `False` | Reopen the pipeline after an open/read failure. |
-| `reconnect_initial_delay` | `1.0` | Delay before the first retry, in seconds. |
-| `reconnect_max_delay` | `30.0` | Maximum exponential-backoff delay. |
-| `reconnect_attempts` | unlimited | Retry limit per failure; `0` disables retries. |
-
-Frame indexes remain increasing across a recovered connection. The first
-emitted frame after recovery has `FrameMetadata.discontinuity=True`. The active
-tracker observes that marker and creates a fresh backend, preventing IDs from
-leaking across an unknown camera gap.
-
-Closing the source or closing a streaming result generator releases the active
-capture. A close request also interrupts reconnect backoff. Depending on the
-platform plugin, an in-progress blocking network read may return only after the
-plugin's own timeout.
 
 ## Annotated output
 
@@ -165,7 +145,7 @@ queue to favor current frames over growing latency.
 ### Segmented recording
 
 ```python
-from dfine import GStreamerVideoSink
+from nitid import GStreamerVideoSink
 
 sink = GStreamerVideoSink(
     "runs/segments/camera-1",
@@ -175,7 +155,6 @@ sink = GStreamerVideoSink(
 for result in model.track(
     "rtsp://camera/input",
     backend="gstreamer",
-    reconnect=True,
     stream=True,
     sink=sink,
 ):
@@ -190,11 +169,10 @@ the destination ends in `.mp4`, its stem becomes the segment prefix instead:
 The equivalent CLI command is:
 
 ```bash
-uv run dfine track \
+uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/input \
     backend=gstreamer \
-    reconnect=true \
     output=runs/segments/camera-1 \
     segment_duration=60
 ```
@@ -219,7 +197,7 @@ publishing server.
 CLI:
 
 ```bash
-uv run dfine track model=nitid1s task=detect source=video.mp4 \
+uv run nitid track model=nitid1s task=detect source=video.mp4 \
     output=rtsp://media-server/nitid output_rtsp_transport=tcp
 ```
 
@@ -231,13 +209,13 @@ Without `segment_duration`, a local destination creates one MP4:
 sink = GStreamerVideoSink("runs/annotated.mp4")
 ```
 
-For another protocol, container, or hardware stack, supply the pipeline after
-or including `appsrc`:
+For another protocol or container, supply the pipeline after or including
+`appsrc`:
 
 ```python
 sink = GStreamerVideoSink(
     pipeline=(
-        "appsrc format=time ! videoconvert ! vaapih264enc "
+        "appsrc format=time ! videoconvert ! x264enc tune=zerolatency "
         "! h264parse ! mpegtsmux ! udpsink host=127.0.0.1 port=5000"
     )
 )
@@ -250,57 +228,8 @@ the shell passes each `key=value` expression as one argument.
 The built-in output pipelines use `x264enc`, `h264parse`, MP4/RTSP elements,
 and a four-frame leaky queue. Required plugins must be installed on the target.
 Closing the result generator closes the sink and finalizes the current MP4
-fragment.
-
-## Hardware decoding
-
-nitid provides named H.264 codec profiles:
-
-| Profile | Decode elements | Encode elements | Intended platform |
-|---|---|---|---|
-| `software` | `avdec_h264` | `x264enc` | Portable CPU baseline |
-| `vaapi` | `vah264dec` or `vaapih264dec` | `vah264enc` or `vaapih264enc` | Intel/AMD VA-API |
-| `v4l2` | `v4l2h264dec` | `v4l2h264enc` | Linux V4L2 M2M |
-| `nvidia` | `nvh264dec` | `nvh264enc` | NVIDIA desktop GStreamer |
-| `jetson` | `nvv4l2decoder` | `nvv4l2h264enc` | NVIDIA Jetson |
-
-Inspect the active OpenCV build and installed elements:
-
-```bash
-dfine gstreamer-info
-```
-
-Decode and encode are reported separately because a host can support only one
-direction. Selecting an unavailable profile raises an error naming the missing
-elements; there is no implicit software fallback.
-
-Apply a profile to automatic H.264 RTSP ingest:
-
-```bash
-dfine track \
-    model=nitid1s task=detect \
-    source=rtsp://camera/live \
-    backend=gstreamer \
-    hardware_profile=vaapi \
-    reconnect=true
-```
-
-Apply a potentially different profile to output:
-
-```bash
-dfine track \
-    model=nitid1s task=detect \
-    source=rtsp://camera/live \
-    backend=gstreamer \
-    hardware_profile=vaapi \
-    output=runs/segments/camera \
-    segment_duration=60 \
-    output_hardware_profile=vaapi
-```
-
-Named input profiles intentionally cover H.264 RTSP only. Containers, files,
-H.265, unusual memory layouts, and vendor plugin variants should use an
-explicit `gst_pipeline`. A custom pipeline cannot also select a named profile.
+fragment. Closing the source or a streaming result generator also releases the
+active capture.
 
 ## GStreamer container
 
@@ -310,12 +239,11 @@ with:
 - an OpenCV binding compiled with `CAP_GSTREAMER`;
 - GStreamer base/good/bad/ugly/libav plugins;
 - software H.264 decode and encode;
-- VA-API plugins, Mesa drivers, and diagnostic tools;
 - a non-root runtime user and locked Python dependencies.
 
 The image constrains NumPy to the 1.x ABI after the locked sync because
 Debian's `python3-opencv` extension is built against that ABI. It is a
-media/software/VA-API baseline and intentionally does not install the optional
+software media baseline and intentionally does not install the optional
 `trackers` package: `trackers` 2.5 requires NumPy 2, so it cannot share this
 system-OpenCV environment safely.
 
@@ -329,36 +257,22 @@ docker build -f Dockerfile.gstreamer -t nitid-gstreamer .
 docker run --rm nitid-gstreamer
 ```
 
-For Intel/AMD VA-API on Linux:
-
-```bash
-docker run --rm \
-    --device /dev/dri:/dev/dri \
-    nitid-gstreamer \
-    dfine gstreamer-info
-```
-
-The optional Compose service supplies `/dev/dri` and host video/render group
-IDs:
+The optional Compose service adds the host `video` group ID:
 
 ```bash
 VIDEO_GID=$(getent group video | cut -d: -f3) \
-RENDER_GID=$(getent group render | cut -d: -f3) \
 docker compose --profile gstreamer run --rm nitid-gstreamer
 ```
 
-Add `/dev/video0` as a device when using a V4L2 camera. NVIDIA desktop and
-Jetson profiles require the vendor container runtime and GStreamer plugins;
-derive a target-specific image from the appropriate NVIDIA base rather than
-assuming the generic Debian image contains them.
+Add `/dev/video0` as a device when using a V4L2 camera.
 
 ## Current boundary
 
-This backend covers decode, RTSP reconnect, bounded buffering, timestamps,
-discontinuity propagation, annotated RTSP publishing, and segmented recording.
-It also provides validated codec profiles, a software/VA-API container
-baseline, and ONVIF discovery/profile resolution. Vendor-specific
-NVIDIA/Jetson images remain later deployment stages.
+This backend covers software decode, bounded buffering, timestamps, annotated
+RTSP publishing, and segmented recording, with a software container baseline.
+It does not reconnect: when a live source stops delivering frames, iteration
+ends. Hardware codecs are not selected automatically; an explicit
+`gst_pipeline=` or `output_pipeline=` can still name any installed element.
 
 `save=True` continues to use nitid's existing OpenCV output; the GStreamer
 output options are independent and can be used alone.

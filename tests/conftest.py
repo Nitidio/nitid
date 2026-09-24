@@ -9,7 +9,29 @@ tiny_yolo_dataset — minimal synthetic YOLO dataset using images/train + labels
 tiny_yolo_splitfirst_dataset — minimal synthetic YOLO dataset using train/images + train/labels.
 """
 
+import contextlib
+
 import pytest
+
+# Every checkpoint fixture below builds a model from random weights. Left
+# unseeded, each run — and each CI machine — drew a different model, and some
+# draws collapse all of the decoder's queries onto identical logits. Identical
+# logits make the postprocessor's top-k scores exactly tied, and an exact tie
+# has no defined winner: torch and ONNX Runtime may each keep a different
+# query, so the export parity tests ended up comparing two equally valid but
+# different instance sets and failed at random. Pinning the draw keeps the
+# fixtures on a known non-degenerate model.
+_FIXTURE_SEED = 1
+
+
+@contextlib.contextmanager
+def _seeded(seed: int = _FIXTURE_SEED):
+    """Draw model weights from a fixed seed, leaving the global RNG as it was."""
+    import torch
+
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(seed)
+        yield
 
 
 @pytest.fixture(scope="session")
@@ -31,7 +53,8 @@ def tiny_checkpoint(tmp_path_factory):
     cfg["DFINETransformer"]["num_denoising"] = 0
     cfg["HybridEncoder"]["depth_mult"] = 0.1
 
-    model = build_model(cfg)
+    with _seeded():
+        model = build_model(cfg)
     model.eval()
 
     names = {i: f"class_{i}" for i in range(80)}
@@ -54,7 +77,8 @@ def tiny_segment_checkpoint(tmp_path_factory):
     cfg["DFINETransformer"]["num_queries"] = 10
     cfg["DFINETransformer"]["num_denoising"] = 0
     cfg["HybridEncoder"]["depth_mult"] = 0.1
-    model = build_model(cfg).eval()
+    with _seeded():
+        model = build_model(cfg).eval()
     names = {i: f"class_{i}" for i in range(80)}
     checkpoint_dir = tmp_path_factory.mktemp("segment_checkpoints")
     checkpoint_path = checkpoint_dir / "tiny_dfine_segment.pth"
@@ -71,7 +95,8 @@ def tiny_semantic_checkpoint(tmp_path_factory):
 
     config = make_model_config("dfine_n", task="semantic", num_classes=3, image_size=(64, 64))
     config["HybridEncoder"]["depth_mult"] = 0.1
-    model = build_model(config).eval()
+    with _seeded():
+        model = build_model(config).eval()
     names = {0: "background", 1: "road", 2: "vehicle"}
     checkpoint_dir = tmp_path_factory.mktemp("semantic_checkpoints")
     checkpoint_path = checkpoint_dir / "tiny_dfine_semantic.pth"
@@ -89,7 +114,8 @@ def tiny_pose_checkpoint(tmp_path_factory):
     config = make_pose_config("detrpose_n")
     config["DETRPoseDecoder"]["num_queries"] = 10
     config["HybridEncoder"]["depth_mult"] = 0.1
-    model = build_model(config).eval()
+    with _seeded():
+        model = build_model(config).eval()
     checkpoint_dir = tmp_path_factory.mktemp("pose_checkpoints")
     checkpoint_path = checkpoint_dir / "tiny_detrpose.pth"
     save_checkpoint(checkpoint_path, model, config, {0: "person"})

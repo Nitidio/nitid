@@ -1,18 +1,41 @@
-# Welcome to nitid
+# nitid
 
-**nitid** is an Ultralytics-style library for DETR-style detection, segmentation, pose, and oriented-box models.
+![nitid](assets/brand/nitid-logo-on-light.png#only-light)
+![nitid](assets/brand/nitid-logo-on-dark.png#only-dark)
 
-It provides a familiar API for inference, training, validation, export, and deployment while preserving D-FINE's performance.
+**Object detection that's actually open source.**
 
-## Features
+Train, validate, export and run vision models. The code and our pretrained
+weights are released under the Apache License 2.0, patent grant included, so you
+can ship them inside your own product without opening your code or paying for a
+license.
 
-- Ultralytics-style Python API
-- Simple command-line interface
-- Detection, instance segmentation, semantic segmentation, pose, and oriented bounding box inference
-- Fine-tuning and validation for boxes, masks, dense semantic maps, COCO keypoints, and rotated boxes
-- ONNX, OpenVINO IR, TorchScript, and TensorRT export where supported by task
-- FastAPI web application
-- Self-contained wrapped checkpoints
+*nitid*, from Latin *nitidus*: clear, transparent, precise. **No AGPL, no
+surprises.**
+
+## Why nitid?
+
+- **Edge first.** The models are designed to run at the edge, on the hardware
+  next to your cameras, not only on a datacenter GPU.
+- **Self-contained checkpoints.** Every checkpoint carries the config and the
+  class names it needs to be reproduced and checked.
+- **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
+  conversion step.
+- **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same
+  checkpoint.
+
+## One library, three tasks, five operations
+
+Object detection, instance segmentation and semantic segmentation, through one
+API: `predict`, `track`, `train`, `val` and `export`.
+
+- Python API and command line
+- Automatic download of supported official checkpoints
+- Fine-tuning and validation for boxes, masks and dense semantic maps
+- Tracking and GStreamer/RTSP ingest
+
+Pose estimation and oriented bounding boxes are supported too, outside the three
+headline tasks — see the [quickstart](quickstart.md).
 
 ## Getting Started
 
@@ -28,13 +51,13 @@ If you're new to nitid, follow these guides in order:
 - [Quick Start](quickstart.md)
 - [Fine-tuning](fine_tuning.md)
 - [Export](export.md)
-- [Web Application](web_app.md)
 - [API Reference](api_reference.md)
 - [Troubleshooting](troubleshooting.md)
 
 ## Project Direction
 
 - [Roadmap](roadmap.md) — what is in scope, what is not, and how the phases are sequenced
+- [Brand](brand.md) — logo, palette, typography, and what the project announces
 - [Decision records](adr/index.md) — why the project is built the way it is
 
 ## For Contributors

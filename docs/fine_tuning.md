@@ -293,9 +293,26 @@ needed when you want a *different* ordering than sorted order.
 ### Python API
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1l", task="detect")
+
+# The default recipe follows the task-native training path. For detection this
+# uses D-FINE-style defaults, matching, losses, and augmentations.
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    recipe="default",
+)
+
+# DEIM is available for object detection only. It keeps nitid's dataset
+# auto-detection/conversion path, then switches detection training to DEIM's
+# MAL classification loss, flat-cosine schedule, Mosaic policy, and batch MixUp.
+deim_metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    recipe="deim",
+)
 
 # Instance segmentation uses the same training API and mask-aware annotations.
 segmenter = NITID("nitid1s", task="segment")
@@ -343,6 +360,7 @@ metrics = model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
     batch=16,
+    recipe="default",
     lr0=1e-4,
     lrf=0.01,       # final lr = lr0 * lrf
     cos_lr=True,
@@ -378,6 +396,25 @@ print(metrics)
 #   ],
 # }
 ```
+
+### Training recipes
+
+`recipe="default"` is the task-native mode and is available for detection,
+instance segmentation, semantic segmentation, pose, and OBB. For detection it
+uses nitid's D-FINE training path: D-FINE matching and losses, D-FINE-style
+detection augmentations, and model-size defaults when you omit values such as
+`epochs`, `batch`, `lr0`, `amp`, or `ema`.
+
+`recipe="deim"` is detection-only. It keeps nitid's normal dataset handling, so
+COCO JSON, YOLO TXT, and automatic conversion still work through the same
+dataset YAMLs. The recipe then switches detection training to DEIM's MAL
+classification loss, flat-cosine learning-rate schedule, recipe Mosaic policy,
+and batch-level MixUp. Calling it for segmentation, semantic segmentation, pose,
+or OBB raises a clear error.
+
+Explicit arguments always win over recipe defaults. For example, passing
+`mosaic=0.0` disables Mosaic even under `recipe="deim"`, and passing `batch=8`
+uses that batch size instead of the model-size recipe value.
 
 With the default `save_period=1`, checkpoints are saved after every epoch to
 `runs/train/my_experiment/epoch{N}.pth`. Use a larger interval or `-1` to reduce
@@ -459,7 +496,7 @@ uv sync --extra wandb
 Enable logging directly from `train()`, in the same style as Ultralytics:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 model.train(
@@ -544,7 +581,7 @@ uv sync --extra mlflow
 Enable MLflow directly on training:
 
 ```python
-from dfine import NITID
+from nitid import NITID
 
 model = NITID("nitid1s", task="detect")
 model.train(
@@ -638,7 +675,7 @@ this flag at safe lifecycle boundaries and finalizes the run cleanly.
 ### CLI
 
 ```bash
-uv run dfine train \
+uv run nitid train \
     model=nitid1l task=detect \
     data=configs/datasets/my_dataset.yml \
     epochs=50 \
@@ -654,12 +691,13 @@ Use this table as the authoritative reference for train-time arguments.
 | Parameter | Type | Default | Valid range / values | Description |
 |-----------|------|---------|----------------------|-------------|
 | `data` | `str` | required | path to a dataset YAML | Ultralytics-style dataset config describing `path`, split locations, class count, and names. |
-| `epochs` | `int` | `50` | `>= 1` | Number of full passes over the training set. |
+| `recipe` | `str` | `"default"` | `"default"`, `"deim"` | Training recipe. `"default"` uses each task's native path. `"deim"` is detection-only and enables DEIM's MAL loss, flat-cosine schedule, Mosaic policy, and batch MixUp while keeping nitid's dataset auto-detection/conversion. |
+| `epochs` | `int` | recipe/task dependent | `>= 1` | Number of full passes over the training set. Detection defaults follow official D-FINE/DEIM model-size recipes when omitted. |
 | `imgsz` | `int` | `640` | `>= 1` (`>= 256` for OBB) | Square training resolution applied during preprocessing. |
-| `batch` | `int` | `16` | positive integer | Images per batch. Choose this explicitly for the available device memory. |
-| `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
-| `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier. Both linear decay and cosine decay end at `lr0 * lrf`. |
-| `cos_lr` | `bool` | `False` | `True`, `False` | Switches the main schedule from linear decay to cosine decay. |
+| `batch` | `int` | recipe/task dependent | positive integer | Images per batch. Choose this explicitly for the available device memory. |
+| `lr0` | `float` | recipe/task dependent | `> 0` | Initial learning rate passed to the optimizer. |
+| `lrf` | `float` | recipe/task dependent | `> 0` | Final learning-rate multiplier. Linear and cosine decay end at `lr0 * lrf`; DEIM uses it as the flat-cosine minimum-LR multiplier. |
+| `cos_lr` | `bool` | `False` | `True`, `False` | Switches the non-DEIM main schedule from linear decay to cosine decay. DEIM uses its own flat-cosine schedule. |
 | `warmup_epochs` | `float` | `0.0` | `>= 0` | Number of warmup epochs before the main LR schedule begins. Fractional values are allowed. |
 | `warmup_momentum` | `float` | `0.8` | typically `0 <= x <= 1` | Starting momentum or Adam/AdamW beta1 used during warmup. It linearly ramps to the optimizer's target value. |
 | `warmup_bias_lr` | `float` | `0.1` | `>= 0` | Starting learning rate for bias parameters during warmup. Non-bias parameters warm up from `0.0`. |
@@ -668,8 +706,8 @@ Use this table as the authoritative reference for train-time arguments.
 | `weight_decay` | `float` | `1e-4` | `>= 0` | Weight decay applied to non-bias parameters. |
 | `clip_grad` | `float` | `0.1` | `>= 0` | Maximum gradient norm; `0` disables clipping. |
 | `resume` | `bool` | `False` | `True`, `False` | Restore the latest run state from `project/name/last.pth`. |
-| `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
-| `ema` | `bool` | `False` | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. |
+| `amp` | `bool` | recipe/task dependent | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. Official detection recipes enable AMP by default when omitted. |
+| `ema` | `bool` | recipe/task dependent | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. Official detection recipes enable EMA by default when omitted. |
 | `ema_decay` | `float` | `0.9999` | usually `0 < x < 1` | Target EMA smoothing factor. The effective decay ramps over the first 1,000 optimizer updates so newly initialized custom heads are not stale during early validation. |
 | `device` | `str \| None` | `None` | e.g. `"cpu"`, `"cuda"`, `"cuda:0"` | Optional override for the training device. If omitted, training uses the device selected when the `DFINE` object was created. |
 | `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
@@ -692,7 +730,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `fraction` | `float` | `1.0` | `(0, 1]` | Deterministically sample this fraction of training images. |
 | `accumulate` | `int` | `1` | `>= 1` | Accumulate gradients across batches before optimizer and EMA steps. |
 | `multi_scale` | `bool` | `False` | `True`, `False` | Randomly resize batches from roughly 0.5× to 1.5× `imgsz`, in multiples of 32. |
-| `augment` | `bool` | `True` | `True`, `False` | Enable box-aware training augmentation. Letterbox preprocessing remains active when disabled. |
+| `augment` | `bool` | `True` | `True`, `False` | Enable recipe-aware box transforms for detection and task-native transforms for other tasks. |
 | `fliplr` | `float` | `0.5` | `[0, 1]` | Probability of a horizontal flip. |
 | `scale` | `float` | `0.5` | `[0, 1)` | Maximum random isotropic scale gain. |
 | `translate` | `float` | `0.1` | `[0, 1]` | Maximum translation as a fraction of image width/height. |
@@ -700,8 +738,8 @@ Use this table as the authoritative reference for train-time arguments.
 | `hsv_h` | `float` | `0.015` | `[0, 0.5]` | Hue jitter gain. |
 | `hsv_s` | `float` | `0.7` | `[0, 1]` | Saturation jitter gain. |
 | `hsv_v` | `float` | `0.4` | `[0, 1]` | Brightness/value jitter gain. |
-| `mosaic` | `float` | `0.0` | `[0, 1]` | Mosaic probability. Not supported for semantic, pose, or OBB. |
-| `mixup` | `float` | `0.0` | `[0, 1]` | MixUp probability. Not supported for semantic, pose, or OBB. |
+| `mosaic` | `float` | `0.0` (`0.5` in DEIM when omitted) | `[0, 1]` | Mosaic probability. Detection uses recipe-aware Mosaic; semantic, pose, and OBB do not support it. |
+| `mixup` | `float` | `0.0` | `[0, 1]` | Dataset-level MixUp probability. DEIM detection additionally uses recipe-controlled batch MixUp; semantic, pose, and OBB do not support dataset-level MixUp. |
 | `close_mosaic` | `int` | `10` | `>= 0` | Disable mosaic for the final N epochs; zero keeps it active. |
 | `time` | `float \| None` | `None` | positive hours or `None` | Training duration in hours. When supplied, this overrides `epochs` as the loop's stopping limit. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
@@ -709,16 +747,19 @@ Use this table as the authoritative reference for train-time arguments.
 | `wandb` | `bool \| dict` | `False` | `True`, `False`, or WandB options | Enables the optional Weights & Biases integration. |
 | `mlflow` | `bool \| dict` | `False` | `True`, `False`, or MLflow options | Enables the optional Ultralytics-style MLflow integration. |
 
-Images are first resized with aspect ratio preserved and padded to `imgsz`. Every
-geometric transform operates on absolute `xyxy` boxes, clips them to the visible
-image, removes empty boxes and their labels, and only then converts targets to the
-normalized `cxcywh` format expected by D-FINE. The sample/epoch seed makes transform
-choices independent of DataLoader worker scheduling. All resolved values above are
-written to `args.yaml` and restored from `last.pth` on resume.
+Detection recipes use a D-FINE/DEIM-style transform profile: photometric
+distortion, zoom-out, IoU crop, horizontal flip, and final square resizing.
+Mosaic is applied before that profile when enabled. Every geometric transform
+operates on absolute `xyxy` boxes, clips them to the visible image, removes empty
+boxes and labels, and only then converts targets to the normalized `cxcywh`
+format expected by the model. The sample/epoch seed makes transform choices
+independent of DataLoader worker scheduling.
 
-Mosaic and MixUp are implemented as opt-in benchmark candidates rather than
-selected defaults. Validate them against the unaugmented baseline on the target
-dataset before enabling them by default.
+`recipe="deim"` enables its recipe Mosaic default and batch-level MixUp for
+detection. Without DEIM, Mosaic and dataset-level MixUp remain explicit opt-ins.
+Mosaic and MixUp are not supported for semantic segmentation, pose, or OBB. All
+resolved values above are written to `args.yaml` and restored from `last.pth` on
+resume.
 
 ## Resume training
 
@@ -875,7 +916,7 @@ print(metrics)
 ### CLI
 
 ```bash
-uv run dfine val \
+uv run nitid val \
     model=nitid1l task=detect \
     data=configs/datasets/my_dataset.yml \
     conf=0.001
