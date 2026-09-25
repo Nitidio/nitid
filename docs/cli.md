@@ -7,7 +7,6 @@ arguments:
 uv run nitid predict model=nitid1s task=detect source=image.jpg conf=0.5
 uv run nitid predict model=nitid1s task=segment source=image.jpg conf=0.5
 uv run nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
-uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 ## Before using the command
@@ -104,7 +103,7 @@ uv run nitid download model=nitid1s task=detect
 
 Supported nitid model names are `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`,
 and `nitid1x`. Select the task explicitly with `task=detect`, `task=segment`,
-`task=semantic`, `task=pose`, or `task=obb`. Select a weight variant explicitly
+or `task=semantic`. Select a weight variant explicitly
 when needed:
 
 ```bash

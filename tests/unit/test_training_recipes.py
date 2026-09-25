@@ -34,10 +34,10 @@ def test_normalize_training_recipe_rejects_dfine_alias() -> None:
 
 
 def test_resolve_training_recipe_defaults_to_task_native_path() -> None:
-    recipe = resolve_training_recipe("default", task="pose")
+    recipe = resolve_training_recipe("default", task="segment")
 
     assert recipe.name == "default"
-    assert recipe.task == "pose"
+    assert recipe.task == "segment"
     assert recipe.implemented is True
 
 
@@ -51,7 +51,7 @@ def test_resolve_training_recipe_recognizes_deim_detection_contract() -> None:
 
 def test_resolve_training_recipe_rejects_deim_for_non_detection_tasks() -> None:
     with pytest.raises(ValueError, match="detection-only"):
-        resolve_training_recipe("deim", task="pose")
+        resolve_training_recipe("deim", task="segment")
 
 
 @pytest.mark.parametrize(
@@ -85,7 +85,7 @@ def test_default_train_options_uses_official_detection_size_defaults() -> None:
 
 
 def test_default_train_options_keeps_legacy_defaults_for_non_detection_tasks() -> None:
-    recipe = resolve_training_recipe("default", task="pose")
+    recipe = resolve_training_recipe("default", task="segment")
     defaults = default_train_options(recipe=recipe, config={})
 
     assert defaults.epochs == 50

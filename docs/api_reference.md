@@ -60,14 +60,12 @@ checkpoint, or use a registry model name and task.
 detector = NITID("nitid1s", task="detect", device="cuda:0")
 segmenter = NITID("nitid1s", task="segment", device="cuda:0")
 semantic = NITID("nitid1s", task="semantic", device="cuda:0")
-pose = NITID("nitid1s", task="pose", device="cuda:0")
-obb = NITID("nitid1s", task="obb", device="cuda:0")
 ```
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
 | `model`   | `str \| Path` | `"nitid1l"` | Checkpoint path or registry model name such as `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`, or `nitid1x` |
-| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, `"semantic"` (`"sem_seg"` alias), `"pose"`, or `"obb"`. Must match an explicit checkpoint's embedded task. |
+| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, or `"semantic"` (`"sem_seg"` alias). Must match an explicit checkpoint's embedded task. |
 | `weights` | `str` | `"default"` | Official weight variant for the selected model/task. Do not combine a non-default value with a checkpoint path. |
 | `backend` | `str` | `"torch"` | `"torch"` (PyTorch, CPU/CUDA) or `"openvino"` (OpenVINO Runtime, CPU/Intel iGPU/Intel NPU). Changes what `device` means — see below. |
 | `device`  | `str \| int \| None` | `None` | For `backend="torch"`: a PyTorch device selector (`"cuda"`, `"cpu"`, `"cuda:N"`); omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. For `backend="openvino"`: an OpenVINO device string (`"CPU"`, `"GPU"` for Intel integrated GPU, `"NPU"`), or `"auto"`/omit to prefer NPU, then GPU, then CPU. |
@@ -95,8 +93,7 @@ for the requested device the first time `predict()`/`track()` is called at a
 given `imgsz`; the compiled model is cached per `imgsz` on the instance, so
 only the first call at a new `imgsz` pays the compile cost. As with the torch
 backend, `imgsz` must match the checkpoint's `eval_spatial_size` (usually
-`640`) for tasks other than `"obb"` — the decoder's anchors are static for a
-given spatial size.
+`640`) — the decoder's anchors are static for a given spatial size.
 
 `backend="openvino"` is inference-only: `train()` and `val()` raise a clear
 error, and every other method (`export()`, `info()`) is unaffected by it —
@@ -181,9 +178,7 @@ playback stays close to the original duration.
 | `path`     | `str`           | Source path or descriptor |
 | `names`    | `dict[int,str]` | Class index → name |
 | `boxes`    | `Boxes \| None` | Detection boxes |
-| `obb`      | `OBB \| None` | Oriented boxes for `task="obb"` |
 | `masks`    | `Masks \| None` | Full-resolution instance masks for `task="segment"` |
-| `keypoints` | `Keypoints \| None` | Per-instance keypoints for `task="pose"` |
 | `semantic` | `SemanticMask \| None` | Original-resolution class map for `task="semantic"`; alias of `semantic_mask` |
 | `semantic_save_path` | `str \| None` | Lossless class-ID PNG written under `masks/` when semantic prediction uses `save=True` |
 | `save_path` | `str \| None`  | Saved annotated image or video path when `save=True` |
@@ -207,12 +202,6 @@ r.crop(save_dir="crops")  # save crops into class-name folders
 r.masks.data       # uint8 [N, H, W], aligned with r.boxes
 r.masks.xy         # absolute polygon coordinates
 r.masks.xyn        # normalized polygon coordinates
-r.keypoints.xy     # float [N, K, 2], pose only
-r.keypoints.conf   # optional float [N, K], pose only
-r.obb.xywhr        # float [N, 5], OBB only: cx, cy, w, h, angle
-r.obb.xyxyxyxy     # float [N, 8], OBB only: four polygon corners
-r.obb.conf         # float [N], OBB confidence
-r.obb.cls          # int [N], OBB class IDs
 len(r)              # number of detections
 ```
 
@@ -258,8 +247,7 @@ class_id x_center y_center width height
 
 For detection, box values are normalized from `0` to `1`. For instance
 segmentation, each line contains the class followed by normalized polygon
-coordinates. For OBB, each line contains class plus normalized four-corner
-YOLO-OBB coordinates. Use `save_conf=True` to append the confidence score:
+coordinates. Use `save_conf=True` to append the confidence score:
 
 ```python
 r.save_txt("predictions.txt", save_conf=True)
@@ -554,8 +542,6 @@ metrics = model.train(
 #   "mAP50": ...,
 #   "mask_mAP50-95": ...,  # segment task
 #   "mask_mAP50": ...,     # segment task
-#   "pose_mAP50-95": ...,  # pose task
-#   "pose_mAP50": ...,     # pose task
 #   "mAP50-95": ...,
 #   "history": [{...}, ...],
 # }
@@ -597,7 +583,7 @@ Training controls added to the public API:
 | `translate` | `float = 0.1` | Random translation gain. |
 | `crop` | `float = 0.0` | Crop probability and maximum edge fraction. |
 | `hsv_h`, `hsv_s`, `hsv_v` | `0.015`, `0.7`, `0.4` | Hue, saturation, and brightness jitter gains. |
-| `mosaic`, `mixup` | `float = 0.0` (`mosaic=0.5` in DEIM when omitted) | Detection probabilities. `recipe="deim"` also enables recipe-controlled batch MixUp. Not supported for semantic, pose, or OBB. |
+| `mosaic`, `mixup` | `float = 0.0` (`mosaic=0.5` in DEIM when omitted) | Detection probabilities. `recipe="deim"` also enables recipe-controlled batch MixUp. Not supported for semantic segmentation. |
 | `close_mosaic` | `int = 10` | Turn mosaic off for the final N epochs. |
 | `time` | `float \| None = None` | Training duration in hours; when set, it overrides `epochs`. |
 | `save_dir` | `str \| Path \| None = None` | Exact requested run directory. |
@@ -657,10 +643,7 @@ trainable model. Repeated exports reuse the valid deployed copy when possible;
 training or loading different weights invalidates that cache automatically.
 
 Semantic ONNX/OpenVINO exports have one output named `semantic_logits` with
-shape `[B, C, H, W]`. Apply softmax and argmax in the consuming runtime. Pose
-ONNX/OpenVINO exports return `(labels, boxes, scores, keypoints)`. OBB exports
-return `(labels, boxes, scores)`, with OBB boxes shaped `[B, topk, 5]` in
-`cx, cy, w, h, angle` format.
+shape `[B, C, H, W]`. Apply softmax and argmax in the consuming runtime.
 
 | Argument    | Default  | Description |
 |-------------|----------|-------------|
@@ -681,7 +664,7 @@ return `(labels, boxes, scores)`, with OBB boxes shaped `[B, topk, 5]` in
 ```python
 model.names   # {0: "person", 1: "bicycle", ...}  — class index → name
 model.device  # "cpu" or "cuda:0"                 — device the model lives on
-model.task    # "detect", "segment", "semantic", "pose", or "obb"
+model.task    # "detect", "segment", or "semantic"
 ```
 
 `names` is the class mapping embedded in the checkpoint.

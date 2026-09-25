@@ -54,16 +54,6 @@ result.save("segmented.jpg")
 
 Segmentation defaults to the official COCO-pretrained mask weights.
 
-For pose estimation, use a DETRPose model name and `task="pose"`:
-
-```python
-pose = NITID("nitid1s", task="pose")
-result = pose.predict("person.jpg", conf=0.25)[0]
-
-keypoints = result.keypoints.xy  # [N, 17, 2] in pixel coordinates
-result.save("pose.jpg")
-```
-
 For dense semantic segmentation, read the original-resolution class map from
 `result.semantic.mask`:
 
@@ -78,17 +68,6 @@ result.save_semantic("class_ids.png")
 
 `save=True` writes an annotated overlay and a lossless class-ID PNG in the
 run's `masks/` directory.
-
-For oriented bounding boxes, use `task="obb"`:
-
-```python
-obb = NITID("nitid1s", task="obb")
-result = obb.predict("aerial.jpg", conf=0.25)[0]
-
-rotated = result.obb.xywhr       # [N, 5]: cx, cy, w, h, angle
-corners = result.obb.xyxyxyxy    # [N, 8]: four polygon corners
-result.save("obb.jpg")
-```
 
 ## Common Workflow
 
@@ -178,7 +157,7 @@ nitid track model=nitid1s task=detect source=video.mp4 \
 ## Working with checkpoints
 
 Official model names such as `nitid1s` with `task="detect"`, `task="segment"`,
-`task="semantic"`, `task="pose"`, or `task="obb"` download the matching supported checkpoint automatically. Training
+or `task="semantic"` download the matching supported checkpoint automatically. Training
 runs save self-contained `.pth` files with the architecture config and class
 names embedded, so a saved checkpoint can be moved and loaded directly:
 
@@ -306,7 +285,7 @@ re-raised.
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
 | TensorRT export | Supported | Supported (see [export.md](export.md)) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, ... | `"detect"`, `"segment"`, `"semantic"`, `"pose"`, or `"obb"` |
+| `model.task` | `"detect"`, `"segment"`, ... | `"detect"`, `"segment"`, or `"semantic"` |
 
 ## CLI
 
@@ -358,7 +337,6 @@ nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50
 nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50 recipe=deim
 nitid val model=nitid1l task=detect data=my_dataset.yml
 nitid export model=nitid1l task=detect format=onnx
-nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 - `train`: fine-tune a model on a supported dataset YAML.

@@ -15,8 +15,6 @@ task.
 | Detection | yes | yes | yes | yes |
 | Instance segmentation | yes | yes | yes | yes |
 | Semantic segmentation | yes | yes | no | no |
-| Pose | yes | yes | no | no |
-| Oriented bounding boxes | yes | yes | no | no |
 
 ## ONNX
 
@@ -35,12 +33,7 @@ uv run nitid export model=nitid1l task=detect format=onnx
 The exported model takes a single input `images [B, 3, H, W]`. Detection returns
 `(labels, boxes, scores)` with the postprocessor in deploy mode baked in.
 Instance segmentation returns `(labels, boxes, scores, masks)`; `masks`
-contains selected mask probabilities aligned with the first three outputs. Pose
-returns `(labels, boxes, scores, keypoints)`, where boxes are derived from the
-selected keypoints for compatibility with common downstream consumers.
-
-OBB exports return `(labels, boxes, scores)`. OBB `boxes` have shape
-`[B, topk, 5]` and use `cx, cy, w, h, angle` in input-image pixels.
+contains selected mask probabilities aligned with the first three outputs.
 
 Semantic segmentation exports return one output, `semantic_logits [B, C, H,
 W]`, at model-input resolution. Apply softmax for per-class probabilities and
@@ -116,8 +109,8 @@ outputs = compiled_model([images])
 OpenVINO export uses the ONNX-related `imgsz`, `batch`, `dynamic`, `simplify`,
 and `opset` arguments. Set `half=True` to compress IR weights to FP16; the
 default preserves FP32 weights to make numerical comparison with ONNX easier.
-Detection, instance segmentation, semantic segmentation, pose, and OBB all
-route through this ONNX-to-IR path.
+Detection, instance segmentation, and semantic segmentation all route through
+this ONNX-to-IR path.
 
 ## TorchScript
 
@@ -174,8 +167,7 @@ model.export(format="tensorrt", dynamic=True, batch=4)
 
 Most checkpoints are calibrated for a fixed evaluation spatial size
 (`eval_spatial_size`, usually `[640, 640]`). Use the checkpoint's configured
-size unless you have intentionally trained/evaluated another size. OBB export
-aligns its internal RiO-DETR anchors to the requested export size.
+size unless you have intentionally trained/evaluated another size.
 
 ```python
 print(model._cfg["eval_spatial_size"])  # [640, 640]

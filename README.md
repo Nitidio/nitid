@@ -56,9 +56,6 @@ What comes with it:
 - Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented
   recording
 
-Pose estimation and oriented bounding boxes are supported too, outside the three
-headline tasks — see the [quickstart](docs/quickstart.md).
-
 ## What "open" means here
 
 The nitid code and our pretrained weights are released under the
@@ -141,9 +138,6 @@ print(result.semantic.mask.shape)  # [H, W]
 result.save_semantic("class_ids.png")
 ```
 
-Pose estimation (`task="pose"`) and oriented bounding boxes (`task="obb"`) work
-the same way; the [quickstart](docs/quickstart.md) has both.
-
 ### Training
 
 ```python
@@ -158,7 +152,7 @@ deim_metrics = model.train(
 )
 ```
 
-See [fine-tuning](docs/fine_tuning.md) for COCO, YOLO, semantic-mask, pose, and OBB dataset formats.
+See [fine-tuning](docs/fine_tuning.md) for COCO, YOLO, and semantic-mask dataset formats.
 
 ### Tracking
 
@@ -234,7 +228,6 @@ print(report.path)
 ```bash
 nitid predict model=nitid1s task=detect source=image.jpg
 nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
-nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
 nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50
 nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
@@ -261,7 +254,7 @@ mapping of the API and the behaviour that differs:
 
 ## Official Models
 
-> 💡 `NITID("nitid1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `nitid1` identifies the model generation. Supported tasks are `detect`, `segment`, `semantic`, `pose`, and `obb`.
+> 💡 `NITID("nitid1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `nitid1` identifies the model generation. Supported tasks are `detect`, `segment`, and `semantic`.
 
 Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 
@@ -329,7 +322,7 @@ required.
 
 ## Acknowledgements
 
-nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), [DETRPose](https://github.com/SebastianJanampa/DETRPose), and RiO-DETR OBB. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
+nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), with smaller portions from RT-DETR, DETR, PaddleDetection, and DEIM. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
 
 ```bibtex
 @article{peng2024dfine,

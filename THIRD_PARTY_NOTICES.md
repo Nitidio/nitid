@@ -22,48 +22,9 @@ The imported code has been modified for nitid, including package-relative
 imports, removal of application-framework dependencies, native task/model
 validation, and composition through nitid's model builder.
 
-## DETRPose pose-estimation architecture
-
-The DETRPose architecture contract and the native pose implementation derived
-from it are based on:
-
-- DETRPose, Copyright (c) 2025 The DETRPose Authors.
-  Source: https://github.com/SebastianJanampa/DETRPose
-  Audited commit: `4e4a842aaa5afb3d13b40224f070bc3e8e8503f6`
-
-DETRPose is provided under the Apache License 2.0. The repository's root
-`LICENSE` file contains the license text. The nitid implementation uses its own
-package, task, device, data, and training abstractions; it does not require the
-upstream repository at runtime.
-
-## RiO-DETR / RT-DETRv2-OBB
-
-The oriented detection components under `dfine/nn/rio/` and the DOTA parsing
-and target conventions in `dfine/utils/data.py` are adapted from the released
-RiO-DETR / RT-DETRv2-OBB framework.
-
-- Source: https://github.com/RicePasteM/RiO-DETR
-- Audited revision: `58dd5300a15296e4db14be5dcc89ebf5235fc064`
-- License: Apache-2.0 (`LICENSE` at that revision).
-
-The released framework retains copyright notices from lyuwenyu, Facebook,
-the D-FINE Authors, the DEIM Authors, and the RT-DETRv4 Authors in its derived
-files. Those notices are preserved in nitid. Some RiO-specific files have no
-separate copyright header; no year or copyright-holder statement has been
-invented for those files.
-
-Nitid modifications include package-relative imports, removal of upstream
-registries, native model/config composition, dataset handling, and integration
-with Nitid's prediction, training, validation, and export interfaces. The
-reference repository is not a runtime dependency. This attribution covers the
-released framework, not the unreleased paper-specific improvements described
-in its README. See `docs/adr/0003-native-rio-detr-obb-integration.md` for the
-source extraction map.
-
 ## DETR
 
-Bounding-box operations in `dfine/nn/rio/box_ops.py`, matching code in
-`dfine/nn/losses/matcher.py` and `dfine/nn/rio/obb_matcher.py`, and the frozen
+Matching code in `dfine/nn/losses/matcher.py` and the frozen
 batch-normalization implementation in `dfine/nn/architecture/common.py`
 contain code derived from DETR, including through RT-DETR and D-FINE.
 
@@ -72,8 +33,8 @@ contain code derived from DETR, including through RT-DETR and D-FINE.
 - Audited revision: `29901c51d7fe8712168b8d0d64351170bc0f83e0`
 - License: Apache-2.0 (`LICENSE` at that revision).
 
-Nitid modifications include package integration, task-specific matching and
-oriented-box handling. Existing upstream notices are retained in the source.
+Nitid modifications include package integration and task-specific matching.
+Existing upstream notices are retained in the source.
 
 ## PaddleDetection HGNetv2
 
@@ -89,23 +50,18 @@ HGNetv2 backbone through D-FINE's PyTorch implementation.
 The PaddlePaddle and D-FINE notices are retained. Nitid modifications include
 native package integration and model construction.
 
-## DEIM and RT-DETRv4 code retained through RiO-DETR
+## DEIM
 
-The OBB decoder, criterion, and utilities in `dfine/nn/rio/` retain upstream
-code and notices from the following projects. This attribution does not imply
-that Nitid offers their complete model families.
+The matchability-aware classification loss (`loss_labels_mal`) in
+`dfine/nn/losses/criterion.py` follows the formulation and code of DEIM. This
+attribution does not imply that Nitid offers the complete DEIM model family.
 
 - DEIM, Copyright (c) 2024 The DEIM Authors. All Rights Reserved.
   The upstream license also states: Copyright (C) INTELLINDUST INFORMATION
   TECHNOLOGY (SHENZHEN) CO., LTD. and all its affiliates.
   Source: https://github.com/ShihuaHuang95/DEIM
   Audited revision: `09d35d53d39ee3145a1e61e3a989b28b9468d1dd`
-- RT-DETRv4, Copyright (c) 2025 The RT-DETRv4 Authors. All Rights Reserved.
-  Source: https://github.com/RT-DETRs/RT-DETRv4
-  Audited revision: `55fefaaed7efe2a5f72d0a18fd4e05965e35c292`
-
-Both upstream `LICENSE` files specify Apache-2.0. Nitid modifications include
-package integration and OBB task adaptation, as noted in the source files.
+- License: Apache-2.0 (`LICENSE` at that revision).
 
 The audited revisions above identify the upstream sources inspected for this
 notice update; they are not claims about the exact commits originally imported.

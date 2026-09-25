@@ -11,9 +11,7 @@ uv sync --extra train
 ## Dataset format
 
 nitid accepts either **COCO JSON** annotations or **YOLO `.txt`** labels for
-detection and instance segmentation. Pose training uses COCO keypoint JSON.
-Oriented bounding box training supports YOLO-OBB, DOTA text labels, and COCO
-polygon JSON.
+detection and instance segmentation.
 
 Semantic segmentation instead uses one dense class-ID PNG mask per image.
 
@@ -38,11 +36,6 @@ my_dataset/
 Annotation files follow the standard [COCO detection format](https://cocodataset.org/#format-data).
 For `task="segment"`, every object must also contain a COCO polygon or RLE
 `segmentation` field.
-
-For `task="pose"`, annotations must follow the COCO keypoints convention:
-`bbox`, `area`, `num_keypoints`, and flattened `keypoints` values
-`[x1, y1, v1, ..., xK, yK, vK]`. The built-in DETRPose models expose the
-single public class `person` and use the COCO-17 keypoint order.
 
 ### YOLO `.txt`
 
@@ -125,88 +118,6 @@ ignore_index: 255
 When image and mask directories do not follow the mirrored `images`/`labels`
 layout, set `train_masks:` and `val_masks:` explicitly. Semantic training does
 not accept instance-only `mosaic`, `mixup`, `classes`, or `single_cls` options.
-
-### Pose keypoints
-
-A compact COCO-keypoints dataset can use the same image split layout:
-
-```text
-my_pose_dataset/
-  images/
-    train/
-    val/
-  annotations/
-    person_keypoints_train.json
-    person_keypoints_val.json
-```
-
-```yaml
-path: /data/my_pose_dataset
-train: images/train
-val: images/val
-train_ann: annotations/person_keypoints_train.json
-val_ann: annotations/person_keypoints_val.json
-
-nc: 1
-names:
-  0: person
-cat_ids:
-  1: 0
-
-kpt_shape: [17, 3]
-flip_idx: [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]
-```
-
-Validation reports both the compatibility box metrics and keypoint metrics:
-`pose_mAP50` and `pose_mAP50-95`.
-
-### Oriented bounding boxes
-
-For `task="obb"`, targets are rotated rectangles. The model returns and
-evaluates boxes as `cx, cy, w, h, angle`.
-
-YOLO-OBB labels use normalized polygon corners:
-
-```text
-my_obb_dataset/
-  images/
-    train/
-    val/
-  labels/
-    train/
-    val/
-```
-
-```text
-class x1 y1 x2 y2 x3 y3 x4 y4
-```
-
-DOTA labels use absolute pixel corners and class names:
-
-```text
-x1 y1 x2 y2 x3 y3 x4 y4 class_name [difficulty]
-```
-
-Use `obb_format: dota` in the YAML for DOTA text labels:
-
-```yaml
-path: /data/my_obb_dataset
-train: images/train
-val: images/val
-obb_format: dota
-names:
-  0: plane
-  1: ship
-```
-
-COCO polygon JSON is also supported. nitid reads the first four polygon points
-from `segmentation`; if a polygon is absent, it falls back to the annotation
-`bbox` as an axis-aligned rotated box.
-
-Current OBB training constraints:
-
-- `imgsz` must be at least `256`.
-- `mosaic` and `mixup` are not supported for OBB yet.
 
 ### Data YAML
 
@@ -331,23 +242,6 @@ semantic_metrics = semantic.train(
 )
 # semantic_metrics["mIoU"], semantic_metrics["pixel_accuracy"]
 
-# Pose models use COCO-keypoint annotations.
-pose = NITID("nitid1s", task="pose")
-pose_metrics = pose.train(
-    data="configs/datasets/my_pose_dataset.yml",
-    epochs=50,
-)
-# pose_metrics["pose_mAP50"], pose_metrics["pose_mAP50-95"]
-
-# OBB models use YOLO-OBB, DOTA text, or COCO polygon annotations.
-obb = NITID("nitid1s", task="obb")
-obb_metrics = obb.train(
-    data="configs/datasets/my_obb_dataset.yml",
-    epochs=50,
-    imgsz=640,
-)
-# obb_metrics["mAP50"], obb_metrics["mAP50-95"]
-
 def print_epoch_end(trainer):
     row = trainer.current_row
     if row is not None:
@@ -400,7 +294,7 @@ print(metrics)
 ### Training recipes
 
 `recipe="default"` is the task-native mode and is available for detection,
-instance segmentation, semantic segmentation, pose, and OBB. For detection it
+instance segmentation, and semantic segmentation. For detection it
 uses nitid's D-FINE training path: D-FINE matching and losses, D-FINE-style
 detection augmentations, and model-size defaults when you omit values such as
 `epochs`, `batch`, `lr0`, `amp`, or `ema`.
@@ -409,8 +303,8 @@ detection augmentations, and model-size defaults when you omit values such as
 COCO JSON, YOLO TXT, and automatic conversion still work through the same
 dataset YAMLs. The recipe then switches detection training to DEIM's MAL
 classification loss, flat-cosine learning-rate schedule, recipe Mosaic policy,
-and batch-level MixUp. Calling it for segmentation, semantic segmentation, pose,
-or OBB raises a clear error.
+and batch-level MixUp. Calling it for instance or semantic segmentation raises a
+clear error.
 
 Explicit arguments always win over recipe defaults. For example, passing
 `mosaic=0.0` disables Mosaic even under `recipe="deim"`, and passing `batch=8`
@@ -693,7 +587,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `data` | `str` | required | path to a dataset YAML | Ultralytics-style dataset config describing `path`, split locations, class count, and names. |
 | `recipe` | `str` | `"default"` | `"default"`, `"deim"` | Training recipe. `"default"` uses each task's native path. `"deim"` is detection-only and enables DEIM's MAL loss, flat-cosine schedule, Mosaic policy, and batch MixUp while keeping nitid's dataset auto-detection/conversion. |
 | `epochs` | `int` | recipe/task dependent | `>= 1` | Number of full passes over the training set. Detection defaults follow official D-FINE/DEIM model-size recipes when omitted. |
-| `imgsz` | `int` | `640` | `>= 1` (`>= 256` for OBB) | Square training resolution applied during preprocessing. |
+| `imgsz` | `int` | `640` | `>= 1` | Square training resolution applied during preprocessing. |
 | `batch` | `int` | recipe/task dependent | positive integer | Images per batch. Choose this explicitly for the available device memory. |
 | `lr0` | `float` | recipe/task dependent | `> 0` | Initial learning rate passed to the optimizer. |
 | `lrf` | `float` | recipe/task dependent | `> 0` | Final learning-rate multiplier. Linear and cosine decay end at `lr0 * lrf`; DEIM uses it as the flat-cosine minimum-LR multiplier. |
@@ -738,8 +632,8 @@ Use this table as the authoritative reference for train-time arguments.
 | `hsv_h` | `float` | `0.015` | `[0, 0.5]` | Hue jitter gain. |
 | `hsv_s` | `float` | `0.7` | `[0, 1]` | Saturation jitter gain. |
 | `hsv_v` | `float` | `0.4` | `[0, 1]` | Brightness/value jitter gain. |
-| `mosaic` | `float` | `0.0` (`0.5` in DEIM when omitted) | `[0, 1]` | Mosaic probability. Detection uses recipe-aware Mosaic; semantic, pose, and OBB do not support it. |
-| `mixup` | `float` | `0.0` | `[0, 1]` | Dataset-level MixUp probability. DEIM detection additionally uses recipe-controlled batch MixUp; semantic, pose, and OBB do not support dataset-level MixUp. |
+| `mosaic` | `float` | `0.0` (`0.5` in DEIM when omitted) | `[0, 1]` | Mosaic probability. Detection uses recipe-aware Mosaic; semantic segmentation does not support it. |
+| `mixup` | `float` | `0.0` | `[0, 1]` | Dataset-level MixUp probability. DEIM detection additionally uses recipe-controlled batch MixUp; semantic segmentation does not support dataset-level MixUp. |
 | `close_mosaic` | `int` | `10` | `>= 0` | Disable mosaic for the final N epochs; zero keeps it active. |
 | `time` | `float \| None` | `None` | positive hours or `None` | Training duration in hours. When supplied, this overrides `epochs` as the loop's stopping limit. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
@@ -757,7 +651,7 @@ independent of DataLoader worker scheduling.
 
 `recipe="deim"` enables its recipe Mosaic default and batch-level MixUp for
 detection. Without DEIM, Mosaic and dataset-level MixUp remain explicit opt-ins.
-Mosaic and MixUp are not supported for semantic segmentation, pose, or OBB. All
+Mosaic and MixUp are not supported for semantic segmentation. All
 resolved values above are written to `args.yaml` and restored from `last.pth` on
 resume.
 

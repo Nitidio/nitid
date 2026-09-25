@@ -65,7 +65,6 @@ def frame() -> np.ndarray:
         ("tiny_checkpoint", "detect", 640),
         ("tiny_segment_checkpoint", "segment", 640),
         ("tiny_semantic_checkpoint", "semantic", 64),
-        ("tiny_pose_checkpoint", "pose", 640),
     ],
 )
 def test_predict_does_not_structurally_modify_trainable_model(
@@ -158,7 +157,7 @@ def test_predictor_rejects_undeployed_trainable_model(tiny_checkpoint: str) -> N
 
 
 def _export_formats_for_task(task: str) -> Iterator[str]:
-    if task in {"semantic", "pose"}:
+    if task == "semantic":
         yield "onnx"
     else:
         yield "onnx"
@@ -171,7 +170,6 @@ def _export_formats_for_task(task: str) -> Iterator[str]:
         ("tiny_checkpoint", "detect", 640),
         ("tiny_segment_checkpoint", "segment", 640),
         ("tiny_semantic_checkpoint", "semantic", 64),
-        ("tiny_pose_checkpoint", "pose", 640),
     ],
 )
 def test_export_does_not_structurally_modify_trainable_model(

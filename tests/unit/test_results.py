@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import torch
 
-from dfine.results import OBB, Boxes, Masks, Results, SemanticMask
+from dfine.results import Boxes, Masks, Results, SemanticMask
 
 
 @pytest.fixture
@@ -148,76 +148,6 @@ def test_segment_results_serialize_and_plot_masks(segment_result, tmp_path):
     assert values[-1] == "0.900000"
     assert len(values) > 6
     assert np.any(segment_result.plot() != segment_result.orig_img)
-
-
-def test_obb_exposes_rotated_box_properties():
-    data = torch.tensor(
-        [
-            [10.0, 20.0, 4.0, 2.0, 0.0, 0.9, 1.0],
-            [10.0, 20.0, 4.0, 2.0, torch.pi / 2, 0.8, 0.0],
-        ]
-    )
-    obb = OBB(data, orig_shape=(40, 50))
-
-    assert len(obb) == 2
-    assert obb.xywhr.shape == (2, 5)
-    assert obb.conf.tolist() == pytest.approx([0.9, 0.8])
-    assert obb.cls.tolist() == [1, 0]
-    torch.testing.assert_close(
-        obb.xyxyxyxy[0],
-        torch.tensor([8.0, 19.0, 12.0, 19.0, 12.0, 21.0, 8.0, 21.0]),
-    )
-    torch.testing.assert_close(
-        obb.xyxyxyxy[1],
-        torch.tensor([11.0, 18.0, 11.0, 22.0, 9.0, 22.0, 9.0, 18.0]),
-        atol=1e-6,
-        rtol=1e-6,
-    )
-    torch.testing.assert_close(obb.xyxyxyxyn[0, 0::2], obb.xyxyxyxy[0, 0::2] / 50)
-    torch.testing.assert_close(obb.xyxyxyxyn[0, 1::2], obb.xyxyxyxy[0, 1::2] / 40)
-
-
-def test_obb_rejects_invalid_data():
-    with pytest.raises(TypeError):
-        OBB(np.zeros((1, 7)), orig_shape=(40, 50))  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match=r"\[N, 7\]"):
-        OBB(torch.zeros((1, 6)), orig_shape=(40, 50))
-
-
-def test_obb_results_serialize_and_plot():
-    image = np.zeros((40, 50, 3), dtype=np.uint8)
-    obb = OBB(torch.tensor([[25.0, 20.0, 20.0, 10.0, 0.25, 0.75, 0.0]]), (40, 50))
-    result = Results(orig_img=image, path="rotated.jpg", names={0: "plane"}, obb=obb)
-
-    assert len(result) == 1
-    assert "obb=1" in repr(result)
-    payload = result.to_json()[0]
-    assert payload["name"] == "plane"
-    assert payload["confidence"] == 0.75
-    assert payload["obb"]["angle"] == pytest.approx(0.25)
-    assert len(payload["obb"]["points"]) == 4
-    assert np.any(result.plot() != image)
-
-
-def test_obb_results_save_txt(tmp_path):
-    image = np.zeros((40, 50, 3), dtype=np.uint8)
-    obb = OBB(torch.tensor([[25.0, 20.0, 20.0, 10.0, 0.0, 0.75, 2.0]]), (40, 50))
-    result = Results(orig_img=image, path="rotated.jpg", names={2: "plane"}, obb=obb)
-    out_file = tmp_path / "obb.txt"
-
-    result.save_txt(out_file, save_conf=True)
-
-    assert out_file.read_text(encoding="utf-8").splitlines() == [
-        "2 0.300000 0.375000 0.700000 0.375000 0.700000 0.625000 0.300000 0.625000 0.750000"
-    ]
-
-
-def test_obb_result_rejects_geometry_mismatch():
-    image = np.zeros((40, 50, 3), dtype=np.uint8)
-    obb = OBB(torch.zeros((0, 7)), (20, 50))
-
-    with pytest.raises(ValueError, match="obb orig_shape"):
-        Results(orig_img=image, path="bad.jpg", names={}, obb=obb)
 
 
 def test_boxes_xyxy(dummy_boxes):

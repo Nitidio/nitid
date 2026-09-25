@@ -43,7 +43,6 @@ nav:
   - Project:
       - Roadmap: roadmap.md
       - Brand: brand.md
-      - DETRPose architecture: pose_architecture.md
       - Decisions:
           - Overview: adr/index.md
           - "ADR-0002: Native DETRPose integration": adr/0002-native-detrpose-integration.md

@@ -14,7 +14,7 @@ from dfine.media import (
 )
 from dfine.model import DFINE
 from dfine.nitid import NITID
-from dfine.results import OBB, SemanticMask
+from dfine.results import SemanticMask
 from dfine.utils.reporting import BugReport, bugreport
 from dfine.utils.sources import GStreamerFrameSource
 
@@ -28,7 +28,6 @@ __all__ = [
     "FrameSink",
     "FrameSource",
     "GStreamerVideoSink",
-    "OBB",
     "SemanticMask",
     "GStreamerFrameSource",
     "build_gstreamer_output_pipeline",

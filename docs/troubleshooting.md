@@ -116,8 +116,8 @@ To replace an existing wrapped checkpoint:
 uv run nitid download model=nitid1s task=detect output=models force=true
 ```
 
-Detection, instance segmentation, semantic segmentation, pose, and OBB all use
-the same public model names (`nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`,
+Detection, instance segmentation, and semantic segmentation all use the same
+public model names (`nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`,
 `nitid1x`) with an explicit `task=...`.
 
 ## Checkpoint gives `KeyError: 'config'`

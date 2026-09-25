@@ -1,7 +1,3 @@
-# DOTA parsing and OBB target conventions adapted from RiO-DETR (Apache-2.0).
-# Source: https://github.com/RicePasteM/RiO-DETR
-# Modified for native dataset integration into nitid in 2026.
-# See THIRD_PARTY_NOTICES.md for upstream attribution.
 """
 Dataset utilities for fine-tuning and validation.
 
@@ -31,18 +27,6 @@ Semantic masks:
     train_masks: labels/train          # optional when inferable from images path
     val_masks: labels/val
     ignore_index: 255
-
-OBB labels:
-    # YOLO-OBB normalized polygons: class x1 y1 x2 y2 x3 y3 x4 y4
-    path: /data/obb
-    train: images/train
-    val: images/val
-
-    # DOTA text polygons: x1 y1 x2 y2 x3 y3 x4 y4 class [difficulty]
-    path: /data/obb
-    train: images/train
-    val: images/val
-    obb_format: dota
 """
 
 from __future__ import annotations
@@ -58,11 +42,9 @@ import sys
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Sequence, cast
+from typing import Literal, Sequence
 
-import cv2
 import numpy as np
-import numpy.typing as npt
 import torch
 import yaml
 from PIL import Image
@@ -73,7 +55,6 @@ from dfine.utils.augmentations import (
     _clip_boxes,
     color_jitter_hsv,
     horizontal_flip,
-    horizontal_flip_keypoints,
     horizontal_flip_masks,
     random_crop,
     random_crop_instances,
@@ -87,10 +68,8 @@ from dfine.utils.augmentations import (
     sanitize_instances,
     scale_translate,
     scale_translate_instances,
-    scale_translate_keypoints,
     scale_translate_semantic,
     stretch_resize,
-    stretch_resize_keypoints,
     to_tensor,
 )
 from dfine.utils.logging import LOGGER
@@ -112,16 +91,6 @@ class SemanticSplitSpec:
 
     img_dir: Path
     mask_dir: Path
-
-
-@dataclass(frozen=True)
-class OBBSplitSpec:
-    """Resolved image/label resources for one oriented-box split."""
-
-    format: Literal["coco", "yolo_obb", "dota"]
-    img_dir: Path
-    ann_file: Path | None = None
-    label_dir: Path | None = None
 
 
 def load_data_yaml(path: str | Path) -> dict:
@@ -216,43 +185,6 @@ def resolve_semantic_split(data: str | Path, split: str) -> SemanticSplitSpec:
     if not mask_dir.is_dir():
         raise FileNotFoundError(f"Semantic mask directory not found: {mask_dir}")
     return SemanticSplitSpec(img_dir=img_dir, mask_dir=mask_dir)
-
-
-def resolve_obb_split(data: str | Path, split: str) -> OBBSplitSpec:
-    """Resolve an OBB split to COCO polygons, YOLO-OBB txt, or DOTA txt labels."""
-    cfg = load_data_yaml(data)
-    if split not in cfg:
-        raise KeyError(f"Data YAML does not define split {split!r}")
-    root_value = cfg.get("path")
-    if not isinstance(root_value, (str, Path)):
-        raise ValueError("Data YAML must define a dataset 'path'")
-    root = Path(root_value).expanduser()
-    if not root.is_absolute():
-        root = (Path(data).resolve().parent / root).resolve()
-
-    img_dir = root / cfg[split]
-    if not img_dir.is_dir():
-        raise FileNotFoundError(f"OBB image directory not found: {img_dir}")
-
-    ann_file = _find_coco_annotation(root, cfg, split, img_dir)
-    if ann_file is not None:
-        return OBBSplitSpec(format="coco", img_dir=img_dir, ann_file=ann_file)
-
-    label_dir = _find_yolo_label_dir(root, img_dir, split)
-    if label_dir is None:
-        raise FileNotFoundError(
-            "Could not resolve OBB labels. Expected COCO polygon annotations, "
-            "YOLO-OBB labels beside images, or DOTA text labels in labels/<split>."
-        )
-
-    obb_format = str(cfg.get("obb_format", cfg.get("format", "yolo_obb"))).lower()
-    if obb_format in {"dota", "dota_txt", "dota-obb"}:
-        return OBBSplitSpec(format="dota", img_dir=img_dir, label_dir=label_dir)
-    if obb_format in {"yolo", "yolo_obb", "yolo-obb", "ultralytics"}:
-        return OBBSplitSpec(format="yolo_obb", img_dir=img_dir, label_dir=label_dir)
-    raise ValueError(
-        f"Unsupported OBB dataset format {obb_format!r}; choose 'yolo_obb', 'dota', or COCO JSON"
-    )
 
 
 class SemanticSegmentationDataset(Dataset):
@@ -411,7 +343,7 @@ class CocoFinetuneDataset(Dataset):
         cache: bool | str = False,
         augment: AugmentationConfig | None = None,
         seed: int = 0,
-        task: Literal["detect", "segment", "pose"] = "detect",
+        task: Literal["detect", "segment"] = "detect",
     ) -> None:
         from pycocotools.coco import COCO
 
@@ -442,21 +374,6 @@ class CocoFinetuneDataset(Dataset):
                 "task='segment' requires polygon or RLE instance annotations; "
                 "the selected split contains bounding boxes only"
             )
-        if self.task == "pose" and not any(
-            ann.get("keypoints") and int(ann.get("num_keypoints", 0)) > 0
-            for ann in self.coco.anns.values()
-        ):
-            raise ValueError(
-                "task='pose' requires COCO keypoint annotations; "
-                "the selected split contains no visible keypoints"
-            )
-        if (
-            self.task == "pose"
-            and augment
-            and augment.enabled
-            and (augment.mosaic > 0 or augment.mixup > 0)
-        ):
-            raise ValueError("Pose training does not support mosaic or mixup augmentations")
         if cache is True or str(cache).lower() == "ram":
             for index in range(len(self.ids)):
                 self._image_cache[index] = self._load_image(index)
@@ -467,7 +384,7 @@ class CocoFinetuneDataset(Dataset):
         return len(self.ids)
 
     def __getitem__(self, idx: int):
-        image, boxes, labels, masks, keypoints, areas, img_id = self._load_item(idx)
+        image, boxes, labels, masks, img_id = self._load_item(idx)
         rng = random.Random(self.seed + self.epoch * max(len(self), 1) + idx)
         cfg = self.augment
         detection_recipe_aug = bool(
@@ -476,15 +393,12 @@ class CocoFinetuneDataset(Dataset):
         mosaic_active = bool(
             cfg
             and cfg.enabled
-            and self.task != "pose"
             and self.mosaic_enabled
             and cfg.mosaic > 0
             and rng.random() < cfg.mosaic
         )
         if mosaic_active:
             image, boxes, labels, masks = self._mosaic(idx, rng)
-            keypoints = torch.zeros((0, 0), dtype=torch.float32)
-            areas = torch.zeros((len(labels),), dtype=torch.float32)
         elif detection_recipe_aug:
             assert cfg is not None
             image = random_photometric_distort(image, rng, cfg.photometric)
@@ -494,38 +408,18 @@ class CocoFinetuneDataset(Dataset):
             image, boxes = stretch_resize(image, boxes, self.imgsz)
             masks = resize_masks(masks, self.imgsz)
         else:
-            orig_w, orig_h = image.size
             image, boxes = stretch_resize(image, boxes, self.imgsz)
-            if self.task == "pose":
-                keypoints = stretch_resize_keypoints(keypoints, orig_w, orig_h, self.imgsz)
-                areas = (
-                    areas
-                    * (self.imgsz / max(1.0, float(orig_w)))
-                    * (self.imgsz / max(1.0, float(orig_h)))
-                )
             masks = resize_masks(masks, self.imgsz)
 
         if cfg and cfg.enabled and not detection_recipe_aug:
             if cfg.fliplr and rng.random() < cfg.fliplr:
                 image, boxes = horizontal_flip(image, boxes)
                 masks = horizontal_flip_masks(masks)
-                if self.task == "pose":
-                    keypoints = horizontal_flip_keypoints(keypoints, width=self.imgsz)
             if cfg.scale or cfg.translate:
                 if self.task == "segment":
                     image, boxes, masks = scale_translate_instances(
                         image, boxes, masks, cfg.scale, cfg.translate, rng
                     )
-                elif self.task == "pose":
-                    width, height = image.size
-                    factor = rng.uniform(1.0 - cfg.scale, 1.0 + cfg.scale)
-                    new_w, new_h = max(1, round(width * factor)), max(1, round(height * factor))
-                    tx = round(rng.uniform(-cfg.translate, cfg.translate) * width)
-                    ty = round(rng.uniform(-cfg.translate, cfg.translate) * height)
-                    left, top = (width - new_w) // 2 + tx, (height - new_h) // 2 + ty
-                    image, boxes = scale_translate_with_params(image, boxes, factor, left, top)
-                    keypoints = scale_translate_keypoints(keypoints, factor, left, top)
-                    areas = areas * factor * factor
                 else:
                     image, boxes = scale_translate(image, boxes, cfg.scale, cfg.translate, rng)
             if cfg.crop and rng.random() < cfg.crop:
@@ -533,30 +427,15 @@ class CocoFinetuneDataset(Dataset):
                     image, boxes, masks, keep = random_crop_instances(
                         image, boxes, masks, cfg.crop, rng
                     )
-                elif self.task == "pose":
-                    image, boxes, keypoints, keep = random_crop_pose(
-                        image, boxes, keypoints, cfg.crop, rng
-                    )
                 else:
                     image, boxes, keep = random_crop(image, boxes, cfg.crop, rng)
                 labels = labels[keep]
-                areas = areas[keep]
-                crop_w, crop_h = image.size
                 image, boxes = stretch_resize(image, boxes, self.imgsz)
-                if self.task == "pose":
-                    keypoints = stretch_resize_keypoints(keypoints, crop_w, crop_h, self.imgsz)
-                    areas = (
-                        areas
-                        * (self.imgsz / max(1.0, float(crop_w)))
-                        * (self.imgsz / max(1.0, float(crop_h)))
-                    )
                 masks = resize_masks(masks, self.imgsz)
             image = color_jitter_hsv(image, cfg, rng)
             if cfg.mixup and rng.random() < cfg.mixup:
                 other_idx = self._sample_partner_index(rng)
-                other_image, other_boxes, other_labels, other_masks, _, _, _ = self._load_item(
-                    other_idx
-                )
+                other_image, other_boxes, other_labels, other_masks, _ = self._load_item(other_idx)
                 other_image, other_boxes = stretch_resize(other_image, other_boxes, self.imgsz)
                 other_masks = resize_masks(other_masks, self.imgsz)
                 ratio = rng.betavariate(32.0, 32.0)
@@ -576,10 +455,6 @@ class CocoFinetuneDataset(Dataset):
 
         if self.task == "segment":
             boxes, labels, masks = sanitize_instances(boxes, labels, masks, self.imgsz, self.imgsz)
-        elif self.task == "pose":
-            boxes, labels, keypoints, areas = sanitize_pose(
-                boxes, labels, keypoints, areas, self.imgsz, self.imgsz
-            )
         else:
             boxes, labels = sanitize(boxes, labels, self.imgsz, self.imgsz)
         boxes = self._normalize_boxes(boxes)
@@ -590,29 +465,18 @@ class CocoFinetuneDataset(Dataset):
         }
         if self.task == "segment":
             target["masks"] = masks
-        if self.task == "pose":
-            target["keypoints"] = normalize_keypoints_for_pose_loss(keypoints, self.imgsz)
-            target["area"] = (areas / float(self.imgsz * self.imgsz)).clamp(min=1e-6)
         return to_tensor(image), target
 
     def _load_item(
         self, idx: int
-    ) -> tuple[
-        Image.Image,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        int,
-    ]:
+    ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor, int]:
         img_id = self.ids[idx]
         image = self._image_cache.get(idx)
         if image is None:
             image = self._load_image(idx)
         width, height = image.size
         anns = self.coco.loadAnns(self.coco.getAnnIds(imgIds=img_id, iscrowd=False))
-        box_values, label_values, mask_values, keypoint_values, area_values = [], [], [], [], []
+        box_values, label_values, mask_values = [], [], []
         for ann in anns:
             x, y, w, h = ann["bbox"]
             if w <= 0 or h <= 0:
@@ -622,12 +486,6 @@ class CocoFinetuneDataset(Dataset):
                 continue
             if self.task == "segment" and not ann.get("segmentation"):
                 continue
-            if self.task == "pose":
-                raw_keypoints = ann.get("keypoints")
-                if not raw_keypoints or int(ann.get("num_keypoints", 0)) <= 0:
-                    continue
-                keypoint_values.append(raw_keypoints)
-                area_values.append(float(ann.get("area", w * h)))
             box_values.append([x, y, x + w, y + h])
             label_values.append(0 if self.single_cls else label)
             if self.task == "segment":
@@ -639,13 +497,7 @@ class CocoFinetuneDataset(Dataset):
             if mask_values
             else torch.zeros((0, height, width), dtype=torch.uint8)
         )
-        keypoints = (
-            torch.tensor(keypoint_values, dtype=torch.float32).reshape(len(keypoint_values), -1)
-            if keypoint_values
-            else torch.zeros((0, 0), dtype=torch.float32)
-        )
-        areas = torch.tensor(area_values, dtype=torch.float32)
-        return image.copy(), boxes, labels, masks, keypoints, areas, img_id
+        return image.copy(), boxes, labels, masks, img_id
 
     def _mosaic(
         self, idx: int, rng: random.Random
@@ -656,7 +508,7 @@ class CocoFinetuneDataset(Dataset):
         all_boxes, all_labels, all_masks = [], [], []
         offsets = ((0, 0), (self.imgsz, 0), (0, self.imgsz), (self.imgsz, self.imgsz))
         for item_idx, (left, top) in zip(indices, offsets):
-            image, boxes, labels, masks, _, _, _ = self._load_item(item_idx)
+            image, boxes, labels, masks, _ = self._load_item(item_idx)
             image, boxes = stretch_resize(image, boxes, self.imgsz)
             masks = resize_masks(masks, self.imgsz)
             canvas.paste(image, (left, top))
@@ -710,245 +562,6 @@ class CocoFinetuneDataset(Dataset):
         info = self.coco.imgs[self.ids[idx]]
         with Image.open(self.img_dir / info["file_name"]) as image:
             return image.convert("RGB").copy()
-
-
-class OBBFinetuneDataset(Dataset):
-    """Oriented-box dataset normalized to RiO-DETR ``cx, cy, w, h, angle`` targets."""
-
-    def __init__(
-        self,
-        spec: OBBSplitSpec,
-        imgsz: int,
-        names: dict[int, str],
-        classes: list[int] | None = None,
-        single_cls: bool = False,
-        cache: bool | str = False,
-        augment: AugmentationConfig | None = None,
-        seed: int = 0,
-    ) -> None:
-        if imgsz < 1:
-            raise ValueError(f"imgsz must be positive, got {imgsz}")
-        self.spec = spec
-        self.imgsz = imgsz
-        self.names = names
-        self.classes = set(classes) if classes is not None else None
-        self.single_cls = single_cls
-        self.augment = augment
-        self.seed = seed
-        self.epoch = 0
-        self.mosaic_enabled = False
-        self.image_paths = sorted(
-            path for path in spec.img_dir.rglob("*") if path.suffix.lower() in IMAGE_SUFFIXES
-        )
-        if not self.image_paths:
-            raise FileNotFoundError(f"No supported images found in OBB split: {spec.img_dir}")
-        self._coco = None
-        self._coco_ids: list[int] = []
-        self._cat_id_to_label: dict[int, int] = {}
-        if spec.format == "coco":
-            if spec.ann_file is None:
-                raise ValueError("COCO OBB split requires ann_file")
-            from pycocotools.coco import COCO
-
-            with contextlib.redirect_stdout(io.StringIO()):
-                self._coco = COCO(str(spec.ann_file))
-            self._coco_ids = sorted(self._coco.imgs)
-            self._cat_id_to_label = {cat_id: i for i, cat_id in enumerate(sorted(self._coco.cats))}
-            self.image_paths = [
-                spec.img_dir / self._coco.imgs[img_id]["file_name"] for img_id in self._coco_ids
-            ]
-
-        self._image_cache: dict[int, Image.Image] = {}
-        if cache is True or str(cache).lower() == "ram":
-            for index in range(len(self.image_paths)):
-                self._image_cache[index] = self._load_image(index)
-        elif cache not in (False, None, "false"):
-            raise ValueError("cache must be False, True, or 'ram'")
-
-    def __len__(self) -> int:
-        return len(self.image_paths)
-
-    def __getitem__(self, idx: int):
-        image = self._image_cache.get(idx)
-        if image is None:
-            image = self._load_image(idx)
-        polygons, labels, img_id = self._load_annotations(idx, image.size)
-        width, height = image.size
-        polygons = polygons.clone()
-        if polygons.numel():
-            polygons[..., 0] *= self.imgsz / width
-            polygons[..., 1] *= self.imgsz / height
-        image = image.resize((self.imgsz, self.imgsz), Image.Resampling.BILINEAR)
-
-        rng = random.Random(self.seed + self.epoch * max(len(self), 1) + idx)
-        cfg = self.augment
-        if cfg and cfg.enabled:
-            if cfg.fliplr and rng.random() < cfg.fliplr and polygons.numel():
-                image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-                polygons[..., 0] = self.imgsz - polygons[..., 0]
-            if cfg.hsv_h or cfg.hsv_s or cfg.hsv_v:
-                image = color_jitter_hsv(image, cfg, rng)
-
-        polygons, labels = _sanitize_obb_polygons(polygons, labels, self.imgsz)
-        boxes = _polygons_to_xywhr(polygons)
-        if boxes.numel():
-            boxes[:, :4] /= float(self.imgsz)
-            boxes[:, 4] /= math.pi
-        target = {
-            "labels": labels,
-            "boxes": boxes,
-            "image_id": torch.tensor([img_id], dtype=torch.long),
-        }
-        return to_tensor(image), target
-
-    def set_epoch(self, epoch: int, mosaic: bool = True) -> None:
-        del mosaic
-        self.epoch = epoch
-
-    def _load_image(self, idx: int) -> Image.Image:
-        with Image.open(self.image_paths[idx]) as image:
-            return image.convert("RGB").copy()
-
-    def _load_annotations(
-        self, idx: int, image_size: tuple[int, int]
-    ) -> tuple[torch.Tensor, torch.Tensor, int]:
-        if self.spec.format == "coco":
-            return self._load_coco_annotations(idx)
-        if self.spec.label_dir is None:
-            raise ValueError("Text OBB split requires label_dir")
-        label_path = self.spec.label_dir / self.image_paths[idx].relative_to(
-            self.spec.img_dir
-        ).with_suffix(".txt")
-        if self.spec.format == "dota":
-            return self._load_dota_annotations(label_path, idx)
-        return self._load_yolo_obb_annotations(label_path, image_size, idx)
-
-    def _load_coco_annotations(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, int]:
-        assert self._coco is not None
-        img_id = self._coco_ids[idx]
-        anns = self._coco.loadAnns(self._coco.getAnnIds(imgIds=img_id, iscrowd=False))
-        polygons: list[list[list[float]]] = []
-        labels: list[int] = []
-        for ann in anns:
-            label = self._cat_id_to_label.get(int(ann["category_id"]), 0)
-            if self.classes is not None and label not in self.classes:
-                continue
-            segmentation = ann.get("segmentation")
-            polygon = _first_polygon(segmentation)
-            if polygon is None:
-                bbox = ann.get("bbox")
-                if not bbox:
-                    continue
-                x, y, w, h = [float(value) for value in bbox]
-                polygon = [x, y, x + w, y, x + w, y + h, x, y + h]
-            polygons.append([[polygon[i], polygon[i + 1]] for i in range(0, 8, 2)])
-            labels.append(0 if self.single_cls else label)
-        return _obb_tensor(polygons), torch.tensor(labels, dtype=torch.long), int(img_id)
-
-    def _load_yolo_obb_annotations(
-        self, label_path: Path, image_size: tuple[int, int], idx: int
-    ) -> tuple[torch.Tensor, torch.Tensor, int]:
-        width, height = image_size
-        polygons: list[list[list[float]]] = []
-        labels: list[int] = []
-        if not label_path.exists():
-            return _obb_tensor(polygons), torch.zeros((0,), dtype=torch.long), idx
-        for line_no, line in enumerate(label_path.read_text().splitlines(), start=1):
-            parts = line.strip().split()
-            if len(parts) != 9:
-                LOGGER.warning("Skipping malformed YOLO-OBB label row %s:%d", label_path, line_no)
-                continue
-            try:
-                class_id = int(float(parts[0]))
-                values = [float(value) for value in parts[1:]]
-            except ValueError:
-                LOGGER.warning("Skipping non-numeric YOLO-OBB label row %s:%d", label_path, line_no)
-                continue
-            if class_id not in self.names or (
-                self.classes is not None and class_id not in self.classes
-            ):
-                continue
-            points = [[values[i] * width, values[i + 1] * height] for i in range(0, 8, 2)]
-            polygons.append(points)
-            labels.append(0 if self.single_cls else class_id)
-        return _obb_tensor(polygons), torch.tensor(labels, dtype=torch.long), idx
-
-    def _load_dota_annotations(
-        self, label_path: Path, idx: int
-    ) -> tuple[torch.Tensor, torch.Tensor, int]:
-        name_to_id = {name: class_id for class_id, name in self.names.items()}
-        polygons: list[list[list[float]]] = []
-        labels: list[int] = []
-        if not label_path.exists():
-            return _obb_tensor(polygons), torch.zeros((0,), dtype=torch.long), idx
-        for line_no, line in enumerate(label_path.read_text().splitlines(), start=1):
-            parts = line.strip().split()
-            if len(parts) < 9:
-                LOGGER.warning("Skipping malformed DOTA label row %s:%d", label_path, line_no)
-                continue
-            try:
-                values = [float(value) for value in parts[:8]]
-            except ValueError:
-                LOGGER.warning("Skipping non-numeric DOTA label row %s:%d", label_path, line_no)
-                continue
-            class_id = name_to_id.get(parts[8])
-            if class_id is None or (self.classes is not None and class_id not in self.classes):
-                continue
-            polygons.append([[values[i], values[i + 1]] for i in range(0, 8, 2)])
-            labels.append(0 if self.single_cls else class_id)
-        return _obb_tensor(polygons), torch.tensor(labels, dtype=torch.long), idx
-
-
-def _first_polygon(segmentation: object) -> list[float] | None:
-    if not isinstance(segmentation, list) or not segmentation:
-        return None
-    candidate = segmentation[0]
-    if not isinstance(candidate, list) or len(candidate) < 8:
-        return None
-    values = [float(value) for value in candidate[:8]]
-    return values if all(math.isfinite(value) for value in values) else None
-
-
-def _obb_tensor(polygons: list[list[list[float]]]) -> torch.Tensor:
-    if not polygons:
-        return torch.zeros((0, 4, 2), dtype=torch.float32)
-    return torch.tensor(polygons, dtype=torch.float32).reshape(-1, 4, 2)
-
-
-def _sanitize_obb_polygons(
-    polygons: torch.Tensor,
-    labels: torch.Tensor,
-    imgsz: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    if polygons.numel() == 0:
-        return polygons.reshape(0, 4, 2), labels.reshape(0)
-    polygons = polygons.clone()
-    polygons[..., 0].clamp_(0, imgsz)
-    polygons[..., 1].clamp_(0, imgsz)
-    finite = torch.isfinite(polygons).flatten(1).all(dim=1)
-    widths = polygons[..., 0].max(dim=1).values - polygons[..., 0].min(dim=1).values
-    heights = polygons[..., 1].max(dim=1).values - polygons[..., 1].min(dim=1).values
-    keep = finite & (widths > 1.0) & (heights > 1.0)
-    return polygons[keep], labels[keep]
-
-
-def _polygons_to_xywhr(polygons: torch.Tensor) -> torch.Tensor:
-    """Convert four-point polygons to ``cx, cy, w, h, angle_radians``."""
-    if polygons.numel() == 0:
-        return torch.zeros((0, 5), dtype=torch.float32)
-    boxes: list[list[float]] = []
-    polygon_array = cast(
-        npt.NDArray[np.float32], polygons.detach().cpu().numpy().astype(np.float32)
-    )
-    for polygon in polygon_array:
-        (cx, cy), (w, h), angle_degrees = cv2.minAreaRect(polygon)
-        if w < h:
-            w, h = h, w
-            angle_degrees += 90.0
-        angle = math.radians(angle_degrees)
-        angle = ((angle + math.pi) % (2 * math.pi)) - math.pi
-        boxes.append([float(cx), float(cy), float(w), float(h), float(angle)])
-    return torch.tensor(boxes, dtype=torch.float32)
 
 
 def _collate(batch):
@@ -1008,120 +621,6 @@ class DetectionBatchCollate:
         return rng.random() < self.mixup_prob
 
 
-def scale_translate_with_params(
-    image: Image.Image,
-    boxes: torch.Tensor,
-    factor: float,
-    left: int,
-    top: int,
-    fill: tuple[int, int, int] = (114, 114, 114),
-) -> tuple[Image.Image, torch.Tensor]:
-    """Apply a fixed scale/translate transform shared by boxes and keypoints."""
-    width, height = image.size
-    new_w, new_h = max(1, round(width * factor)), max(1, round(height * factor))
-    resized = image.resize((new_w, new_h), Image.Resampling.BILINEAR)
-    canvas = Image.new("RGB", (width, height), fill)
-    canvas.paste(resized, (left, top))
-    result = boxes.clone()
-    if result.numel():
-        result[:, [0, 2]] = result[:, [0, 2]] * factor + left
-        result[:, [1, 3]] = result[:, [1, 3]] * factor + top
-        result[:, [0, 2]].clamp_(0, width)
-        result[:, [1, 3]].clamp_(0, height)
-    return canvas, result
-
-
-def random_crop_pose(
-    image: Image.Image,
-    boxes: torch.Tensor,
-    keypoints: torch.Tensor,
-    gain: float,
-    rng: random.Random,
-) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Crop an image while keeping pose boxes and keypoints aligned."""
-    width, height = image.size
-    left = round(rng.uniform(0.0, gain) * width)
-    right = round(rng.uniform(0.0, gain) * width)
-    top = round(rng.uniform(0.0, gain) * height)
-    bottom = round(rng.uniform(0.0, gain) * height)
-    if left + right >= width or top + bottom >= height:
-        return image, boxes, keypoints, torch.ones(len(boxes), dtype=torch.bool)
-
-    result_boxes = boxes.clone()
-    result_boxes[:, [0, 2]] -= left
-    result_boxes[:, [1, 3]] -= top
-    crop_w, crop_h = width - left - right, height - top - bottom
-    result_boxes[:, [0, 2]].clamp_(0, crop_w)
-    result_boxes[:, [1, 3]].clamp_(0, crop_h)
-    keep = (result_boxes[:, 2] - result_boxes[:, 0] >= 1.0) & (
-        result_boxes[:, 3] - result_boxes[:, 1] >= 1.0
-    )
-
-    result_keypoints = keypoints.clone()
-    if result_keypoints.numel():
-        view = result_keypoints.view(result_keypoints.shape[0], -1, 3)
-        view[..., 0] -= left
-        view[..., 1] -= top
-        outside = (
-            (view[..., 0] < 0)
-            | (view[..., 0] > crop_w)
-            | (view[..., 1] < 0)
-            | (view[..., 1] > crop_h)
-        )
-        view[..., 2] = torch.where(outside, torch.zeros_like(view[..., 2]), view[..., 2])
-        view[..., 0].clamp_(0, crop_w)
-        view[..., 1].clamp_(0, crop_h)
-
-    return (
-        image.crop((left, top, width - right, height - bottom)),
-        result_boxes[keep],
-        result_keypoints[keep],
-        keep,
-    )
-
-
-def sanitize_pose(
-    boxes: torch.Tensor,
-    labels: torch.Tensor,
-    keypoints: torch.Tensor,
-    areas: torch.Tensor,
-    width: int,
-    height: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Clip boxes and remove invalid pose instances with no visible keypoints."""
-    boxes = boxes.clone()
-    if boxes.numel():
-        boxes[:, [0, 2]].clamp_(0, width)
-        boxes[:, [1, 3]].clamp_(0, height)
-    keep = (boxes[:, 2] - boxes[:, 0] >= 1.0) & (boxes[:, 3] - boxes[:, 1] >= 1.0)
-    keep = keep & torch.isfinite(boxes).all(dim=1)
-    if keypoints.numel():
-        view = keypoints.view(keypoints.shape[0], -1, 3)
-        outside = (
-            (view[..., 0] < 0)
-            | (view[..., 0] > width)
-            | (view[..., 1] < 0)
-            | (view[..., 1] > height)
-        )
-        view[..., 2] = torch.where(outside, torch.zeros_like(view[..., 2]), view[..., 2])
-        view[..., 0].clamp_(0, width)
-        view[..., 1].clamp_(0, height)
-        keep = keep & (view[..., 2] > 0).any(dim=1)
-    else:
-        keep = keep & torch.zeros_like(keep)
-    return boxes[keep], labels[keep], keypoints[keep], areas[keep]
-
-
-def normalize_keypoints_for_pose_loss(keypoints: torch.Tensor, image_size: int) -> torch.Tensor:
-    """Convert COCO interleaved ``x,y,v`` keypoints to DETRPose loss format."""
-    if not keypoints.numel():
-        return torch.zeros((0, 0), dtype=torch.float32, device=keypoints.device)
-    view = keypoints.view(keypoints.shape[0], -1, 3)
-    xy = view[..., :2].reshape(keypoints.shape[0], -1) / float(image_size)
-    visibility = (view[..., 2] > 0).to(dtype=keypoints.dtype)
-    return torch.cat([xy, visibility], dim=1)
-
-
 def build_detection_dataloader(
     data: str | Path,
     split: str,
@@ -1136,7 +635,7 @@ def build_detection_dataloader(
     single_cls: bool = False,
     fraction: float = 1.0,
     augment: AugmentationConfig | None = None,
-    task: Literal["detect", "segment", "pose"] = "detect",
+    task: Literal["detect", "segment"] = "detect",
     collate_mixup_prob: float = 0.0,
     collate_mixup_epochs: Sequence[int] = (0, 0),
 ) -> DataLoader:
@@ -1189,61 +688,6 @@ def build_detection_dataloader(
         shuffle=split == "train",
         num_workers=workers,
         collate_fn=collate_fn,
-        drop_last=split == "train" and dataset_size >= batch_size,
-        generator=generator,
-        worker_init_fn=_seed_worker if workers > 0 and deterministic else None,
-    )
-
-
-def build_obb_dataloader(
-    data: str | Path,
-    split: str,
-    imgsz: int,
-    batch_size: int,
-    spec: OBBSplitSpec | None = None,
-    workers: int = 0,
-    cache: bool | str = False,
-    seed: int = 0,
-    deterministic: bool = True,
-    classes: list[int] | None = None,
-    single_cls: bool = False,
-    fraction: float = 1.0,
-    augment: AugmentationConfig | None = None,
-) -> DataLoader:
-    """Build a DataLoader for YOLO-OBB, DOTA, or COCO polygon OBB datasets."""
-    cfg = load_data_yaml(data)
-    names = normalize_names(cfg)
-    if augment and augment.enabled and (augment.mosaic > 0 or augment.mixup > 0):
-        raise ValueError("OBB training does not support mosaic or mixup augmentations")
-
-    base_dataset = OBBFinetuneDataset(
-        spec=spec or resolve_obb_split(data, split),
-        imgsz=imgsz,
-        names=names,
-        classes=classes,
-        single_cls=single_cls,
-        cache=cache,
-        augment=augment if split == "train" else None,
-        seed=seed,
-    )
-    if not 0.0 < fraction <= 1.0:
-        raise ValueError("fraction must be in the range (0, 1]")
-    dataset: Dataset = base_dataset
-    dataset_size = len(base_dataset)
-    if fraction < 1.0:
-        count = max(1, int(dataset_size * fraction))
-        subset_generator = torch.Generator().manual_seed(seed)
-        indices = torch.randperm(dataset_size, generator=subset_generator)[:count].tolist()
-        dataset = Subset(base_dataset, indices)
-        dataset_size = count
-
-    generator = torch.Generator().manual_seed(seed)
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=split == "train",
-        num_workers=workers,
-        collate_fn=_collate,
         drop_last=split == "train" and dataset_size >= batch_size,
         generator=generator,
         worker_init_fn=_seed_worker if workers > 0 and deterministic else None,

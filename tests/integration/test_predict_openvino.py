@@ -102,13 +102,6 @@ def test_unknown_backend_raises(tiny_checkpoint):
         DFINE(tiny_checkpoint, backend="tensorflow", verbose=False)
 
 
-def test_nitid_rejects_openvino_backend_for_random_obb_init():
-    from dfine import NITID
-
-    with pytest.raises(ValueError, match="randomly-initialized OBB"):
-        NITID("nitid1s", task="obb", weights=None, backend="openvino", verbose=False)
-
-
 def test_unavailable_openvino_device_raises_with_available_devices_listed(tiny_checkpoint):
     pytest.importorskip("openvino", reason="openvino not installed")
     from dfine import DFINE

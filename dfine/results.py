@@ -1,5 +1,5 @@
 """
-Results, Boxes, Masks, and OBB — return types from predict().
+Results, Boxes, Masks, and SemanticMask — return types from predict().
 """
 
 from __future__ import annotations
@@ -36,9 +36,7 @@ class Results:
         path: str,
         names: dict[int, str],
         boxes=None,
-        obb: OBB | None = None,
         masks=None,
-        keypoints: Keypoints | None = None,
         semantic_mask: SemanticMask | None = None,
         save_path: str | None = None,
         speed: dict[str, float] | None = None,
@@ -48,31 +46,14 @@ class Results:
         self.path = path
         self.names = names
         self.boxes = boxes
-        self.obb = obb
         self.masks = masks
-        self.keypoints = keypoints
         self.semantic_mask = semantic_mask
-        if semantic_mask is not None and (
-            boxes is not None or obb is not None or masks is not None or keypoints is not None
-        ):
-            raise ValueError(
-                "semantic_mask cannot be combined with boxes, oriented boxes, "
-                "instance masks, or keypoints"
-            )
-        if obb is not None and obb.orig_shape != orig_img.shape[:2]:
-            raise ValueError(
-                "obb orig_shape must match the original image, "
-                f"got {obb.orig_shape} and {orig_img.shape[:2]}"
-            )
+        if semantic_mask is not None and (boxes is not None or masks is not None):
+            raise ValueError("semantic_mask cannot be combined with boxes or instance masks")
         if semantic_mask is not None and semantic_mask.orig_shape != orig_img.shape[:2]:
             raise ValueError(
                 "semantic_mask shape must match the original image, "
                 f"got {semantic_mask.orig_shape} and {orig_img.shape[:2]}"
-            )
-        if keypoints is not None and keypoints.orig_shape != orig_img.shape[:2]:
-            raise ValueError(
-                "keypoints orig_shape must match the original image, "
-                f"got {keypoints.orig_shape} and {orig_img.shape[:2]}"
             )
         self.save_path = save_path
         self.speed = speed or {"preprocess": 0.0, "inference": 0.0, "postprocess": 0.0}
@@ -120,16 +101,7 @@ class Results:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         lines: list[str] = []
-        if self.obb is not None:
-            corners = self.obb.xyxyxyxyn
-            for i in range(len(self.obb)):
-                cls = int(self.obb.cls[i])
-                coords = [f"{float(x):.6f}" for x in corners[i].tolist()]
-                values = [str(cls), *coords]
-                if save_conf:
-                    values.append(f"{float(self.obb.conf[i]):.6f}")
-                lines.append(" ".join(values))
-        elif self.boxes is not None:
+        if self.boxes is not None:
             xywhn = self.boxes.xywhn
             for i in range(len(self)):
                 cls = int(self.boxes.cls[i])
@@ -241,32 +213,18 @@ class Results:
                 }
             ]
         out: list[dict[str, object]] = []
-        if self.boxes is None and self.obb is None:
+        if self.boxes is None:
             return out
-        detections = self.boxes if self.boxes is not None else self.obb
-        assert detections is not None
-        for i in range(len(detections)):
-            cls_id = int(detections.cls[i])
+        for i in range(len(self.boxes)):
+            cls_id = int(self.boxes.cls[i])
+            xyxy = self.boxes.xyxy[i].tolist()
             item = {
-                "confidence": round(float(detections.conf[i]), 4),
+                "confidence": round(float(self.boxes.conf[i]), 4),
                 "class": cls_id,
                 "name": self.names.get(cls_id, "unknown"),
+                "box": {"x1": xyxy[0], "y1": xyxy[1], "x2": xyxy[2], "y2": xyxy[3]},
             }
-            if self.boxes is not None:
-                xyxy = self.boxes.xyxy[i].tolist()
-                item["box"] = {"x1": xyxy[0], "y1": xyxy[1], "x2": xyxy[2], "y2": xyxy[3]}
-            if self.obb is not None:
-                xywhr = self.obb.xywhr[i].tolist()
-                corners = self.obb.xyxyxyxy[i].reshape(4, 2).tolist()
-                item["obb"] = {
-                    "cx": xywhr[0],
-                    "cy": xywhr[1],
-                    "w": xywhr[2],
-                    "h": xywhr[3],
-                    "angle": xywhr[4],
-                    "points": corners,
-                }
-            if self.boxes is not None and self.boxes.id is not None:
+            if self.boxes.id is not None:
                 item["track_id"] = int(self.boxes.id[i])
             if self.masks is not None and i < len(self.masks):
                 polygon = self.masks.xy[i]
@@ -274,15 +232,6 @@ class Results:
                     "x": polygon[:, 0].tolist(),
                     "y": polygon[:, 1].tolist(),
                 }
-            if self.keypoints is not None and i < len(self.keypoints):
-                kpts_xy = self.keypoints.xy[i].tolist()
-                kpts_dict: dict[str, object] = {
-                    "x": [k[0] for k in kpts_xy],
-                    "y": [k[1] for k in kpts_xy],
-                }
-                if self.keypoints.conf is not None:
-                    kpts_dict["visible"] = self.keypoints.conf[i].tolist()
-                item["keypoints"] = kpts_dict
             out.append(item)
         return out
 
@@ -329,92 +278,12 @@ class Results:
     def __len__(self) -> int:
         if self.semantic_mask is not None:
             return 0
-        if self.boxes is not None:
-            return len(self.boxes)
-        return 0 if self.obb is None else len(self.obb)
+        return 0 if self.boxes is None else len(self.boxes)
 
     def __repr__(self) -> str:
         if self.semantic_mask is not None:
             return f"Results(path={self.path!r}, semantic_shape={self.semantic_mask.orig_shape})"
-        return (
-            f"Results(path={self.path!r}, detections={len(self)}, "
-            f"masks={len(self.masks or [])}, keypoints={len(self.keypoints or [])}, "
-            f"obb={len(self.obb or [])})"
-        )
-
-
-class OBB:
-    """
-    Oriented bounding box container for one image.
-
-    Args:
-        data: Tensor ``[N, 7]`` with ``cx, cy, w, h, angle_radians, conf, cls``.
-        orig_shape: ``(H, W)`` of the original image.
-    """
-
-    def __init__(self, data: torch.Tensor, orig_shape: tuple[int, int]) -> None:
-        if not isinstance(data, torch.Tensor):
-            raise TypeError(f"obb data must be a torch.Tensor, got {type(data).__name__}")
-        if data.ndim != 2 or data.shape[1] != 7:
-            raise ValueError("obb data must have shape [N, 7]")
-        self._data = data
-        self.orig_shape = orig_shape
-
-    @property
-    def data(self) -> torch.Tensor:
-        """Raw ``[N, 7]`` tensor in ``cx, cy, w, h, angle, conf, cls`` order."""
-        return self._data
-
-    @property
-    def xywhr(self) -> torch.Tensor:
-        """Center-x, center-y, width, height, rotation in radians."""
-        return self._data[:, :5]
-
-    @property
-    def xyxyxyxy(self) -> torch.Tensor:
-        """Four rotated box corners as ``[N, 8]`` absolute pixel coordinates."""
-        xywhr = self.xywhr
-        centers = xywhr[:, :2]
-        widths = xywhr[:, 2:3]
-        heights = xywhr[:, 3:4]
-        angles = xywhr[:, 4]
-
-        x_offsets = torch.cat((-widths, widths, widths, -widths), dim=1) / 2
-        y_offsets = torch.cat((-heights, -heights, heights, heights), dim=1) / 2
-
-        cos = torch.cos(angles).unsqueeze(1)
-        sin = torch.sin(angles).unsqueeze(1)
-        x = x_offsets * cos - y_offsets * sin + centers[:, 0:1]
-        y = x_offsets * sin + y_offsets * cos + centers[:, 1:2]
-        return torch.stack((x, y), dim=2).reshape(-1, 8)
-
-    @property
-    def xyxyxyxyn(self) -> torch.Tensor:
-        """Four rotated box corners normalized to ``[0, 1]`` as ``[N, 8]``."""
-        height, width = self.orig_shape
-        normalized = self.xyxyxyxy.clone()
-        normalized[:, 0::2] /= width
-        normalized[:, 1::2] /= height
-        return normalized
-
-    @property
-    def conf(self) -> torch.Tensor:
-        """Confidence scores ``[N]``."""
-        return self._data[:, 5]
-
-    @property
-    def cls(self) -> torch.Tensor:
-        """Class indices ``[N]`` as int."""
-        return self._data[:, 6].int()
-
-    def __len__(self) -> int:
-        return len(self._data)
-
-    def __bool__(self) -> bool:
-        return len(self) > 0
-
-    def __repr__(self) -> str:
-        return f"OBB(n={len(self)}, device={self._data.device})"
+        return f"Results(path={self.path!r}, detections={len(self)}, masks={len(self.masks or [])})"
 
 
 class SemanticMask:
@@ -543,59 +412,6 @@ class Masks:
 
     def __repr__(self) -> str:
         return f"Masks(n={len(self)}, shape={self.orig_shape}, device={self._data.device})"
-
-
-class Keypoints:
-    """
-    Per-instance keypoints container for one image.
-
-    Args:
-        data: Tensor [N, K, 2] (XY pixel coords) or [N, K, 3] (XY coords + confidence).
-        orig_shape: (H, W) of the original image (for normalised coords).
-    """
-
-    def __init__(self, data: torch.Tensor, orig_shape: tuple[int, int]) -> None:
-        if not isinstance(data, torch.Tensor):
-            raise TypeError(f"keypoints data must be a torch.Tensor, got {type(data).__name__}")
-        if data.ndim != 3 or data.shape[2] not in (2, 3):
-            raise ValueError(
-                f"keypoints data must have shape [N, K, 2] or [N, K, 3], got {tuple(data.shape)}"
-            )
-        self._data = data
-        self.orig_shape = orig_shape
-
-    @property
-    def data(self) -> torch.Tensor:
-        """Raw keypoint tensor with shape ``[N, K, 2]`` or ``[N, K, 3]``."""
-        return self._data
-
-    @property
-    def xy(self) -> torch.Tensor:
-        """Absolute pixel coords ``[N, K, 2]``."""
-        return self._data[..., :2]
-
-    @property
-    def xyn(self) -> torch.Tensor:
-        """Normalised 0-1 coords ``[N, K, 2]``."""
-        height, width = self.orig_shape
-        norm = self._data[..., :2].clone()
-        norm[..., 0] /= width
-        norm[..., 1] /= height
-        return norm
-
-    @property
-    def conf(self) -> torch.Tensor | None:
-        """Keypoint confidence scores ``[N, K]`` if present."""
-        return self._data[..., 2] if self._data.shape[2] == 3 else None
-
-    def __len__(self) -> int:
-        return len(self._data)
-
-    def __bool__(self) -> bool:
-        return len(self) > 0
-
-    def __repr__(self) -> str:
-        return f"Keypoints(n={len(self)}, shape={self.orig_shape}, device={self._data.device})"
 
 
 class Boxes:
