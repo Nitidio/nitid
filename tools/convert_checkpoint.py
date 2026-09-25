@@ -7,17 +7,20 @@ Migrates a raw D-FINE .pth (weights only) into the dfine-wrap format
 Usage:
     python tools/convert_checkpoint.py \
         --weights dfine_l.pth \
-        --model   dfine_l \
+        --model   nitid1l \
         --task    detect \
         --names   configs/datasets/coco.yml \
-        --output  dfine_l_wrapped.pth
+        --output  nitid1l_detect.pth
+
+``--model`` takes the public ``nitid1{n,s,m,l,x}`` names or their ``dfine_*``
+equivalents.
 """
 
 from __future__ import annotations
 
 import argparse
 import copy
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -102,12 +105,27 @@ def convert(
     print(f"Saved wrapped checkpoint to {output}  ({len(names)} classes)")
 
 
-def main() -> None:
+def _model_name(value: str) -> str:
+    """Map a public ``nitid1*`` name to its ``dfine_*`` config; pass other names through."""
+    if not value.lower().startswith("nitid"):
+        return value
+    from dfine.nitid import parse_nitid_model_name
+
+    try:
+        spec = parse_nitid_model_name(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return f"dfine_{spec.size}"
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Convert raw D-FINE checkpoint to dfine-wrap format")
     p.add_argument("--weights", required=True)
     source = p.add_mutually_exclusive_group(required=True)
     source.add_argument(
         "--model",
+        type=_model_name,
+        help="Model config: nitid1n/s/m/l/x, or the equivalent dfine_n/s/m/l/x",
         choices=[
             "dfine_n",
             "dfine_s",
@@ -120,7 +138,7 @@ def main() -> None:
     p.add_argument("--task", choices=["detect", "segment", "semantic"], default="detect")
     p.add_argument("--names", required=True)
     p.add_argument("--output", required=True)
-    args = p.parse_args()
+    args = p.parse_args(argv)
     if args.model:
         from dfine.nn.configs import make_model_config
 
