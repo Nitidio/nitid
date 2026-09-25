@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-import tools.convert_checkpoint as convert_checkpoint
+import nitid.convert_checkpoint as convert_checkpoint
 from dfine.nn.configs import make_model_config
 
 

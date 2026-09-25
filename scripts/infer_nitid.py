@@ -11,7 +11,7 @@ Usage:
 Notes:
     - Expects a *nitid-wrapped* checkpoint (keys: model, config, names).
       Convert a raw D-FINE checkpoint first if needed:
-        uv run python tools/convert_checkpoint.py \
+        uv run python -m nitid.convert_checkpoint \
             --weights dfine_l.pth \
             --model   nitid1l \
             --task    detect \

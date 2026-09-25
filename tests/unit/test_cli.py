@@ -5,7 +5,7 @@ import types
 
 import pytest
 
-from tools.dfine_cli import COMMAND_HELP, COMMANDS, main, parse_args
+from nitid.cli import COMMAND_HELP, COMMANDS, main, parse_args
 
 
 @pytest.mark.parametrize(

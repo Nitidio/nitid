@@ -27,6 +27,8 @@ uv run mypy dfine/
 
 ```
 nitid/              Public Python package — import NITID from here
+  cli.py                  `nitid` CLI entry point (`dfine` is a back-compat alias)
+  convert_checkpoint.py   Maintainer utility for raw upstream checkpoints
 dfine/              Internal implementation and compatibility namespace
   nitid.py          NITID public class and model-name mapping
   model.py          D-FINE backend class and checkpoint validation
@@ -38,8 +40,7 @@ dfine/              Internal implementation and compatibility namespace
   nn/               Integrated detection, segmentation, and semantic architectures/losses
   utils/            sources.py (LoadSource), plotting, misc helpers
 tools/
-  dfine_cli.py      Nitid CLI implementation (internal filename)
-  convert_checkpoint.py   Maintainer utility for raw upstream checkpoints
+  visualize_augmentations.py  Source-checkout maintainer utility
 configs/
   datasets/         coco.yml and example_custom.yml
 tests/
@@ -169,7 +170,7 @@ If you are maintaining support for a new upstream checkpoint, use the conversion
 tool explicitly:
 
 ```bash
-uv run python tools/convert_checkpoint.py \
+uv run python -m nitid.convert_checkpoint \
     --weights upstream_checkpoint.pth \
     --model   nitid1l \
     --task    detect \
