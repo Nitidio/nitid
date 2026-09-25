@@ -105,12 +105,6 @@ uses. Requesting a `device` OpenVINO doesn't report as available (check
 `dfine.nn.openvino_runtime.list_openvino_devices()`) raises a `ValueError`
 naming what's actually available, instead of an unexplained backend error.
 
-Note the naming overlap: this constructor-level `backend` selects the
-*compute* backend (PyTorch vs. OpenVINO). It is unrelated to `predict()`'s
-own `backend` argument below, which selects the *video source* backend
-(`"opencv"` vs. `"gstreamer"`) — the two are independent and can be combined
-freely, e.g. `NITID(..., backend="openvino", device="NPU").predict(source, backend="gstreamer")`.
-
 ---
 
 ### `predict()`
@@ -130,11 +124,7 @@ results = model.predict(
     save=False,       # save annotated outputs to project/name
     project=None,     # defaults to runs/detect or runs/segment
     name="exp",
-    backend="opencv", # or "gstreamer" for video/live sources
-    gst_pipeline=None, # optional explicit GStreamer pipeline
-    rtsp_latency=200,
-    rtsp_transport="tcp",
-    rtsp_username=None,
+    rtsp_username=None, # credentials for an rtsp:// or rtsps:// source
     rtsp_password=None, # Python only; CLI reads passwords from an environment variable
     iou=0.85,          # IoU threshold for TTA NMS
     sink=None,         # optional FrameSink receiving annotated frames
@@ -336,10 +326,6 @@ results = model.track(
     save_dir=None,
     exist_ok=False,
     verbose=True,
-    backend="opencv",
-    gst_pipeline=None,
-    rtsp_latency=200,
-    rtsp_transport="tcp",
     rtsp_username=None,
     rtsp_password=None, # Python only; CLI uses rtsp_password_env
     iou=0.85,
@@ -471,13 +457,7 @@ and closes the sink when iteration finishes or the generator is closed.
 The public media types can be imported directly:
 
 ```python
-from nitid import (
-    Frame,
-    FrameMetadata,
-    FrameSink,
-    FrameSource,
-    GStreamerVideoSink,
-)
+from nitid import Frame, FrameMetadata, FrameSink, FrameSource
 ```
 
 A `FrameSource` yields ordered BGR frames with stable metadata. Both
@@ -485,41 +465,27 @@ A `FrameSource` yields ordered BGR frames with stable metadata. Both
 camera source. A `FrameSink` receives annotated frames through `sink=`. Sources
 and sinks have explicit `close()` methods and support context-manager use.
 
-`GStreamerFrameSource` is the built-in GStreamer/live-stream implementation:
+Video files, webcams, and RTSP/HTTP streams are read through OpenCV's default
+FFmpeg backend. For an authenticated RTSP camera, pass `rtsp_username=` and
+`rtsp_password=` instead of embedding them in the URL: nitid percent-encodes
+them into the URL it opens, while `Results`, frame metadata, and `args.yaml`
+keep the credential-free source you passed.
+
+`save=True` writes annotated video with OpenCV's `VideoWriter`. To send
+annotated frames anywhere else, implement a `FrameSink`:
 
 ```python
-from nitid import GStreamerFrameSource
+class Forwarder(FrameSink):
+    def write(self, frame: Frame) -> None:
+        publish(frame.image, frame.metadata.timestamp)
 
-source = GStreamerFrameSource("rtsp://camera/live", rtsp_transport="tcp")
-for result in model.track(source, stream=True):
-    ...
-```
-
-Alternatively, pass the same settings directly to `predict()` or `track()`
-using `backend="gstreamer"`. See [GStreamer and RTSP](gstreamer.md).
-
-Use `GStreamerVideoSink` to send annotated results to a file, segmented files,
-an RTSP publishing endpoint, or a custom appsrc pipeline. The sink opens on its
-first frame, so width, height, and source FPS do not need to be known upfront:
-
-```python
-sink = GStreamerVideoSink("runs/segments/camera", segment_duration=60)
-for result in model.track("video.mp4", stream=True, sink=sink):
-    ...
-```
-
-```python
-sink = GStreamerVideoSink("rtsp://media-server/nitid")
-for result in model.track("rtsp://camera/input", stream=True, sink=sink):
+for result in model.track("video.mp4", stream=True, sink=Forwarder()):
     ...
 ```
 
 The predictor sends `result.plot()` to the sink after tracking, so output
 frames contain persistent IDs. The sink is closed when inference finishes or
 when the streaming generator is explicitly closed.
-
-Use `inspect_gstreamer_capabilities()` or `nitid gstreamer-info` to check that
-the active OpenCV build has GStreamer enabled before deployment.
 
 ---
 

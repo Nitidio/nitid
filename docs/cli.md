@@ -228,65 +228,41 @@ uv run nitid track \
 activation and association thresholds operate afterward. Run
 `uv run nitid track --help` for every supported option and its defaults.
 
-Use the GStreamer backend for an RTSP source:
+Track an RTSP or HTTP stream. Streams are read through OpenCV's default FFmpeg
+backend:
 
 ```bash
 uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://camera/live \
-    backend=gstreamer \
     conf=0.5
 ```
 
-Tracking ends when the stream stops delivering frames. See
-[GStreamer and RTSP](gstreamer.md) for installation requirements and explicit
-pipelines.
-
-Publish annotated tracking to an RTSP server that supports client publishing:
-
-```bash
-uv run nitid track \
-    model=nitid1s task=detect \
-    source=rtsp://camera/input \
-    backend=gstreamer \
-    output=rtsp://media-server/nitid \
-    output_rtsp_transport=tcp
-```
-
-Record annotated MP4 segments instead:
-
-```bash
-uv run nitid track \
-    model=nitid1s task=detect \
-    source=rtsp://camera/input \
-    backend=gstreamer \
-    output=runs/segments/camera-1 \
-    segment_duration=60
-```
-
-`output=` activates the GStreamer output sink and is separate from `save=true`.
-Use `output_pipeline=` for a fully custom appsrc pipeline and `output_encoder=`
-to select a platform encoder.
-
-Check that the active OpenCV build has GStreamer enabled:
-
-```bash
-uv run nitid gstreamer-info
-```
+Tracking ends when the stream stops delivering frames.
+FFmpeg options such as the RTSP transport are set through OpenCV's
+`OPENCV_FFMPEG_CAPTURE_OPTIONS` environment variable, for example
+`OPENCV_FFMPEG_CAPTURE_OPTIONS="rtsp_transport;tcp"`.
 
 ## Authenticated RTSP cameras
 
-Pass the camera password through an environment variable:
+Pass the camera username as an option and the password through an environment
+variable:
 
 ```bash
 export CAMERA_RTSP_PASSWORD='camera password'
 uv run nitid track \
     model=nitid1s task=detect \
     source=rtsp://192.0.2.10/Streaming/Channels/101 \
-    backend=gstreamer \
     rtsp_username=operator \
     rtsp_password_env=CAMERA_RTSP_PASSWORD
 ```
+
+nitid percent-encodes both values and injects them into the URL that OpenCV
+opens, so passwords with characters such as `@`, `:` or `/` work unchanged.
+The source recorded in results and in `args.yaml` stays the credential-free URL
+you passed; the password is never written there. Credentials are accepted only
+for `rtsp://` and `rtsps://` sources that do not already contain a
+`user:password@` part.
 
 A direct `rtsp_password=` CLI argument is rejected because process arguments
 may be visible to other users.
