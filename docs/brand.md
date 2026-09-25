@@ -103,9 +103,11 @@ describe the same scope, which keeps the promise narrow and the "three tasks,
 five operations" framing honest. The five operations are `predict`, `track`,
 `train`, `val` and `export`.
 
-**The README is the pitch, not the manual.** It covers only the three announced
-tasks and the five operations. Pose, OBB and GStreamer/RTSP video I/O are
-documented on the documentation site, not in the README.
+**The README is the pitch, not the manual.** It covers the three announced
+tasks and the five operations; details belong on the documentation site. Pose
+estimation, oriented bounding boxes and GStreamer video I/O were removed from
+the library on 2026-09-25 and are preserved in the `archive/pose-obb-gstreamer`
+tag.
 
 **The repository is the source of truth for the API.** Where marketing material
 and the code disagree about names or signatures, the code wins and the
