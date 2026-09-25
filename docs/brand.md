@@ -104,6 +104,10 @@ stay out of the headline pitch, which keeps the promise narrow and keeps the
 "three tasks, five operations" framing honest. The five operations are
 `predict`, `track`, `train`, `val` and `export`.
 
+**The README is the pitch, not the manual.** It covers only the three announced
+tasks and the five operations. Pose, OBB and GStreamer/RTSP video I/O are
+documented on the documentation site, not in the README.
+
 **The repository is the source of truth for the API.** Where marketing material
 and the code disagree about names or signatures, the code wins and the
 marketing material gets corrected.
