@@ -18,7 +18,6 @@ __all__ = [
     "FrameMetadata",
     "FrameSink",
     "FrameSource",
-    "OBB",
     "SemanticMask",
     "bugreport",
 ]

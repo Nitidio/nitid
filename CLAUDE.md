@@ -54,11 +54,13 @@ Raw checkpoints can be wrapped without a separate model config:
 ```bash
 uv run python tools/convert_checkpoint.py \
     --weights dfine_l.pth \
-    --model dfine_l \
+    --model nitid1l \
     --task detect \
     --names configs/datasets/coco.yml \
-    --output dfine_l_wrapped.pth
+    --output nitid1l_detect.pth
 ```
+
+`--model` takes the public `nitid1{n,s,m,l,x}` names or their `dfine_*` equivalents.
 
 The converter prefers EMA weights when present. Model weights always come from the checkpoint, and class names come from its `names` mapping.
 
