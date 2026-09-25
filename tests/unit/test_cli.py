@@ -5,7 +5,7 @@ import types
 
 import pytest
 
-from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main, parse_args
+from tools.dfine_cli import COMMAND_HELP, COMMANDS, main, parse_args
 
 
 @pytest.mark.parametrize(
@@ -17,8 +17,8 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
             (
                 "source=SOURCE",
                 "tracker=NAME",
-                "backend=NAME",
-                "output=DEST",
+                "rtsp_username=USER",
+                "rtsp_password_env=NAME",
                 "track_activation_threshold=FLOAT",
                 "enable_cmc=BOOL",
                 "direction_consistency_weight=FLOAT",
@@ -34,7 +34,6 @@ from tools.dfine_cli import COMMAND_HELP, COMMANDS, _configure_output_sink, main
         ("export", ("task=TASK", "format=FORMAT", "opset=INT", "nitid export")),
         ("convert", ("data=DATA", "target=FORMAT", "output=PATH", "nitid convert")),
         ("info", ("task=TASK", "detailed=BOOL", "nitid info")),
-        ("gstreamer-info", ("OpenCV has GStreamer enabled", "gst-inspect-1.0")),
         ("bugreport", ("environment-only", "nitid bugreport")),
     ],
 )
@@ -270,102 +269,10 @@ def test_track_cli_respects_explicit_stream_and_tracker_selection(monkeypatch):
     }
 
 
-def test_track_cli_forwards_gstreamer_source_options(monkeypatch):
-    observed = {}
-
-    class FakeDFINE:
-        def __init__(self, model, *, task="detect", weights="default"):
-            pass
-
-        def track(self, source, **kwargs):
-            observed.update(source=source, kwargs=kwargs)
-            return []
-
-    fake_module = types.ModuleType("dfine")
-    fake_module.NITID = FakeDFINE
-    monkeypatch.setitem(sys.modules, "nitid", fake_module)
-
-    main(
-        [
-            "nitid",
-            "track",
-            "source=rtsp://camera/live",
-            "backend=gstreamer",
-            "rtsp_latency=300",
-            "rtsp_transport=udp",
-        ]
-    )
-
-    assert observed == {
-        "source": "rtsp://camera/live",
-        "kwargs": {
-            "backend": "gstreamer",
-            "rtsp_latency": 300,
-            "rtsp_transport": "udp",
-            "stream": True,
-        },
-    }
-
-
-def test_track_cli_builds_gstreamer_segment_sink(monkeypatch, capsys):
-    observed = {}
-
-    class FakeSink:
-        def __init__(self, destination, **kwargs):
-            observed.update(destination=destination, sink_kwargs=kwargs)
-
-    class FakeDFINE:
-        def __init__(self, model, *, task="detect", weights="default"):
-            pass
-
-        def track(self, source, **kwargs):
-            observed.update(source=source, model_kwargs=kwargs)
-            return []
-
-    fake_module = types.ModuleType("dfine")
-    fake_module.NITID = FakeDFINE
-    fake_module.GStreamerVideoSink = FakeSink
-    monkeypatch.setitem(sys.modules, "dfine", fake_module)
-    monkeypatch.setitem(sys.modules, "nitid", fake_module)
-
-    main(
-        [
-            "nitid",
-            "track",
-            "source=video.mp4",
-            "output=runs/segments",
-            "segment_duration=60",
-            "output_fps=15",
-        ]
-    )
-
-    assert observed["destination"] == "runs/segments"
-    assert observed["sink_kwargs"] == {
-        "pipeline": None,
-        "fps": 15,
-        "segment_duration": 60,
-    }
-    assert observed["source"] == "video.mp4"
-    assert observed["model_kwargs"] == {"sink": observed["model_kwargs"]["sink"], "stream": True}
-    assert "Wrote annotated output to runs/segments" in capsys.readouterr().out
-
-
-def test_output_options_require_a_destination():
-    with pytest.raises(ValueError, match="require output="):
-        _configure_output_sink({"segment_duration": 60})
-
-
-def test_gstreamer_info_does_not_load_a_model(monkeypatch, capsys):
-    monkeypatch.setattr(
-        "dfine.gstreamer.inspect_gstreamer_capabilities",
-        lambda: {"opencv_gstreamer": True, "gst_inspect": False},
-    )
-
-    main(["nitid", "gstreamer-info"])
-
-    output = capsys.readouterr().out
-    assert "OpenCV GStreamer: yes" in output
-    assert "gst-inspect-1.0: no" in output
+def test_removed_video_io_options_are_not_documented():
+    for command in ("predict", "track"):
+        for option in ("backend=", "output=", "segment_duration=", "rtsp_latency="):
+            assert option not in COMMAND_HELP[command]
 
 
 def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
@@ -389,7 +296,6 @@ def test_track_cli_reads_rtsp_password_from_environment(monkeypatch, capsys):
             "nitid",
             "track",
             "source=rtsp://camera/live",
-            "backend=gstreamer",
             "rtsp_username=operator",
             "rtsp_password_env=CAMERA_RTSP_PASSWORD",
         ]

@@ -53,8 +53,6 @@ What comes with it:
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
   video output
-- Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented
-  recording
 
 Pose estimation and oriented bounding boxes are supported too, outside the three
 headline tasks — see the [quickstart](docs/quickstart.md).
@@ -171,28 +169,22 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 The annotated video is saved under `runs/track/exp/`. Tracking dependencies
 are optional; install them with `pip install "nitid[track]"`.
 
-For RTSP ingest through GStreamer, use an OpenCV build compiled with it:
+RTSP and HTTP streams are read through OpenCV's default FFmpeg backend. For
+an authenticated camera, pass the credentials separately; nitid injects them
+into the capture URL and keeps the password out of results and saved run
+metadata:
 
 ```python
+import os
+
 for result in model.track(
     "rtsp://camera/live",
-    backend="gstreamer",
+    rtsp_username="viewer",
+    rtsp_password=os.environ["CAMERA_PASSWORD"],
     conf=0.5,
     stream=True,
 ):
     ...
-```
-
-See [docs/gstreamer.md](docs/gstreamer.md) for system requirements and
-explicit pipelines. `nitid gstreamer-info` checks whether your OpenCV build
-has GStreamer enabled.
-
-Annotated tracking can also be published or segmented without buffering
-results in Python:
-
-```bash
-nitid track model=nitid1s task=detect source=video.mp4 \
-  output=runs/segments segment_duration=60
 ```
 
 ### Validation
@@ -250,7 +242,6 @@ For the full guide:
 - Fine-tuning and validation: [docs/fine_tuning.md](docs/fine_tuning.md)
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
-- GStreamer and RTSP: [docs/gstreamer.md](docs/gstreamer.md)
 
 
 ## Migrating from YOLO

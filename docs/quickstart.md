@@ -153,27 +153,25 @@ objects with persistent IDs in `result.boxes.id`. With `save=True`, the
 annotated video defaults to `runs/track/exp/video.mp4`. Prefer `stream=True`
 for video and live sources so results are not retained in memory.
 
-For a live RTSP camera, select GStreamer explicitly:
+Live RTSP and HTTP cameras are read through OpenCV's default FFmpeg backend.
+Pass credentials separately rather than in the URL; the password stays out of
+results and saved run metadata:
 
 ```python
+import os
+
 for result in model.track(
     "rtsp://camera/live",
-    backend="gstreamer",
+    rtsp_username="viewer",
+    rtsp_password=os.environ["CAMERA_PASSWORD"],
     conf=0.5,
     stream=True,
 ):
     track_ids = result.boxes.id
 ```
 
-This requires an OpenCV build compiled with GStreamer. See
-[GStreamer and RTSP](gstreamer.md) for verification and pipeline examples.
-
-Write annotated one-minute segments from the CLI:
-
-```bash
-nitid track model=nitid1s task=detect source=video.mp4 \
-    output=runs/segments segment_duration=60 conf=0.5
-```
+See [authenticated RTSP cameras](cli.md#authenticated-rtsp-cameras) for the
+CLI equivalent.
 
 ## Working with checkpoints
 
