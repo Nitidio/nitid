@@ -43,7 +43,7 @@ class DFINE:
 
     Args:
         model:   D-FINE architecture name or path to a wrapped .pth checkpoint.
-        task:    ``"detect"``, ``"segment"``, ``"semantic"`` (alias ``"sem_seg"``), or ``"pose"``.
+        task:    ``"detect"``, ``"segment"``, or ``"semantic"`` (alias ``"sem_seg"``).
         weights: Official weight variant: ``default``, ``obj2coco``, or ``coco``.
         backend: ``"torch"`` (default) or ``"openvino"``. ``"openvino"`` routes
                  ``predict()``/``track()`` through OpenVINO Runtime, enabling
@@ -131,10 +131,6 @@ class DFINE:
         save_dir: str | Path | None = None,
         exist_ok: bool = False,
         verbose: bool = True,
-        backend: str = "opencv",
-        gst_pipeline: str | None = None,
-        rtsp_latency: int = 200,
-        rtsp_transport: str = "tcp",
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
         iou: float = 0.85,
@@ -162,10 +158,6 @@ class DFINE:
             save_dir=save_dir,
             exist_ok=exist_ok,
             verbose=verbose,
-            backend=backend,
-            gst_pipeline=gst_pipeline,
-            rtsp_latency=rtsp_latency,
-            rtsp_transport=rtsp_transport,
             rtsp_username=rtsp_username,
             rtsp_password=rtsp_password,
             iou=iou,
@@ -188,10 +180,6 @@ class DFINE:
         save_dir: str | Path | None = None,
         exist_ok: bool = False,
         verbose: bool = True,
-        backend: str = "opencv",
-        gst_pipeline: str | None = None,
-        rtsp_latency: int = 200,
-        rtsp_transport: str = "tcp",
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
         iou: float = 0.85,
@@ -222,10 +210,6 @@ class DFINE:
             save_dir=save_dir,
             exist_ok=exist_ok,
             verbose=verbose,
-            backend=backend,
-            gst_pipeline=gst_pipeline,
-            rtsp_latency=rtsp_latency,
-            rtsp_transport=rtsp_transport,
             rtsp_username=rtsp_username,
             rtsp_password=rtsp_password,
             iou=iou,

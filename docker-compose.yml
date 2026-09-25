@@ -18,28 +18,3 @@ services:
     stdin_open: true
     tty: true
     restart: unless-stopped
-
-  nitid-gstreamer:
-    profiles: ["gstreamer"]
-    build:
-      context: .
-      dockerfile: Dockerfile.gstreamer
-    image: nitid-gstreamer
-    container_name: nitid_gstreamer
-    user: "${UID:-1000}:${GID:-1000}"
-    volumes:
-      - .:/app
-    environment:
-      - PYTHONUNBUFFERED=1
-      - PYTHONDONTWRITEBYTECODE=1
-      - HOME=/tmp/nitid-home
-    group_add:
-      - "${VIDEO_GID:-44}"
-    healthcheck:
-      test: ["CMD-SHELL", "dfine gstreamer-info | grep -q 'OpenCV GStreamer: yes'"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    stdin_open: true
-    tty: true
-    restart: unless-stopped

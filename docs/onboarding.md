@@ -36,8 +36,8 @@ dfine/              Internal implementation and compatibility namespace
   trainer.py        Fine-tuning worker
   validator.py      COCO evaluation worker
   exporter.py       ONNX / OpenVINO / TorchScript / TensorRT export worker
-  results.py        Results + Boxes + Masks + Keypoints return types
-  nn/               Integrated detection, segmentation, semantic, and pose architectures/losses
+  results.py        Results + Boxes + Masks + SemanticMask return types
+  nn/               Integrated detection, segmentation, and semantic architectures/losses
   utils/            sources.py (LoadSource), plotting, misc helpers
 tools/
   visualize_augmentations.py  Source-checkout maintainer utility
@@ -58,8 +58,8 @@ docs/               All documentation lives here
 or self-contained `.pth` checkpoints and delegates `predict`,
 `track`, `train`, `val`, and `export` to internal workers. Model construction,
 losses, and postprocessing live under `dfine/nn/`. The checkpoint's embedded
-`task` selects detection, instance segmentation, semantic segmentation, pose, or
-OBB; an explicitly requested task must match it.
+`task` selects detection, instance segmentation, or semantic segmentation; an
+explicitly requested task must match it.
 
 ---
 
@@ -74,9 +74,8 @@ package must contain everything required to construct a model.
 Detection and instance segmentation share the backbone, encoder, transformer
 decoder, boxes, and class logits. `task="segment"` enables the mask head and
 mask losses. Semantic segmentation adds a dense decoder on shared features.
-`task="pose"` routes to the DETRPose family. `task="obb"` routes to the
-RiO-DETR OBB family. New code must preserve strict state-dict compatibility
-with published checkpoints.
+New code must preserve strict state-dict compatibility with published
+checkpoints.
 
 ---
 
@@ -165,8 +164,6 @@ real checkpoint. For manual testing, prefer official model names:
 ```bash
 uv run nitid predict model=nitid1s task=detect source=image.jpg conf=0.5
 uv run nitid predict model=nitid1s task=segment source=image.jpg conf=0.5
-uv run nitid predict model=nitid1s task=pose source=image.jpg conf=0.25
-uv run nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 ```
 
 If you are maintaining support for a new upstream checkpoint, use the conversion
@@ -188,7 +185,6 @@ uv run python -m nitid.convert_checkpoint \
 | Symptom | Cause | Fix |
 |---|---|---|
 | `KeyError: 'config'` loading a `.pth` | File is not a nitid runtime checkpoint | Use a supported model name, a training checkpoint, or the maintainer conversion tool |
-| Unexpectedly low pose AP in a tiny smoke run | Too few keypoint examples or low image size | Validate on a larger split and prefer the official 640 image size |
 | `AMP has no effect` warning | Running on CPU with `amp=True` | Expected — silently degrades to FP32 |
 | Explicit task does not match checkpoint | Checkpoint opened with the wrong task | Select a matching model/task pair |
 

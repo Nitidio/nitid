@@ -1,4 +1,4 @@
-"""Export to TensorRT for deployment in GStreamer pipeline."""
+"""Export to ONNX and TensorRT for deployment."""
 
 from nitid import NITID
 

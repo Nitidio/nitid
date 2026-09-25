@@ -18,8 +18,6 @@ from nitid import NITID
 detector = NITID("nitid1s", task="detect")
 segmenter = NITID("nitid1s", task="segment")
 semantic = NITID("nitid1s", task="semantic")
-pose = NITID("nitid1s", task="pose")
-obb = NITID("nitid1s", task="obb")
 ```
 
 Supported tasks are:
@@ -27,8 +25,6 @@ Supported tasks are:
 - `detect` — D-FINE object detection.
 - `segment` — D-FINE instance segmentation.
 - `semantic` — dense semantic segmentation on D-FINE features.
-- `pose` — DETRPose single-class person keypoints.
-- `obb` — RiO-DETR oriented bounding boxes.
 
 The guiding principle is depth over breadth. A task belongs in nitid when it
 has a clear implementation, a normal user API, dataset support,
@@ -41,15 +37,15 @@ validation metrics, export coverage where realistic, tests, and documentation.
 - Automatic download/preparation of supported official checkpoints.
 - Prediction on images, videos, folders, streams, screen capture, and numpy
   arrays.
-- Result helpers for annotated outputs, masks, semantic maps, keypoints, JSON,
-  YOLO TXT, CSV, pandas DataFrames, timings, and crops.
-- Fine-tuning and validation for detection, instance segmentation, semantic
-  segmentation, COCO keypoints, and oriented bounding boxes.
+- Result helpers for annotated outputs, masks, semantic maps, JSON, YOLO TXT,
+  CSV, pandas DataFrames, timings, and crops.
+- Fine-tuning and validation for detection, instance segmentation, and semantic
+  segmentation.
 - Training features: AMP, EMA, resume, per-epoch metrics, callbacks, W&B, and
   MLflow.
 - Export to ONNX/OpenVINO for all supported tasks, and TorchScript/TensorRT for
   detection and instance segmentation.
-- RTSP/GStreamer camera workflows and annotated video output.
+- RTSP camera input and annotated video output.
 - Tests and CI that protect supported user flows.
 
 ## Not in scope by default
@@ -69,19 +65,15 @@ Available today:
 - Detection and instance segmentation with official checkpoint downloads.
 - Semantic segmentation training, validation, inference, and ONNX/OpenVINO
   export.
-- DETRPose model loading, training, validation, inference, visualization, and
-  ONNX/OpenVINO export.
-- RiO-DETR OBB model loading, training, validation, inference, visualization,
-  and ONNX/OpenVINO export.
 - Tracking with optional tracker dependencies.
-- GStreamer/RTSP camera helpers.
+- RTSP camera input, including authenticated cameras.
 - Developer tests for model construction, datasets, training, validation,
   export, and result containers.
 
 Known gaps:
 
-- Pose and semantic benchmark parity still need larger public benchmark runs.
-- TensorRT coverage has not been completed for semantic segmentation, pose, or OBB.
+- Semantic benchmark parity still needs larger public benchmark runs.
+- TensorRT coverage has not been completed for semantic segmentation.
 - Distributed training and automatic batch sizing are not implemented.
 - Quantized deployment is not implemented.
 - Public PyPI release workflow and hosted model registry remain release tasks.
@@ -97,10 +89,10 @@ pipeline. The known gaps above are documented gaps for v0.1.0, not blockers.
 
 ## Near-term priorities
 
-1. Stabilize the task surface: detection, instance segmentation, semantic
-   segmentation, pose, and OBB.
+1. Stabilize the task surface: detection, instance segmentation, and semantic
+   segmentation.
 2. Keep README/API/fine-tuning/export docs aligned with the actual public API.
-3. Add benchmark-grade validation runs for segmentation and pose on datasets
+3. Add benchmark-grade validation runs for segmentation on datasets
    larger than smoke tests.
 4. Finish release hygiene: package artifacts, notices, versioning, and PyPI.
 5. Harden deployment workflows: reproducible export checks, hardware notes, and

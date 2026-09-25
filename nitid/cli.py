@@ -25,7 +25,6 @@ COMMANDS = {
     "export",
     "convert",
     "info",
-    "gstreamer-info",
     "bugreport",
 }
 REPORT_COMMANDS = {"predict", "track", "train", "val", "export"}
@@ -63,7 +62,6 @@ Commands:
   export   Export a model to ONNX, OpenVINO, TorchScript, or TensorRT
   convert  Convert a detection dataset between YOLO and COCO formats
   info     Show model parameters, GFLOPs, and checkpoint size
-  gstreamer-info  Show whether GStreamer is available to OpenCV
   bugreport Create an environment-only log for a GitHub issue
 
 Run "nitid COMMAND --help" for command-specific options and examples.
@@ -85,18 +83,8 @@ Options:
   conf=FLOAT          Confidence threshold (default: 0.5)
   imgsz=INT           Square inference image size (default: 640)
   stream=BOOL         Return results as a generator (default: false)
-  backend=NAME        Video backend: opencv or gstreamer (default: opencv)
-  gst_pipeline=TEXT   Explicit GStreamer pipeline ending before or at appsink
-  rtsp_latency=INT    GStreamer RTSP jitter-buffer latency in ms (default: 200)
-  rtsp_transport=NAME RTSP transport: tcp or udp (default: tcp)
-  rtsp_username=USER RTSP username passed as a GStreamer property
+  rtsp_username=USER  Username for an rtsp:// or rtsps:// source
   rtsp_password_env=NAME  Environment variable containing the RTSP password
-  output=DEST         Annotated MP4 path, segment directory, or RTSP publish URL
-  output_pipeline=TEXT  Explicit GStreamer appsrc output pipeline
-  output_fps=FLOAT    Override output FPS (default: source FPS)
-  segment_duration=FLOAT  Split local output every N seconds
-  output_encoder=TEXT GStreamer encoder element and properties (default: x264enc)
-  output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
   return_probs=BOOL   Retain full-resolution semantic probabilities (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
@@ -130,18 +118,8 @@ Options:
   classes=LIST        Track only selected class IDs, e.g. classes=[0,2]
   stream=BOOL         Process results incrementally (CLI default: true)
   vid_stride=INT      Process every Nth source frame (default: 1)
-  backend=NAME        Video backend: opencv or gstreamer (default: opencv)
-  gst_pipeline=TEXT   Explicit GStreamer pipeline ending before or at appsink
-  rtsp_latency=INT    GStreamer RTSP jitter-buffer latency in ms (default: 200)
-  rtsp_transport=NAME RTSP transport: tcp or udp (default: tcp)
-  rtsp_username=USER RTSP username passed as a GStreamer property
+  rtsp_username=USER  Username for an rtsp:// or rtsps:// source
   rtsp_password_env=NAME  Environment variable containing the RTSP password
-  output=DEST         Annotated MP4 path, segment directory, or RTSP publish URL
-  output_pipeline=TEXT  Explicit GStreamer appsrc output pipeline
-  output_fps=FLOAT    Override output FPS (default: source FPS)
-  segment_duration=FLOAT  Split local output every N seconds
-  output_encoder=TEXT GStreamer encoder element and properties (default: x264enc)
-  output_rtsp_transport=NAME  RTSP publish transport: tcp or udp (default: tcp)
   augment=BOOL        Use test-time augmentation (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
   save=BOOL           Save annotated output with persistent IDs (default: false)
@@ -188,8 +166,7 @@ Examples:
   nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
   nitid track model=nitid1s source=0 classes=[0] stream=true
   nitid track model=nitid1s source=rtsp://camera/stream lost_track_buffer=60
-  nitid track model=nitid1s source=rtsp://camera/stream backend=gstreamer
-  nitid track model=nitid1s source=video.mp4 output=runs/segments segment_duration=60
+  nitid track model=nitid1s source=rtsp://cam/stream rtsp_username=viewer rtsp_password_env=CAM_PW
 """,
     "download": """\
 Usage:
@@ -372,13 +349,6 @@ Options:
 Example:
   nitid info model=nitid1l weights=obj2coco detailed=true
 """,
-    "gstreamer-info": """\
-Usage:
-  nitid gstreamer-info
-
-Reports whether OpenCV has GStreamer enabled and whether gst-inspect-1.0 is
-available.
-""",
     "bugreport": """\
 Usage:
   nitid bugreport
@@ -441,38 +411,6 @@ def _coerce(v: str):
         if isinstance(value, list):
             return value
     return v
-
-
-def _configure_output_sink(kwargs: dict) -> str | None:
-    """Convert CLI output options into a lazy GStreamer frame sink."""
-    destination = kwargs.pop("output", None)
-    pipeline = kwargs.pop("output_pipeline", None)
-    option_names = {
-        "output_fps": "fps",
-        "segment_duration": "segment_duration",
-        "output_encoder": "encoder",
-        "output_rtsp_transport": "rtsp_transport",
-    }
-    provided_options = [name for name in option_names if name in kwargs]
-    sink_options = {
-        sink_name: kwargs.pop(cli_name)
-        for cli_name, sink_name in option_names.items()
-        if cli_name in kwargs
-    }
-    if destination is None and pipeline is None:
-        if sink_options:
-            names = ", ".join(sorted(provided_options))
-            raise ValueError(f"output options require output= or output_pipeline=: {names}")
-        return None
-
-    from dfine import GStreamerVideoSink
-
-    kwargs["sink"] = GStreamerVideoSink(
-        destination,
-        pipeline=pipeline,
-        **sink_options,
-    )
-    return str(destination) if destination is not None else "custom GStreamer pipeline"
 
 
 def _configure_rtsp_credentials(kwargs: dict) -> None:
@@ -541,14 +479,6 @@ def _execute(argv: list[str]) -> None:
         print(f"Dataset config saved to {result.config_path}")
         return
 
-    if command == "gstreamer-info":
-        from dfine.gstreamer import inspect_gstreamer_capabilities
-
-        capabilities = inspect_gstreamer_capabilities()
-        print("OpenCV GStreamer: " + ("yes" if capabilities["opencv_gstreamer"] else "no"))
-        print("gst-inspect-1.0: " + ("yes" if capabilities["gst_inspect"] else "no"))
-        return
-
     model_path = kwargs.pop("model", "nitid1l")
     task = kwargs.pop("task", "detect")
     weights = kwargs.pop("weights", "default")
@@ -563,7 +493,6 @@ def _execute(argv: list[str]) -> None:
             print(f"ERROR: source= is required for {command}")
             sys.exit(1)
         _configure_rtsp_credentials(kwargs)
-        output_label = _configure_output_sink(kwargs)
         if command == "predict":
             results = model.predict(source, **kwargs)
             for r in results:
@@ -572,8 +501,6 @@ def _execute(argv: list[str]) -> None:
                     print(f"Saved {r.save_path}")
                 if getattr(r, "semantic_save_path", None):
                     print(f"Saved {r.semantic_save_path}")
-            if output_label is not None:
-                print(f"Wrote annotated output to {output_label}")
         else:
             tracker_kwargs = {key: kwargs.pop(key) for key in TRACKER_OPTIONS if key in kwargs}
             if tracker_kwargs:
@@ -589,8 +516,6 @@ def _execute(argv: list[str]) -> None:
             print(f"Tracked {frame_count} frame{'s' if frame_count != 1 else ''}")
             for save_path in save_paths:
                 print(f"Saved {save_path}")
-            if output_label is not None:
-                print(f"Wrote annotated output to {output_label}")
     elif command == "train":
         metrics = model.train(**kwargs)
         print(metrics)

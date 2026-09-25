@@ -12,7 +12,7 @@
 [![codecov](https://codecov.io/gh/Vaelsys/nitid/graph/badge.svg)](https://codecov.io/gh/Vaelsys/nitid)
 [![License](https://img.shields.io/github/license/Vaelsys/nitid)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/develop/examples/tutorial.ipynb)
 
 Train, validate, export and run vision models. The code and our pretrained
 weights are released under the Apache License 2.0, patent grant included, so you
@@ -53,11 +53,6 @@ What comes with it:
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
   video output
-- Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented
-  recording
-
-Pose estimation and oriented bounding boxes are supported too, outside the three
-headline tasks — see the [quickstart](docs/quickstart.md).
 
 ## What "open" means here
 
@@ -141,9 +136,6 @@ print(result.semantic.mask.shape)  # [H, W]
 result.save_semantic("class_ids.png")
 ```
 
-Pose estimation (`task="pose"`) and oriented bounding boxes (`task="obb"`) work
-the same way; the [quickstart](docs/quickstart.md) has both.
-
 ### Training
 
 ```python
@@ -158,7 +150,7 @@ deim_metrics = model.train(
 )
 ```
 
-See [fine-tuning](docs/fine_tuning.md) for COCO, YOLO, semantic-mask, pose, and OBB dataset formats.
+See [fine-tuning](docs/fine_tuning.md) for COCO, YOLO, and semantic-mask dataset formats.
 
 ### Tracking
 
@@ -170,30 +162,6 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 
 The annotated video is saved under `runs/track/exp/`. Tracking dependencies
 are optional; install them with `pip install "nitid[track]"`.
-
-For RTSP ingest through GStreamer, use an OpenCV build compiled with it:
-
-```python
-for result in model.track(
-    "rtsp://camera/live",
-    backend="gstreamer",
-    conf=0.5,
-    stream=True,
-):
-    ...
-```
-
-See [docs/gstreamer.md](docs/gstreamer.md) for system requirements and
-explicit pipelines. `nitid gstreamer-info` checks whether your OpenCV build
-has GStreamer enabled.
-
-Annotated tracking can also be published or segmented without buffering
-results in Python:
-
-```bash
-nitid track model=nitid1s task=detect source=video.mp4 \
-  output=runs/segments segment_duration=60
-```
 
 ### Validation
 
@@ -234,7 +202,6 @@ print(report.path)
 ```bash
 nitid predict model=nitid1s task=detect source=image.jpg
 nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
-nitid predict model=nitid1s task=obb source=aerial.jpg conf=0.25
 nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
 nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50
 nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
@@ -250,7 +217,6 @@ For the full guide:
 - Fine-tuning and validation: [docs/fine_tuning.md](docs/fine_tuning.md)
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
-- GStreamer and RTSP: [docs/gstreamer.md](docs/gstreamer.md)
 
 
 ## Migrating from YOLO
@@ -261,7 +227,7 @@ mapping of the API and the behaviour that differs:
 
 ## Official Models
 
-> 💡 `NITID("nitid1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `nitid1` identifies the model generation. Supported tasks are `detect`, `segment`, `semantic`, `pose`, and `obb`.
+> 💡 `NITID("nitid1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `nitid1` identifies the model generation. Supported tasks are `detect`, `segment`, and `semantic`.
 
 Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 
@@ -283,6 +249,7 @@ Segmentation checkpoints are published in the official [D-FINE-seg model reposit
 | [docs/quickstart.md](docs/quickstart.md) | Full quickstart |
 | [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset formats |
 | [docs/export.md](docs/export.md) | ONNX, OpenVINO, TorchScript, and TensorRT export |
+| [docs/cli.md](docs/cli.md) | Command-line reference |
 | [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 | [docs/brand.md](docs/brand.md) | Brand: logo, palette, typography, and what the project announces |
@@ -311,11 +278,12 @@ uv run pytest tests/unit
 # All tests (integration tests build a tiny checkpoint automatically)
 uv run pytest
 
-# Lint
-uv run ruff check .
+# Lint and format
+uv run ruff check dfine tools tests
+uv run ruff format --check dfine tools tests
 
 # Type-check
-uv run mypy dfine/
+uv run mypy dfine tools
 ```
 
 Integration tests use a session-scoped fixture in `tests/conftest.py` that
@@ -329,7 +297,7 @@ required.
 
 ## Acknowledgements
 
-nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), [DETRPose](https://github.com/SebastianJanampa/DETRPose), and RiO-DETR OBB. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
+nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), with smaller portions from RT-DETR, DETR, PaddleDetection, and DEIM. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
 
 ```bibtex
 @article{peng2024dfine,

@@ -4,8 +4,8 @@ This file provides repository guidance to coding agents.
 
 ## Project overview
 
-nitid provides a unified API for detection, segmentation, pose, and oriented
-bounding boxes. The public entry point is `NITID` from the `nitid` package;
+nitid provides a unified API for object detection, instance segmentation, and
+semantic segmentation. The public entry point is `NITID` from the `nitid` package;
 model construction, losses, and postprocessing are implemented internally in
 the `dfine` package.
 
@@ -54,11 +54,13 @@ Raw checkpoints can be wrapped without a separate model config:
 ```bash
 uv run python -m nitid.convert_checkpoint \
     --weights dfine_l.pth \
-    --model dfine_l \
+    --model nitid1l \
     --task detect \
     --names configs/datasets/coco.yml \
-    --output dfine_l_wrapped.pth
+    --output nitid1l_detect.pth
 ```
+
+`--model` takes the public `nitid1{n,s,m,l,x}` names or their `dfine_*` equivalents.
 
 The converter prefers EMA weights when present. Model weights always come from the checkpoint, and class names come from its `names` mapping.
 

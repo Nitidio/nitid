@@ -96,13 +96,18 @@ it is not the pitch.
 
 These are deliberate scope decisions, not oversights.
 
-**Three tasks are announced in public messaging:** object detection, instance
-segmentation and semantic segmentation. Pose estimation and oriented bounding
-boxes are fully supported, tested and documented — see the
-[quickstart](quickstart.md) and the [API reference](api_reference.md) — but they
-stay out of the headline pitch, which keeps the promise narrow and keeps the
-"three tasks, five operations" framing honest. The five operations are
-`predict`, `track`, `train`, `val` and `export`.
+**Three tasks, five operations.** nitid supports exactly three tasks — object
+detection, instance segmentation and semantic segmentation — and the public
+messaging announces exactly those. The library, its documentation and the pitch
+describe the same scope, which keeps the promise narrow and the "three tasks,
+five operations" framing honest. The five operations are `predict`, `track`,
+`train`, `val` and `export`.
+
+**The README is the pitch, not the manual.** It covers the three announced
+tasks and the five operations; details belong on the documentation site. Pose
+estimation, oriented bounding boxes and GStreamer video I/O were removed from
+the library on 2026-09-25 and are preserved in the `archive/pose-obb-gstreamer`
+tag.
 
 **The repository is the source of truth for the API.** Where marketing material
 and the code disagree about names or signatures, the code wins and the

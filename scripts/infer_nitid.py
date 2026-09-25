@@ -13,10 +13,10 @@ Notes:
       Convert a raw D-FINE checkpoint first if needed:
         uv run python -m nitid.convert_checkpoint \
             --weights dfine_l.pth \
-            --model   dfine_l \
+            --model   nitid1l \
             --task    detect \
             --names   configs/datasets/coco.yml \
-            --output  dfine_l_wrapped.pth
+            --output  nitid1l_detect.pth
     - Output image saved to nitid_result.jpg
 """
 

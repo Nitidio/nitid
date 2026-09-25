@@ -1,6 +1,8 @@
 # ADR-0002: Native DETRPose integration
 
-- **Status**: Accepted
+- **Status**: Superseded (previously Accepted) —
+  Pose/OBB support was removed from the library on 2026-09-25 (#193/#194). The implementation is
+  preserved in the `archive/pose-obb-gstreamer` tag.
 - **Date**: 2026-08-19
 - **Deciders**: nitid maintainers
 - **Related**: [DETRPose](https://github.com/SebastianJanampa/DETRPose),

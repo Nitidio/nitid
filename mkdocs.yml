@@ -35,7 +35,6 @@ nav:
   - Home: index.md
   - Quick Start: quickstart.md
   - Command Line: cli.md
-  - GStreamer and RTSP: gstreamer.md
   - Fine-tuning: fine_tuning.md
   - Export: export.md
   - API Reference: api_reference.md
@@ -43,7 +42,6 @@ nav:
   - Project:
       - Roadmap: roadmap.md
       - Brand: brand.md
-      - DETRPose architecture: pose_architecture.md
       - Decisions:
           - Overview: adr/index.md
           - "ADR-0002: Native DETRPose integration": adr/0002-native-detrpose-integration.md

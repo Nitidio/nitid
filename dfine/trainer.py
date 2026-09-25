@@ -564,11 +564,6 @@ class DFINETrainer:
             iou_crop=iou_crop,
         )
         augmentation.validate()
-        if task == "obb":
-            if imgsz < 256:
-                raise ValueError("OBB training requires imgsz >= 256 for the RiO-DETR decoder")
-            if mosaic > 0 or mixup > 0:
-                raise ValueError("OBB training does not support mosaic or mixup augmentations")
         semantic_config = self.cfg.get("SemanticSegmentation", {})
         ignore_index = (
             int(semantic_config.get("ignore_index", 255))
@@ -1157,11 +1152,7 @@ class DFINETrainer:
         collate_mixup_epochs: tuple[int, int] = (0, 0),
     ):
         from dfine.tasks import normalize_task
-        from dfine.utils.data import (
-            build_detection_dataloader,
-            build_obb_dataloader,
-            build_semantic_dataloader,
-        )
+        from dfine.utils.data import build_detection_dataloader, build_semantic_dataloader
 
         task = normalize_task(str(self.cfg.get("task", "detect")))
         if task == "semantic":
@@ -1176,21 +1167,6 @@ class DFINETrainer:
                 cache=cache,
                 seed=seed,
                 deterministic=deterministic,
-                fraction=fraction,
-                augment=augment,
-            )
-        if task == "obb":
-            return build_obb_dataloader(
-                data,
-                split="train",
-                imgsz=imgsz,
-                batch_size=batch,
-                workers=workers,
-                cache=cache,
-                seed=seed,
-                deterministic=deterministic,
-                classes=classes,
-                single_cls=single_cls,
                 fraction=fraction,
                 augment=augment,
             )
@@ -1702,9 +1678,6 @@ class DFINETrainer:
             if "mask_mAP50" in final_row:
                 metrics["mask_mAP50"] = float(final_row["mask_mAP50"])
                 metrics["mask_mAP50-95"] = float(final_row["mask_mAP50-95"])
-            if "pose_mAP50" in final_row:
-                metrics["pose_mAP50"] = float(final_row["pose_mAP50"])
-                metrics["pose_mAP50-95"] = float(final_row["pose_mAP50-95"])
             if "mIoU" in final_row:
                 metrics["mIoU"] = float(final_row["mIoU"])
                 metrics["pixel_accuracy"] = float(final_row["pixel_accuracy"])
@@ -1721,9 +1694,6 @@ class DFINETrainer:
         if str(self.cfg.get("task", "detect")).lower() == "segment":
             metrics["mask_mAP50"] = 0.0
             metrics["mask_mAP50-95"] = 0.0
-        if str(self.cfg.get("task", "detect")).lower() == "pose":
-            metrics["pose_mAP50"] = 0.0
-            metrics["pose_mAP50-95"] = 0.0
         if str(self.cfg.get("task", "detect")).lower() == "semantic":
             metrics["mIoU"] = 0.0
             metrics["pixel_accuracy"] = 0.0
@@ -1773,8 +1743,6 @@ class DFINETrainer:
         keys = ["precision", "recall", "mAP50", "mAP50-95", "fitness"]
         if "mask_mAP50" in val_metrics:
             keys.extend(["mask_mAP50", "mask_mAP50-95"])
-        if "pose_mAP50" in val_metrics:
-            keys.extend(["pose_mAP50", "pose_mAP50-95"])
         return {key: _as_float(val_metrics.get(key, 0.0)) for key in keys}
 
     def _write_results_row(self, path: Path, row: dict[str, float | int]) -> None:
@@ -1804,8 +1772,6 @@ class DFINETrainer:
             "mAP50-95",
             "mask_mAP50",
             "mask_mAP50-95",
-            "pose_mAP50",
-            "pose_mAP50-95",
             "mIoU",
             "pixel_accuracy",
             "fitness",
@@ -1841,12 +1807,6 @@ class DFINETrainer:
             )
         if "mask_mAP50" in metrics:
             axes[0, 1].plot(epochs, metrics["mask_mAP50"], label="mask mAP50", color="tab:olive")
-        if "pose_mAP50-95" in metrics:
-            axes[0, 1].plot(
-                epochs, metrics["pose_mAP50-95"], label="pose mAP50-95", color="tab:pink"
-            )
-        if "pose_mAP50" in metrics:
-            axes[0, 1].plot(epochs, metrics["pose_mAP50"], label="pose mAP50", color="tab:olive")
         if "mIoU" in metrics:
             axes[0, 1].plot(epochs, metrics["mIoU"], label="mIoU", color="tab:blue")
         if "pixel_accuracy" in metrics:
@@ -1909,13 +1869,6 @@ class DFINETrainer:
                 [
                     f"mask_mAP50={float(row['mask_mAP50']):.3f}",
                     f"mask_mAP50-95={float(row['mask_mAP50-95']):.3f}",
-                ]
-            )
-        if validated and "pose_mAP50" in row:
-            val_fields.extend(
-                [
-                    f"pose_mAP50={float(row['pose_mAP50']):.3f}",
-                    f"pose_mAP50-95={float(row['pose_mAP50-95']):.3f}",
                 ]
             )
         parts = [

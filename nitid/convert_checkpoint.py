@@ -7,17 +7,20 @@ Migrates a raw D-FINE .pth (weights only) into the dfine-wrap format
 Usage:
     python -m nitid.convert_checkpoint \
         --weights dfine_l.pth \
-        --model   dfine_l \
+        --model   nitid1l \
         --task    detect \
         --names   configs/datasets/coco.yml \
-        --output  dfine_l_wrapped.pth
+        --output  nitid1l_detect.pth
+
+``--model`` takes the public ``nitid1{n,s,m,l,x}`` names or their ``dfine_*``
+equivalents.
 """
 
 from __future__ import annotations
 
 import argparse
 import copy
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -72,11 +75,6 @@ def convert(
         state_dict = ckpt.get("model", ckpt)
         print("Using model weights (ckpt['model'])")
 
-    mapped_state_dict = {}
-    for k, v in state_dict.items():
-        new_k = "decoder." + k[len("transformer.") :] if k.startswith("transformer.") else k
-        mapped_state_dict[new_k] = v
-
     cfg = copy.deepcopy(dict(config)) if isinstance(config, Mapping) else _load_config(config)
     from dfine.tasks import normalize_task
     from dfine.utils.checkpoint import CHECKPOINT_FORMAT_VERSION
@@ -96,7 +94,7 @@ def convert(
     out_ckpt = {
         "format_version": CHECKPOINT_FORMAT_VERSION,
         "task": task,
-        "model": mapped_state_dict,
+        "model": state_dict,
         "config": cfg,
         "names": names,
         "epoch": ckpt.get("epoch", 0),
@@ -107,37 +105,44 @@ def convert(
     print(f"Saved wrapped checkpoint to {output}  ({len(names)} classes)")
 
 
-def main() -> None:
+def _model_name(value: str) -> str:
+    """Map a public ``nitid1*`` name to its ``dfine_*`` config; pass other names through."""
+    if not value.lower().startswith("nitid"):
+        return value
+    from dfine.nitid import parse_nitid_model_name
+
+    try:
+        spec = parse_nitid_model_name(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return f"dfine_{spec.size}"
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Convert raw D-FINE checkpoint to dfine-wrap format")
     p.add_argument("--weights", required=True)
     source = p.add_mutually_exclusive_group(required=True)
     source.add_argument(
         "--model",
+        type=_model_name,
+        help="Model config: nitid1n/s/m/l/x, or the equivalent dfine_n/s/m/l/x",
         choices=[
             "dfine_n",
             "dfine_s",
             "dfine_m",
             "dfine_l",
             "dfine_x",
-            "detrpose_n",
-            "detrpose_s",
-            "detrpose_m",
-            "detrpose_l",
-            "detrpose_x",
         ],
     )
     source.add_argument("--config", help="Path to a self-contained YAML config")
-    p.add_argument("--task", choices=["detect", "segment", "semantic", "pose"], default="detect")
+    p.add_argument("--task", choices=["detect", "segment", "semantic"], default="detect")
     p.add_argument("--names", required=True)
     p.add_argument("--output", required=True)
-    args = p.parse_args()
+    args = p.parse_args(argv)
     if args.model:
-        from dfine.nn.configs import make_model_config, make_pose_config
+        from dfine.nn.configs import make_model_config
 
-        if args.model.startswith("detrpose_") or args.task == "pose":
-            config = make_pose_config(args.model)
-        else:
-            config = make_model_config(args.model, task=args.task)
+        config = make_model_config(args.model, task=args.task)
     else:
         config = args.config
     convert(args.weights, config, args.names, args.output)

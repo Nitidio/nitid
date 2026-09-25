@@ -1,17 +1,13 @@
 """Unit tests for validation geometry handling."""
 
-import pytest
 import torch
 import torch.nn as nn
-import yaml
-from PIL import Image
 
 from dfine.validator import (
     DFINEValidator,
     SemanticConfusionMatrix,
     _dynamic_eval_geometry,
     _restore_original_coordinates,
-    rotated_box_iou,
 )
 
 
@@ -43,19 +39,6 @@ class _SemanticGeometryModel(nn.Module):
         return {"sem_seg_logits": logits}
 
 
-class _PerfectOBBModel(nn.Module):
-    """Predict the same normalized OBB as the tiny validation label."""
-
-    def forward(self, images: torch.Tensor) -> dict[str, torch.Tensor]:
-        batch_size = images.shape[0]
-        logits = torch.tensor([10.0], device=images.device).reshape(1, 1, 1)
-        boxes = torch.tensor([0.5, 0.5, 0.5, 0.5, 0.0], device=images.device).reshape(1, 1, 5)
-        return {
-            "pred_logits": logits.repeat(batch_size, 1, 1),
-            "pred_boxes": boxes.repeat(batch_size, 1, 1),
-        }
-
-
 def test_restore_original_coordinates_reverses_dfine_square_resize():
     resized = torch.tensor([[10.0, 10.0, 50.0, 50.0]])
     restored = _restore_original_coordinates(
@@ -85,39 +68,6 @@ def test_native_eval_size_keeps_cached_geometry():
         assert model[0].eval_spatial_size == [640, 640]
 
 
-def test_rotated_box_iou_identity_and_no_overlap():
-    boxes = torch.tensor([[10.0, 10.0, 4.0, 2.0, 0.25]])
-    identical = rotated_box_iou(boxes, boxes)
-    far = rotated_box_iou(boxes, torch.tensor([[100.0, 100.0, 4.0, 2.0, 0.25]]))
-
-    assert float(identical[0, 0]) == pytest.approx(1.0)
-    assert float(far[0, 0]) == pytest.approx(0.0)
-
-
-def test_obb_map_perfect_prediction_scores_one():
-    validator = DFINEValidator(nn.Identity(), {"task": "obb"}, "cpu", {0: "plane"})
-    records = [
-        {
-            "boxes": torch.tensor([[10.0, 10.0, 4.0, 2.0, 0.25]]),
-            "labels": torch.tensor([0]),
-            "image_id": 1,
-        }
-    ]
-    predictions = [
-        {
-            "boxes": torch.tensor([[10.0, 10.0, 4.0, 2.0, 0.25]]),
-            "scores": torch.tensor([0.9]),
-            "labels": torch.tensor([0]),
-        }
-    ]
-
-    map50, map5095, per_class = validator._obb_map(records, predictions)
-
-    assert map50 == pytest.approx(1.0)
-    assert map5095 == pytest.approx(1.0)
-    assert per_class[0]["ap50"] == pytest.approx(1.0)
-
-
 def test_segment_validation_crops_masks_to_predicted_boxes(tiny_dataset):
     config = {
         "task": "segment",
@@ -141,43 +91,6 @@ def test_segment_validation_crops_masks_to_predicted_boxes(tiny_dataset):
     assert metrics["mAP50"] > 0.99
     assert metrics["mask_mAP50"] > 0.99
     assert metrics["mask_mAP50-95"] > 0.99
-
-
-def test_obb_validation_reports_rotated_map(tmp_path):
-    root = tmp_path / "obb"
-    (root / "images" / "val").mkdir(parents=True)
-    (root / "labels" / "val").mkdir(parents=True)
-    Image.new("RGB", (64, 64), (0, 0, 0)).save(root / "images" / "val" / "im.jpg")
-    (root / "labels" / "val" / "im.txt").write_text(
-        "0 0.25 0.25 0.75 0.25 0.75 0.75 0.25 0.75\n",
-        encoding="utf-8",
-    )
-    data_yaml = tmp_path / "data.yaml"
-    data_yaml.write_text(
-        yaml.safe_dump({"path": str(root), "val": "images/val", "names": ["plane"]}),
-        encoding="utf-8",
-    )
-    config = {
-        "task": "obb",
-        "num_classes": 1,
-        "PostProcessorOBB": {"num_top_queries": 1},
-    }
-    validator = DFINEValidator(_PerfectOBBModel(), config, "cpu", {0: "plane"})
-
-    metrics = validator.run(
-        data=str(data_yaml),
-        imgsz=64,
-        batch=1,
-        conf=0.001,
-        split="val",
-        verbose=False,
-        plots=False,
-    )
-
-    assert metrics["mAP50"] == pytest.approx(1.0)
-    assert metrics["mAP50-95"] == pytest.approx(1.0)
-    assert metrics["precision"] == pytest.approx(1.0)
-    assert metrics["recall"] == pytest.approx(1.0)
 
 
 def test_semantic_confusion_matrix_ignores_void_and_excludes_absent_classes():
