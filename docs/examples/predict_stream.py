@@ -1,6 +1,5 @@
 """
-Predict on a live stream (RTSP or GStreamer numpy frames).
-This is Jorge's primary use case — feed cv2/GStreamer frames directly.
+Predict on a live stream (an RTSP URL or numpy frames from your own capture code).
 """
 
 import cv2
@@ -16,6 +15,6 @@ for result in model("rtsp://camera_ip/stream", stream=True, conf=0.4):
     if cv2.waitKey(1) == ord("q"):
         break
 
-# Option B: numpy frame from your GStreamer pipeline
-# frame = your_gstreamer_appsink.pull_sample()  # → np.ndarray HWC BGR
+# Option B: numpy frame from your own capture code
+# frame = your_capture.read()  # → np.ndarray HWC BGR
 # results = model(frame, conf=0.4)

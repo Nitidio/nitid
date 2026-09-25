@@ -32,7 +32,7 @@ API: `predict`, `track`, `train`, `val` and `export`.
 - Python API and command line
 - Automatic download of supported official checkpoints
 - Fine-tuning and validation for boxes, masks and dense semantic maps
-- Tracking and GStreamer/RTSP ingest
+- Tracking with video, webcam and RTSP input
 
 ## Getting Started
 

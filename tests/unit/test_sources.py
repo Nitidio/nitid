@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from dfine.utils.sources import LoadSource
+from dfine.utils.sources import LoadSource, rtsp_url_with_credentials
 
 
 def test_array_source():
@@ -27,14 +27,72 @@ def test_invalid_source():
         LoadSource(object(), imgsz=640, device="cpu")
 
 
-def test_source_backend_options_are_validated():
+def test_rtsp_credentials_are_percent_encoded_into_the_url():
+    url = rtsp_url_with_credentials(
+        "rtsp://camera.local:554/stream?channel=1", "ops@site", "p@ss:w/rd %#?"
+    )
+    assert url == (
+        "rtsp://ops%40site:p%40ss%3Aw%2Frd%20%25%23%3F@camera.local:554/stream?channel=1"
+    )
+    assert rtsp_url_with_credentials("rtsps://camera/live", "viewer") == (
+        "rtsps://viewer@camera/live"
+    )
+
+
+def test_rtsp_credentials_reject_non_rtsp_or_already_authenticated_urls():
+    with pytest.raises(ValueError, match="rtsp://"):
+        rtsp_url_with_credentials("http://camera/stream", "viewer", "secret")
+    with pytest.raises(ValueError, match="already contains credentials"):
+        rtsp_url_with_credentials("rtsp://admin:old@camera/stream", "viewer", "secret")
+    with pytest.raises(ValueError, match="host"):
+        rtsp_url_with_credentials("rtsp:///stream", "viewer", "secret")
+
+
+class _RecordingCapture:
+    opened: list = []
+
+    def __init__(self, target):
+        type(self).opened.append(target)
+
+    def isOpened(self):
+        return False
+
+    def get(self, prop):
+        return 0.0
+
+    def release(self):
+        pass
+
+
+def test_authenticated_rtsp_source_opens_credentialed_url_without_exposing_it(monkeypatch):
+    _RecordingCapture.opened = []
+    monkeypatch.setattr("dfine.utils.sources.cv2.VideoCapture", _RecordingCapture)
+    loader = LoadSource(
+        "rtsp://camera/stream",
+        imgsz=8,
+        device="cpu",
+        rtsp_username="viewer",
+        rtsp_password="s3cr:t@",
+    )
+
+    assert loader.mode == "stream"
+    with pytest.raises(RuntimeError) as excinfo:
+        list(loader.iter_frames())
+
+    assert _RecordingCapture.opened == ["rtsp://viewer:s3cr%3At%40@camera/stream"]
+    assert "rtsp://camera/stream" in str(excinfo.value)
+    assert "s3cr" not in str(excinfo.value)
+    assert loader.source == "rtsp://camera/stream"
+
+
+def test_rtsp_credential_options_are_validated():
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
-    with pytest.raises(ValueError, match="backend must be"):
-        LoadSource(frame, imgsz=8, device="cpu", backend="ffmpeg")
-    with pytest.raises(TypeError, match="GStreamer backend requires"):
-        LoadSource(frame, imgsz=8, device="cpu", backend="gstreamer")
-    with pytest.raises(ValueError, match="require backend='gstreamer'"):
-        LoadSource(frame, imgsz=8, device="cpu", gst_pipeline="videotestsrc")
+    with pytest.raises(ValueError, match="RTSP credentials require"):
+        LoadSource(frame, imgsz=8, device="cpu", rtsp_username="viewer")
+    with pytest.raises(ValueError, match="RTSP credentials require"):
+        LoadSource("https://camera/stream", imgsz=8, device="cpu", rtsp_username="viewer")
+    with pytest.raises(ValueError, match="requires rtsp_username"):
+        LoadSource("rtsp://camera/stream", imgsz=8, device="cpu", rtsp_password="secret")
 
 
 def test_image_source(tmp_path):

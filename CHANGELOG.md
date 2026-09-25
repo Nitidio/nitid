@@ -22,8 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   probability output, overlays, class-ID maps, and ONNX/OpenVINO export.
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs, class
   filtering, frame sampling, and annotated video output.
-- GStreamer video and RTSP input, annotated RTSP publishing, and segmented
-  recording.
+- Video file, webcam, and RTSP/HTTP stream input through OpenCV, including
+  authenticated RTSP cameras.
 - OpenVINO Runtime inference on Intel CPU, integrated GPU, and NPU devices,
   with automatic device selection and compiled-model caching.
 - ONNX and OpenVINO export for every supported task, plus TorchScript and

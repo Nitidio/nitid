@@ -12,7 +12,7 @@
 [![codecov](https://codecov.io/gh/Vaelsys/nitid/graph/badge.svg)](https://codecov.io/gh/Vaelsys/nitid)
 [![License](https://img.shields.io/github/license/Vaelsys/nitid)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/develop/examples/tutorial.ipynb)
 
 Train, validate, export and run vision models. The code and our pretrained
 weights are released under the Apache License 2.0, patent grant included, so you
@@ -53,8 +53,6 @@ What comes with it:
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
   video output
-- Optional GStreamer video/RTSP ingest, annotated restreaming, and segmented
-  recording
 
 ## What "open" means here
 
@@ -165,30 +163,6 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
 The annotated video is saved under `runs/track/exp/`. Tracking dependencies
 are optional; install them with `pip install "nitid[track]"`.
 
-For RTSP ingest through GStreamer, use an OpenCV build compiled with it:
-
-```python
-for result in model.track(
-    "rtsp://camera/live",
-    backend="gstreamer",
-    conf=0.5,
-    stream=True,
-):
-    ...
-```
-
-See [docs/gstreamer.md](docs/gstreamer.md) for system requirements and
-explicit pipelines. `nitid gstreamer-info` checks whether your OpenCV build
-has GStreamer enabled.
-
-Annotated tracking can also be published or segmented without buffering
-results in Python:
-
-```bash
-nitid track model=nitid1s task=detect source=video.mp4 \
-  output=runs/segments segment_duration=60
-```
-
 ### Validation
 
 ```python
@@ -243,7 +217,6 @@ For the full guide:
 - Fine-tuning and validation: [docs/fine_tuning.md](docs/fine_tuning.md)
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
-- GStreamer and RTSP: [docs/gstreamer.md](docs/gstreamer.md)
 
 
 ## Migrating from YOLO
@@ -276,6 +249,7 @@ Segmentation checkpoints are published in the official [D-FINE-seg model reposit
 | [docs/quickstart.md](docs/quickstart.md) | Full quickstart |
 | [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset formats |
 | [docs/export.md](docs/export.md) | ONNX, OpenVINO, TorchScript, and TensorRT export |
+| [docs/cli.md](docs/cli.md) | Command-line reference |
 | [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 | [docs/brand.md](docs/brand.md) | Brand: logo, palette, typography, and what the project announces |
@@ -304,11 +278,12 @@ uv run pytest tests/unit
 # All tests (integration tests build a tiny checkpoint automatically)
 uv run pytest
 
-# Lint
-uv run ruff check .
+# Lint and format
+uv run ruff check dfine tools tests
+uv run ruff format --check dfine tools tests
 
 # Type-check
-uv run mypy dfine/
+uv run mypy dfine tools
 ```
 
 Integration tests use a session-scoped fixture in `tests/conftest.py` that
