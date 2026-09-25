@@ -20,9 +20,7 @@ from dfine.utils.runs import atomic_output_path, resolve_run_dir, write_run_meta
 # scores) contract used by the public export() formats.
 _RAW_OUTPUT_NAMES: dict[str, list[str]] = {
     "detect": ["pred_logits", "pred_boxes"],
-    "obb": ["pred_logits", "pred_boxes"],
     "segment": ["pred_logits", "pred_boxes", "pred_masks"],
-    "pose": ["pred_logits", "pred_boxes", "pred_keypoints"],
     "semantic": ["sem_seg_logits"],
 }
 
@@ -211,15 +209,11 @@ class DFINEExporter:
 
         task = str(self.cfg.get("task", "detect")).lower()
         is_semantic = task == "semantic"
-        is_obb = task == "obb"
-        if is_obb:
-            self._prepare_obb_export_geometry(self.model, postprocessor, imgsz)
         wrapped_model = DeployModel(self.model, postprocessor, semantic=is_semantic)
         wrapped_model.eval()
 
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
         is_segment = task == "segment"
-        is_pose = task == "pose"
         dynamic_axes = (
             {
                 "images": {0: "batch"},
@@ -231,7 +225,6 @@ class DFINEExporter:
                         "boxes": {0: "batch"},
                         "scores": {0: "batch"},
                         **({"masks": {0: "batch"}} if is_segment else {}),
-                        **({"keypoints": {0: "batch"}} if is_pose else {}),
                     }
                 ),
             }
@@ -252,33 +245,11 @@ class DFINEExporter:
                 else (
                     ["labels", "boxes", "scores", "masks"]
                     if is_segment
-                    else (
-                        ["labels", "boxes", "scores", "keypoints"]
-                        if is_pose
-                        else ["labels", "boxes", "scores"]
-                    )
+                    else ["labels", "boxes", "scores"]
                 )
             ),
             dynamic_axes=dynamic_axes,
         )
-
-    def _prepare_obb_export_geometry(self, model, postprocessor, imgsz: int) -> None:
-        """Align RiO-DETR OBB static anchors/postprocessor scaling with export image size."""
-        self._prepare_obb_anchors(model, imgsz)
-        if hasattr(postprocessor, "input_shape"):
-            postprocessor.input_shape = [imgsz, imgsz]
-
-    def _prepare_obb_anchors(self, model, imgsz: int) -> None:
-        """Refresh RiO-DETR OBB static anchors on `model` for `imgsz`."""
-        input_shape = [imgsz, imgsz]
-        for module in model.modules():
-            if not hasattr(module, "_generate_anchors"):
-                continue
-            if hasattr(module, "eval_spatial_size"):
-                module.eval_spatial_size = input_shape
-            anchors, valid_mask = module._generate_anchors(device=torch.device(self.device))
-            module.anchors = anchors
-            module.valid_mask = valid_mask
 
     # ── Raw (non-postprocessed) trace — used by the OpenVINO runtime ────────
 
@@ -291,8 +262,6 @@ class DFINEExporter:
         ``dfine.nn.openvino_runtime.compile_raw_openvino``.
         """
         task = normalize_task(str(self.cfg.get("task", "detect")))
-        if task == "obb":
-            self._prepare_obb_anchors(self.model, imgsz)
         return self.model, _RAW_OUTPUT_NAMES[task]
 
     # ── TensorRT ─────────────────────────────────────────────────────────────

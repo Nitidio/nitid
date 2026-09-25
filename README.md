@@ -297,7 +297,7 @@ required.
 
 ## Acknowledgements
 
-nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), [DETRPose](https://github.com/SebastianJanampa/DETRPose), and RiO-DETR OBB. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
+nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), with smaller portions from RT-DETR, DETR, PaddleDetection, and DEIM. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
 
 ```bibtex
 @article{peng2024dfine,

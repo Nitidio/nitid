@@ -49,44 +49,6 @@ def test_semantic_asset_uses_instance_checkpoint_as_initialization():
     assert asset.filename == "dfine_semantic_n_coco_init_wrapped.pth"
 
 
-def test_pose_asset_uses_official_detrpose_checkpoint():
-    asset = downloads.get_model_asset("detrpose_n", task="pose", weights="coco")
-    assert asset.task == "pose"
-    assert asset.weights == "coco"
-    assert asset.url.endswith("/model_weights/detrpose_hgnetv2_n.pth")
-    assert "SebastianJanampa/DETRPose" in asset.url
-    assert asset.filename == "detrpose_n_coco_wrapped.pth"
-
-
-def test_obb_registry_contains_rio_variants_and_weight_aliases():
-    assert downloads.list_models(task="obb") == [
-        "nitid1l",
-        "nitid1m",
-        "nitid1n",
-        "nitid1s",
-        "nitid1x",
-    ]
-    assert downloads.list_weights("nitid1s", task="obb") == ["diorr", "dota_1_ss"]
-    assert downloads.list_weights("nitid1m", task="obb") == [
-        "diorr",
-        "dota_1_ms",
-        "dota_1_ss",
-    ]
-
-    default = downloads.get_model_asset("nitid1s", task="obb")
-    dota = downloads.get_model_asset("rio_s", weights="dota", task="obb")
-    dota_ms = downloads.get_model_asset("rtdetrv2_obb_m", weights="dota-ms", task="obb")
-    diorr = downloads.get_model_asset("nitid1s", weights="dior-r", task="obb")
-
-    assert default.weights == "dota_1_ss"
-    assert dota.weights == "dota_1_ss"
-    assert dota_ms.weights == "dota_1_ms"
-    assert diorr.weights == "diorr"
-    assert default.filename == "nitid1s_dota_1_ss_wrapped.pth"
-    assert default.url.endswith("/dota_1_ss/rtdetrv2_obb_hgnetv2_s_dota_1_ss.pth")
-    assert default.sha256 == "ef0c728aaeb4d85950134431617fb576b3ad6a9ac85878088ce97c0075df2026"
-
-
 @pytest.mark.parametrize(
     ("name", "expected"),
     [
@@ -242,63 +204,3 @@ def test_download_semantic_model_transfers_instance_fuser(monkeypatch, tmp_path)
         for name, value in instance_model.state_dict().items()
         if name.startswith("decoder.mask_decoder.")
     )
-
-
-def test_download_obb_model_embeds_rio_config_and_dota_names(monkeypatch, tmp_path):
-    calls = {}
-
-    def fake_urlretrieve(url, filename):
-        calls["url"] = url
-        Path(filename).write_bytes(b"raw-rio")
-        return filename, None
-
-    def fake_convert(weights, config, names_file, output):
-        import yaml
-
-        calls["weights"] = weights
-        calls["config"] = config
-        calls["names"] = yaml.safe_load(Path(names_file).read_text(encoding="utf-8"))["names"]
-        Path(output).write_bytes(b"wrapped-rio")
-
-    monkeypatch.setattr(downloads, "urlretrieve", fake_urlretrieve)
-    monkeypatch.setattr(downloads, "_verify_sha256", lambda path, expected: None)
-    monkeypatch.setattr(downloads, "convert_checkpoint", fake_convert)
-
-    output = downloads.download_model("nitid1s", task="obb", output=tmp_path)
-
-    assert output == tmp_path / "nitid1s_dota_1_ss_wrapped.pth"
-    assert output.read_bytes() == b"wrapped-rio"
-    assert calls["url"].endswith("/dota_1_ss/rtdetrv2_obb_hgnetv2_s_dota_1_ss.pth")
-    assert calls["weights"].endswith("rtdetrv2_obb_hgnetv2_s_dota_1_ss.pth")
-    assert calls["config"]["task"] == "obb"
-    assert calls["config"]["model"] == "RioOBB"
-    assert calls["config"]["num_classes"] == 15
-    assert calls["config"]["RTDETRTransformerv2OBB"]["hidden_dim"] == 224
-    assert calls["names"][0] == "plane"
-    assert calls["names"][-1] == "helicopter"
-
-
-def test_download_obb_model_wrapped_checkpoint_loads(monkeypatch, tmp_path):
-    import torch
-
-    from dfine.nn.native_build import build_native_model
-    from dfine.utils.checkpoint import load_checkpoint
-
-    rio_model = build_native_model("nitid1n", num_classes=15, task="obb", image_size=(1024, 1024))
-
-    def fake_urlretrieve(url, filename):
-        del url
-        torch.save({"model": rio_model.state_dict(), "epoch": 7}, filename)
-        return filename, None
-
-    monkeypatch.setattr(downloads, "urlretrieve", fake_urlretrieve)
-    monkeypatch.setattr(downloads, "_verify_sha256", lambda path, expected: None)
-
-    output = downloads.download_model("nitid1n", task="obb", output=tmp_path)
-    model, cfg, names = load_checkpoint(output)
-
-    assert cfg["task"] == "obb"
-    assert cfg["model"] == "RioOBB"
-    assert names[0] == "plane"
-    assert names[14] == "helicopter"
-    assert model.state_dict().keys() == rio_model.state_dict().keys()

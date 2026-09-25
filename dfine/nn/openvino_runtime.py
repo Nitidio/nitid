@@ -61,14 +61,11 @@ def resolve_openvino_device(device: str | None) -> str:
 
 
 # Raw (undecoded) model output names per task — matches the dict keys the
-# deployed model itself returns (see dfine/nn/architecture/decoder.py and
-# dfine/nn/rio/model.py), not the postprocessed (labels, boxes, scores)
-# contract used by the public DFINE.export().
+# deployed model itself returns (see dfine/nn/architecture/decoder.py), not the
+# postprocessed (labels, boxes, scores) contract used by the public DFINE.export().
 _RAW_OUTPUT_NAMES: dict[str, list[str]] = {
     "detect": ["pred_logits", "pred_boxes"],
-    "obb": ["pred_logits", "pred_boxes"],
     "segment": ["pred_logits", "pred_boxes", "pred_masks"],
-    "pose": ["pred_logits", "pred_boxes", "pred_keypoints"],
     "semantic": ["sem_seg_logits"],
 }
 

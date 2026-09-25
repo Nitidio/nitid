@@ -23,120 +23,24 @@ PALETTE = [
 ]
 
 
-COCO_SKELETON = [
-    (15, 13),
-    (13, 11),
-    (16, 14),
-    (14, 12),
-    (11, 12),
-    (5, 11),
-    (6, 12),
-    (5, 6),
-    (5, 7),
-    (6, 8),
-    (7, 9),
-    (8, 10),
-    (1, 2),
-    (0, 1),
-    (0, 2),
-    (1, 3),
-    (2, 4),
-    (3, 5),
-    (4, 6),
-]
-
-CROWDPOSE_SKELETON = [
-    (12, 13),
-    (13, 0),
-    (13, 1),
-    (0, 2),
-    (1, 3),
-    (2, 4),
-    (3, 5),
-    (0, 6),
-    (1, 7),
-    (6, 7),
-    (6, 8),
-    (7, 9),
-    (8, 10),
-    (9, 11),
-]
-
-KEYPOINT_COLORS = [
-    (255, 0, 0),
-    (255, 85, 0),
-    (255, 170, 0),
-    (255, 255, 0),
-    (170, 255, 0),
-    (85, 255, 0),
-    (0, 255, 0),
-    (0, 255, 85),
-    (0, 255, 170),
-    (0, 255, 255),
-    (0, 170, 255),
-    (0, 85, 255),
-    (0, 0, 255),
-    (85, 0, 255),
-    (170, 0, 255),
-    (255, 0, 255),
-    (255, 0, 170),
-]
-
-
 def plot_results(result, conf: bool, labels: bool, line_width, font_size) -> np.ndarray:
     img = result.orig_img.copy()
     if result.semantic_mask is not None:
         colorized = result.semantic_mask.colorize()
         return cv2.addWeighted(colorized, 0.45, img, 0.55, 0)
-    has_boxes = result.boxes is not None and len(result.boxes) > 0
-    has_obb = result.obb is not None and len(result.obb) > 0
-    if not has_boxes and not has_obb:
+    if result.boxes is None or len(result.boxes) == 0:
         return img
 
     lw = line_width or max(round(sum(img.shape[:2]) / 2 * 0.003), 2)
     fs = font_size or max(lw - 1, 1)
 
-    if has_boxes and result.masks is not None:
+    if result.masks is not None:
         overlay = img.copy()
         for index, mask in enumerate(result.masks.data.detach().cpu().numpy()):
             cls_id = int(result.boxes.cls[index])
             color = PALETTE[cls_id % len(PALETTE)]
             overlay[mask.astype(bool)] = color
         img = cv2.addWeighted(overlay, 0.45, img, 0.55, 0)
-
-    if has_obb:
-        corners = result.obb.xyxyxyxy.detach().cpu().numpy().reshape(-1, 4, 2)
-        for i, points in enumerate(corners):
-            cls_id = int(result.obb.cls[i])
-            score = float(result.obb.conf[i])
-            color = PALETTE[cls_id % len(PALETTE)]
-            polygon = np.rint(points).astype(np.int32)
-            cv2.polylines(img, [polygon], isClosed=True, color=color, thickness=lw)
-
-            if labels or conf:
-                name = result.names.get(cls_id, str(cls_id))
-                text = f"{name} {score:.2f}" if conf else name
-                anchor_x, anchor_y = polygon[:, 0].min(), polygon[:, 1].min()
-                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, fs * 0.5, 1)
-                cv2.rectangle(
-                    img,
-                    (int(anchor_x), int(anchor_y) - th - 4),
-                    (int(anchor_x) + tw, int(anchor_y)),
-                    color,
-                    -1,
-                )
-                cv2.putText(
-                    img,
-                    text,
-                    (int(anchor_x), int(anchor_y) - 2),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    fs * 0.5,
-                    (255, 255, 255),
-                    1,
-                )
-
-    if not has_boxes:
-        return img
 
     for i in range(len(result.boxes)):
         x1, y1, x2, y2 = result.boxes.xyxy[i].int().tolist()
@@ -158,38 +62,5 @@ def plot_results(result, conf: bool, labels: bool, line_width, font_size) -> np.
             cv2.putText(
                 img, text, (x1, y1 - 2), cv2.FONT_HERSHEY_SIMPLEX, fs * 0.5, (255, 255, 255), 1
             )
-
-    if result.keypoints is not None and len(result.keypoints):
-        kpts_xy = result.keypoints.xy.detach().cpu().numpy()
-        kpts_conf = (
-            result.keypoints.conf.detach().cpu().numpy()
-            if result.keypoints.conf is not None
-            else None
-        )
-        radius = max(lw, 3)
-
-        for i in range(len(result.keypoints)):
-            kpts = kpts_xy[i]
-            conf_i = kpts_conf[i] if kpts_conf is not None else None
-            num_kpts = len(kpts)
-
-            skeleton = (
-                COCO_SKELETON if num_kpts == 17 else (CROWDPOSE_SKELETON if num_kpts == 14 else [])
-            )
-
-            # Draw skeleton limbs
-            for p1, p2 in skeleton:
-                if p1 < num_kpts and p2 < num_kpts:
-                    if conf_i is None or (conf_i[p1] > 0.3 and conf_i[p2] > 0.3):
-                        pt1 = (int(kpts[p1, 0]), int(kpts[p1, 1]))
-                        pt2 = (int(kpts[p2, 0]), int(kpts[p2, 1]))
-                        limb_color = KEYPOINT_COLORS[p1 % len(KEYPOINT_COLORS)]
-                        cv2.line(img, pt1, pt2, limb_color, max(1, lw - 1))
-
-            # Draw keypoint dots
-            for k_idx, (kx, ky) in enumerate(kpts):
-                if conf_i is None or conf_i[k_idx] > 0.3:
-                    kp_color = KEYPOINT_COLORS[k_idx % len(KEYPOINT_COLORS)]
-                    cv2.circle(img, (int(kx), int(ky)), radius, kp_color, -1)
 
     return img

@@ -4,8 +4,8 @@ This file provides repository guidance to coding agents.
 
 ## Project overview
 
-nitid provides a unified API for detection, segmentation, pose, and oriented
-bounding boxes. The public entry point is `NITID` from the `nitid` package;
+nitid provides a unified API for object detection, instance segmentation, and
+semantic segmentation. The public entry point is `NITID` from the `nitid` package;
 model construction, losses, and postprocessing are implemented internally in
 the `dfine` package.
 

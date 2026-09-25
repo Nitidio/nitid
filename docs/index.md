@@ -34,9 +34,6 @@ API: `predict`, `track`, `train`, `val` and `export`.
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - Tracking with video, webcam and RTSP input
 
-Pose estimation and oriented bounding boxes are supported too, outside the three
-headline tasks — see the [quickstart](quickstart.md).
-
 ## Getting Started
 
 If you're new to nitid, follow these guides in order:

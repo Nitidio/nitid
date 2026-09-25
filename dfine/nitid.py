@@ -3,16 +3,11 @@
 from __future__ import annotations
 
 import re
-import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-import torch.nn as nn
-
-from dfine.model import DFINE, ModelCallback
+from dfine.model import DFINE
 from dfine.tasks import normalize_task
-from dfine.utils.device import resolve_device
 
 _NITID_MODEL_RE = re.compile(r"^nitid(?P<version>\d+)(?P<size>[nsmxl])$")
 _SUPPORTED_VERSION = 1
@@ -56,12 +51,6 @@ def resolve_nitid_backend_model(model: str | Path, *, task: str) -> str:
     spec = parse_nitid_model_name(model)
     resolved_task = normalize_task(task)
 
-    if resolved_task == "obb":
-        return spec.name
-
-    if resolved_task == "pose":
-        return f"detrpose_{spec.size}"
-
     if resolved_task == "detect" and spec.size == "n":
         raise ValueError(
             "NITID('nitid1n', task='detect') is not available because no official "
@@ -77,8 +66,8 @@ class NITID(DFINE):
 
     ``NITID`` accepts public model identifiers such as ``nitid1s`` and maps them
     to the concrete architecture backend for the requested task. Existing
-    D-FINE/DETRPose behavior is reused while the public constructor moves away
-    from assuming every model family is D-FINE.
+    D-FINE behavior is reused while the public constructor moves away from
+    assuming every model family is D-FINE.
     """
 
     def __init__(
@@ -86,41 +75,12 @@ class NITID(DFINE):
         model: str | Path = "nitid1s",
         *,
         task: str = "detect",
-        weights: str | None = "default",
+        weights: str = "default",
         backend: str = "torch",
         device: str | int | None = None,
         verbose: bool = True,
     ) -> None:
         backend_model = resolve_nitid_backend_model(model, task=task)
-        if normalize_task(task) == "obb":
-            if weights is None or (
-                isinstance(weights, str) and weights.lower().replace("-", "_") in {"none", "random"}
-            ):
-                if backend == "openvino":
-                    raise ValueError(
-                        "backend='openvino' is not supported for randomly-initialized OBB "
-                        "models — there is no pretrained checkpoint to trace"
-                    )
-                self._init_random_obb(
-                    model=model,
-                    backend_model=backend_model,
-                    weights=weights,
-                    device=device,
-                    verbose=verbose,
-                )
-            else:
-                super().__init__(
-                    backend_model,
-                    task=task,
-                    weights=weights,
-                    backend=backend,
-                    device=device,
-                    verbose=verbose,
-                )
-                self._nitid_model = parse_nitid_model_name(model)
-            return
-        if weights is None:
-            raise ValueError("weights=None is currently only supported for task='obb'")
         super().__init__(
             backend_model,
             task=task,
@@ -130,51 +90,6 @@ class NITID(DFINE):
             verbose=verbose,
         )
         self._nitid_model = parse_nitid_model_name(model)
-
-    def _init_random_obb(
-        self,
-        *,
-        model: str | Path,
-        backend_model: str,
-        weights: str | None,
-        device: str | int | None,
-        verbose: bool,
-    ) -> None:
-        from dfine.nn.native_build import build_native_model
-        from dfine.nn.rio import DOTA_OBB_NAMES, make_rio_obb_config
-
-        self._backend = "torch"
-        self._openvino_device: str | None = None
-        self._openvino_cache: dict[int, Any] = {}
-        self._model_lock = threading.RLock()
-        self._device_str: str = resolve_device(device)
-        self.verbose = verbose
-        self._cfg: dict[str, Any] = make_rio_obb_config(
-            backend_model,
-            num_classes=len(DOTA_OBB_NAMES),
-        )
-        self._model: nn.Module = build_native_model(
-            backend_model,
-            num_classes=len(DOTA_OBB_NAMES),
-            task="obb",
-            image_size=tuple(self._cfg["eval_spatial_size"]),
-            device=self._device_str,
-        )
-        self._names: dict[int, str] = dict(enumerate(DOTA_OBB_NAMES))
-        self._path = backend_model
-        self._weights = None
-        self._deployed_model: nn.Module | None = None
-        self._deployed_model_device: str | None = None
-        self._task = "obb"
-        self._callbacks: dict[str, list[ModelCallback]] = {}
-        self._nitid_model = parse_nitid_model_name(model)
-        self._model.eval()
-        if self.verbose:
-            n_params = sum(p.numel() for p in self._model.parameters())
-            print(
-                f"[NITID] Built '{self._nitid_model.name}' task='obb' "
-                f"— {n_params / 1e6:.1f}M params on {self._device_str}"
-            )
 
     @property
     def nitid_model(self) -> str:

@@ -855,7 +855,7 @@ def test_public_train_rejects_deim_for_non_detection_tasks(tiny_model):
 
     model = object.__new__(DFINE)
     model._model = tiny_model
-    model._cfg = {"task": "pose"}
+    model._cfg = {"task": "segment"}
     model._backend = "torch"
     model._device_str = "cpu"
     model._names = {}
@@ -863,7 +863,7 @@ def test_public_train_rejects_deim_for_non_detection_tasks(tiny_model):
     model._deployed_model = None
     model._deployed_model_device = None
     model._openvino_cache = {}
-    model._task = "pose"
+    model._task = "segment"
 
     with pytest.raises(ValueError, match="detection-only"):
         model.train(data="missing.yaml", recipe="deim")

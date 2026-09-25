@@ -45,10 +45,6 @@ def _patch_checkpoint_loading(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str
             task = "segment"
         if "dfine_semantic_" in path_text:
             task = "semantic"
-        if "detrpose_" in path_text:
-            task = "pose"
-        if "nitid1" in path_text:
-            task = "obb"
         return _DummyModel(), {"task": task}, {}
 
     monkeypatch.setattr(downloads, "download_model", fake_download_model)
@@ -90,7 +86,6 @@ def test_parse_nitid_model_name_rejects_invalid_names(name: str) -> None:
         ("detect", "nitid1s", "dfine_s"),
         ("segment", "nitid1n", "dfine_n"),
         ("semantic", "nitid1m", "dfine_m"),
-        ("pose", "nitid1s", "detrpose_s"),
     ],
 )
 def test_nitid_resolves_existing_tasks_to_backend_models(
@@ -126,52 +121,9 @@ def test_nitid_detect_n_rejected_until_detection_weights_exist() -> None:
         NITID("nitid1n", task="detect", device="cpu", verbose=False)
 
 
-def test_nitid_obb_task_builds_random_rio_model() -> None:
-    from dfine import NITID
-    from dfine.nn.rio import RioOBBModel
-    from dfine.tasks import get_task_contract, normalize_task
-
-    assert normalize_task("oriented_detection") == "obb"
-    assert get_task_contract("obb").result_fields == ("obb",)
-
-    model = NITID("nitid1s", task="obb", weights=None, device="cpu", verbose=False)
-
-    assert model.task == "obb"
-    assert model.nitid_model == "nitid1s"
-    assert model.weights is None
-    assert isinstance(model._model, RioOBBModel)
-    assert len(model.names) == 15
-
-
-def test_nitid_obb_default_weights_resolve_through_registry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.parametrize("task", ["pose", "obb"])
+def test_nitid_rejects_removed_tasks(task: str) -> None:
     from dfine import NITID
 
-    download_calls = _patch_checkpoint_loading(monkeypatch)
-
-    model = NITID("nitid1s", task="obb", device="cpu", verbose=False)
-
-    assert model.nitid_model == "nitid1s"
-    assert model.task == "obb"
-    assert model.weights == "dota_1_ss"
-    assert download_calls[0][0] == "nitid1s"
-    assert download_calls[0][1] == "obb"
-    assert download_calls[0][2] == "dota_1_ss"
-
-
-def test_nitid_obb_weight_aliases_resolve() -> None:
-    from dfine.utils.downloads import get_model_asset, list_models, list_weights
-
-    assert "nitid1s" in list_models(task="obb")
-    assert list_weights("nitid1m", task="obb") == ["diorr", "dota_1_ms", "dota_1_ss"]
-
-    default = get_model_asset("nitid1s", task="obb")
-    dota = get_model_asset("rio_s", weights="dota", task="obb")
-    diorr = get_model_asset("rtdetrv2_obb_s", weights="dior-r", task="obb")
-
-    assert default.weights == "dota_1_ss"
-    assert dota.weights == "dota_1_ss"
-    assert diorr.weights == "diorr"
-    assert default.url.endswith("/dota_1_ss/rtdetrv2_obb_hgnetv2_s_dota_1_ss.pth")
-    assert default.sha256 is not None
+    with pytest.raises(ValueError, match="Unsupported task"):
+        NITID("nitid1s", task=task, device="cpu", verbose=False)

@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, cast
 
-Task = Literal["detect", "segment", "semantic", "pose", "obb"]
-SUPPORTED_TASKS: tuple[Task, ...] = ("detect", "segment", "semantic", "pose", "obb")
+Task = Literal["detect", "segment", "semantic"]
+SUPPORTED_TASKS: tuple[Task, ...] = ("detect", "segment", "semantic")
 
 
 @dataclass(frozen=True)
@@ -41,20 +41,6 @@ TASK_CONTRACTS: dict[Task, TaskContract] = {
         result_fields=("semantic_mask",),
         instance_level=False,
         pretrained_source_task="segment",
-    ),
-    "pose": TaskContract(
-        name="pose",
-        aliases=("keypoint", "keypoints", "pose_estimation"),
-        result_fields=("keypoints",),
-        instance_level=True,
-        pretrained_source_task="pose",
-    ),
-    "obb": TaskContract(
-        name="obb",
-        aliases=("oriented", "oriented_detection", "rotated", "rotated_detection"),
-        result_fields=("obb",),
-        instance_level=True,
-        pretrained_source_task="obb",
     ),
 }
 

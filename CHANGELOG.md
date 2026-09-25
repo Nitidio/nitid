@@ -20,10 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   export.
 - Dense semantic segmentation with mask training, mIoU validation,
   probability output, overlays, class-ID maps, and ONNX/OpenVINO export.
-- DETRPose model loading, COCO-keypoint training and validation, visualization,
-  and ONNX/OpenVINO export.
-- RiO-DETR oriented bounding boxes with DOTA/DIOR-R data support, training,
-  validation, visualization, and ONNX/OpenVINO export.
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs, class
   filtering, frame sampling, and annotated video output.
 - Video file, webcam, and RTSP/HTTP stream input through OpenCV, including
@@ -35,8 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fine-tuning controls for AMP, EMA, checkpoint resume, cosine learning-rate
   warmup, freezing, augmentation, callbacks, per-epoch validation, W&B, and
   MLflow.
-- Result helpers for annotated media, masks, semantic maps, keypoints, rotated
-  boxes, JSON, YOLO text, pandas DataFrames, timings, and crops.
+- Result helpers for annotated media, masks, semantic maps, JSON, YOLO text,
+  pandas DataFrames, timings, and crops.
 - Atomic, incremented run directories with saved arguments, environment
   snapshots, optional single-file bug reports, and exact output-path
   overrides.
@@ -60,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   convergent fine-tuning.
 - Public messaging leads with the Apache 2.0 licensing of both code and
   weights, and announces three tasks: detection, instance segmentation, and
-  semantic segmentation. Pose and OBB stay supported and documented.
+  semantic segmentation.
 
 ### Fixed
 
