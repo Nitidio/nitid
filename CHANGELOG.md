@@ -62,6 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Prediction and export preserve the trainable model's structure and state.
 - OpenVINO parity checks tolerate valid encoder tie-breaking differences.
+- `import nitid` works on servers and slim containers without `libGL`: the
+  package depends on `opencv-python-headless`, and `Results.show()` falls back
+  to matplotlib, or raises a clear error when no display is available.
 
 [Unreleased]: https://github.com/Vaelsys/nitid/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/Vaelsys/nitid/releases/tag/v0.1.0

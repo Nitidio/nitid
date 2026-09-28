@@ -5,6 +5,8 @@ Results, Boxes, Masks, and SemanticMask — return types from predict().
 from __future__ import annotations
 
 import json
+import os
+import sys
 from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,6 +19,37 @@ if TYPE_CHECKING:
     import pandas as pd
 
     from dfine.media import FrameMetadata
+
+_NON_INTERACTIVE_BACKENDS = {"agg", "cairo", "pdf", "pgf", "ps", "svg", "template"}
+_NO_DISPLAY_MESSAGE = (
+    "Results.show() needs a display, and none is available here (no OpenCV GUI window, and "
+    "matplotlib is using the non-interactive '{backend}' backend). Use result.save('out.jpg') "
+    "to write the image, or result.plot() to get it as a BGR array."
+)
+
+
+def _has_display() -> bool:
+    """Whether a GUI window can be opened. On Linux this needs an X11 or Wayland session."""
+    if sys.platform.startswith("linux"):
+        return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    return True
+
+
+def _show_with_matplotlib(image: np.ndarray, title: str) -> None:
+    """Display a BGR image with matplotlib, or raise if it has no interactive backend."""
+    import matplotlib
+
+    backend = matplotlib.get_backend().lower()
+    if backend in _NON_INTERACTIVE_BACKENDS:
+        raise RuntimeError(_NO_DISPLAY_MESSAGE.format(backend=backend))
+
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    ax.imshow(image[..., ::-1])
+    ax.set_title(title)
+    ax.axis("off")
+    plt.show()
 
 
 class Results:
@@ -186,10 +219,25 @@ class Results:
         return crops
 
     def show(self) -> None:
-        """Display image in a window (blocks until key press)."""
-        cv2.imshow(str(self.path), self.plot())
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        """Display the plotted image and block until the window is closed.
+
+        Uses an OpenCV window when OpenCV has GUI support and a display is available, and
+        matplotlib otherwise, which also covers Jupyter. nitid depends on the headless OpenCV
+        build, so the matplotlib path is the usual one. Raises ``RuntimeError`` when neither
+        can display anything; use ``save()`` or ``plot()`` instead.
+        """
+        image = self.plot()
+        title = str(self.path)
+        if _has_display():
+            try:
+                cv2.imshow(title, image)
+            except cv2.error:
+                pass  # Headless OpenCV build: no GUI backend compiled in.
+            else:
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+                return
+        _show_with_matplotlib(image, title)
 
     def to_json(self) -> list[dict]:
         """Serialise detections to a list of dicts."""

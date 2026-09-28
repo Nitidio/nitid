@@ -235,6 +235,47 @@ docker exec nitid_container /app/.venv/bin/dfine --help
 
 See the [macOS Docker setup](macos_docker_setup.md) for the full container workflow.
 
+## `Results.show()` raises `RuntimeError: Results.show() needs a display`
+
+### What it means
+
+`show()` opens a window, and there is nowhere to open one: a server, a container or an SSH session
+without X11 or Wayland. nitid installs the headless OpenCV build so that `import nitid` works on
+those machines, and `show()` then falls back to matplotlib. It raises this error only when matplotlib
+cannot display anything either.
+
+### Fix
+
+Write the image to disk, or take it as an array:
+
+```python
+result.save("out.jpg")
+image = result.plot()  # HWC BGR numpy array
+```
+
+In Jupyter, `show()` renders inline through matplotlib.
+
+## `ImportError: libGL.so.1` when importing nitid
+
+### What it means
+
+The GUI build of OpenCV (`opencv-python`) is installed, and it needs system graphics libraries that
+slim or server images do not have. nitid itself depends on `opencv-python-headless`, which does not
+need them. `opencv-python` usually arrives with another package; the `track` extra's `trackers`
+dependency requires it, for example. When both builds are installed, they share the `cv2` module,
+and whichever was installed last wins.
+
+### Fix
+
+Make the headless build the one that provides `cv2`:
+
+```bash
+pip uninstall -y opencv-python
+pip install --force-reinstall --no-deps opencv-python-headless
+```
+
+Or install the system library instead: `apt-get install -y libgl1 libglib2.0-0`.
+
 ## Still stuck?
 
 Run these checks from the repository root and include the output when asking for help:
