@@ -5,7 +5,6 @@
   preserved in the `archive/pose-obb-gstreamer` tag.
 - **Date**: 2026-08-19
 - **Deciders**: nitid maintainers
-- **Related**: [DETRPose](https://github.com/SebastianJanampa/DETRPose),
 
 ## Context
 
