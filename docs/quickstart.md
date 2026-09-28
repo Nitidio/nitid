@@ -200,7 +200,7 @@ Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly w
 nitid mirrors the `ultralytics.YOLO` interface closely, so most migrations are
 a one-line import swap.
 
-### Drop-in replacement
+### Loading a model
 
 ```python
 # Before
