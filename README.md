@@ -12,7 +12,7 @@
 [![codecov](https://codecov.io/gh/Vaelsys/nitid/graph/badge.svg)](https://codecov.io/gh/Vaelsys/nitid)
 [![License](https://img.shields.io/github/license/Vaelsys/nitid)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/develop/examples/tutorial.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
 
 Train, validate, export and run vision models. The code and our pretrained
 weights are released under the Apache License 2.0, patent grant included, so you

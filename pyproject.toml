@@ -83,7 +83,7 @@ Homepage = "https://Vaelsys.github.io/nitid/"
 Documentation = "https://Vaelsys.github.io/nitid/"
 Issues = "https://github.com/Vaelsys/nitid/issues"
 Repository = "https://github.com/Vaelsys/nitid"
-Changelog = "https://github.com/Vaelsys/nitid/blob/develop/CHANGELOG.md"
+Changelog = "https://github.com/Vaelsys/nitid/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
