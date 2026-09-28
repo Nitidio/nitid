@@ -204,6 +204,37 @@ refactor: simplify checkpoint loading logic
 - Open a PR back to `develop`
 - `develop` is merged to `main` at release
 
+## Releasing
+
+Releases are published to PyPI by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) through a PyPI
+trusted publisher, so no API token is stored in the repository.
+
+1. Fast-forward `main` to `develop`.
+2. In one commit on `develop`, set `version` in `pyproject.toml` and the release
+   date in `CHANGELOG.md`, then fast-forward `main` again.
+3. Tag that commit and push the tag: `git tag v0.1.0 && git push origin v0.1.0`.
+   The workflow checks that the tag matches the package version, builds the
+   sdist and wheel, runs `scripts/verify_wheel.py`, installs the wheel into a
+   clean environment, runs `scripts/verify_install.py`, and publishes.
+
+Running the workflow by hand (`workflow_dispatch`) publishes the same build to
+TestPyPI instead. Use it as a dry run before a release.
+
+The build job can be reproduced locally with [act](https://github.com/nektos/act):
+
+```bash
+gh act push -W .github/workflows/release.yml -j build \
+    -P ubuntu-latest=catthehacker/ubuntu:act-latest --artifact-server-path /tmp/act-artifacts
+```
+
+The `act-latest` image has no `libGL`, which `opencv-python` needs, so the final
+"Verify installed" step fails there with `ImportError: libGL.so.1`; every earlier
+step is meaningful. GitHub-hosted runners ship `libGL`.
+
+The publish jobs cannot run locally: trusted publishing needs the OIDC token
+that only GitHub-hosted runs receive.
+
 ## Extending nitid
 
 When you add a new capability, keep the public API, implementation, tests, and
