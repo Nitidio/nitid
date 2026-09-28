@@ -50,6 +50,99 @@ uv run mypy dfine/
 Then iterate on the narrower tests for the area you touched before running the
 full suite.
 
+## Good first issues
+
+If you are new to nitid, start with a small issue that helps you learn one part
+of the project without touching too many files at once. Good first
+contributions usually improve docs, tests, examples, or one focused helper
+method.
+
+Before starting, check the issue page and make sure nobody is already assigned.
+If the issue is free, leave a short comment such as:
+
+```text
+I can work on this.
+```
+
+Then assign yourself if you have permission, or ask a maintainer to assign it
+to you.
+
+### Issue labels
+
+Use labels to decide how risky or beginner-friendly an issue is:
+
+| Label | Meaning | Beginner fit |
+|---|---|---|
+| `good first issue` | Maintainers consider this a safe first task | Best starting point |
+| `documentation` | Changes docs, examples, guides, or README content | Usually beginner-friendly |
+| `bug` | Fixes broken behavior | Good if the failure is easy to reproduce |
+| `enhancement` | Adds or improves functionality | Depends on scope |
+| `ci` | Changes GitHub Actions, release, or test automation | Good if the change is small |
+| `help wanted` | Maintainers want outside help or ownership | Ask for scope if unclear |
+| `question` | Needs discussion before implementation | Do not code until clarified |
+
+### Recommended starter areas
+
+These areas are usually easier to approach because they have a clear user
+impact and a smaller code surface:
+
+- Docs and onboarding: `README.md`, `CONTRIBUTING.md`, and files in `docs/`.
+- CLI wording and examples: `docs/cli.md`, `docs/quickstart.md`, and
+  `tools/dfine_cli.py`.
+- Result helpers: `dfine/results.py` and `tests/unit/test_results.py`.
+- Small test additions: focused unit tests in `tests/unit/`.
+- Docs site navigation: `mkdocs.yml` and matching pages in `docs/`.
+
+Avoid large architecture issues as a first contribution unless a maintainer
+has already helped define the approach. Examples include model-state changes,
+training pipeline changes, deployment backends, and packaging/publishing work.
+
+### Suggested first contribution workflow
+
+Use one branch per issue and keep the pull request small:
+
+```bash
+git switch develop
+git pull --ff-only origin develop
+git switch -c docs/123-short-description
+```
+
+Make the change, then run the narrow checks first. For example:
+
+```bash
+uv run pytest tests/unit/test_results.py
+uv run ruff check .
+uv run ruff format --check .
+```
+
+If you changed docs, also run:
+
+```bash
+uv run --extra dev mkdocs build --strict
+```
+
+Before opening the PR, check exactly what will be included:
+
+```bash
+git status
+git diff --stat
+```
+
+Then commit and push:
+
+```bash
+git add <files-you-changed>
+git commit -m "docs: improve contributor guide"
+git push -u origin docs/123-short-description
+```
+
+Open the PR against `develop` and include:
+
+- the issue number, for example `Closes #123`
+- what changed
+- why it helps users or contributors
+- what checks you ran
+
 ## Running tests
 
 Use the narrowest command that covers your change first, then the full suite
