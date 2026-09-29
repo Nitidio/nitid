@@ -126,3 +126,16 @@ jobs:
           cd "$RUNNER_TEMP"
           "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/scripts/verify_install.py"
           "$GITHUB_WORKSPACE/.venv/bin/dfine" --help
+
+      - name: Verify the wheel in a slim container without libGL
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo:ro" python:3.12-slim bash -c '
+            set -e
+            pip install -q uv
+            uv venv -q /venv
+            uv pip install -q --python /venv/bin/python \
+              --index-url https://download.pytorch.org/whl/cpu \
+              --extra-index-url https://pypi.org/simple \
+              /repo/dist/*.whl
+            cd /tmp && /venv/bin/python /repo/scripts/verify_install.py
+          '

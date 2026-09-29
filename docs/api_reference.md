@@ -179,7 +179,7 @@ playback stays close to the original duration.
 r = results[0]
 r.plot()            # → HWC BGR ndarray with boxes drawn
 r.save("out.jpg")   # write plotted image to disk
-r.show()            # display in a window (blocks until key press)
+r.show()            # display in a window or notebook; RuntimeError if no display
 r.to_json()         # → list[dict] with box/score/class per detection
 r.pandas()          # → pandas.DataFrame with xyxy/conf/class/name columns
 r.to_df()           # → same DataFrame as r.pandas()
