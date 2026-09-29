@@ -131,7 +131,7 @@ This downloads all packages (PyTorch, CUDA libraries, pytest, ruff, mypy, etc.) 
 ### Step 6 — Verify the setup (from `onboarding.md`)
 ```bash
 uv run pytest tests/unit           # should show: 42 passed
-uv run ruff check dfine/ nitid/ tools/ tests/ scripts/
+uv run ruff check .
 uv run mypy dfine/
 ```
 
