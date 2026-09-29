@@ -36,7 +36,7 @@ dependencies = [
     "onnx>=1.15",
     "onnxscript>=0.1",
     # 0.6.2 has broken source metadata and no CPython 3.11 wheel.
-    "onnxsim>=0.6.5,<0.7",
+    "onnxsim>=0.6.5,<0.8",
     "tqdm>=4.66",
     "tensorboard>=2.14",
     "scipy>=1.10",        # Hungarian matching during training
