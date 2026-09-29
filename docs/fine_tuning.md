@@ -489,7 +489,9 @@ model.train(
 
 This follows the Ultralytics MLflow conventions:
 
-- the tracking URI defaults to `runs/mlflow`
+- the tracking URI defaults to `runs/mlflow`; a plain local path like this one
+  is stored as a SQLite database (`mlflow.db`) with an `artifacts/` directory
+  inside it, which works with both MLflow 2 and MLflow 3
 - the experiment defaults to the training `project`
 - the MLflow run name defaults to the training `name`
 - an already-active MLflow run is reused and is not closed by nitid
@@ -503,7 +505,7 @@ the defaults and Python options:
 
 | Variable | Purpose |
 |----------|---------|
-| `MLFLOW_TRACKING_URI` | Local store or remote tracking-server URI |
+| `MLFLOW_TRACKING_URI` | Local directory, or any MLflow URI (`http://`, `sqlite://`, `databricks`) passed through unchanged |
 | `MLFLOW_EXPERIMENT_NAME` | Experiment name |
 | `MLFLOW_RUN` | Run name |
 | `MLFLOW_KEEP_RUN_ACTIVE` | Keep a nitid-created run open when set to `1`, `true`, `yes`, `on`, `y`, or `t` (case-insensitive) |
@@ -517,7 +519,7 @@ model.train(data="data.yaml", epochs=2, mlflow=True)
 Inspect those results through the MLflow UI:
 
 ```bash
-mlflow server --backend-store-uri runs/mlflow
+mlflow server --backend-store-uri sqlite:///runs/mlflow/mlflow.db
 ```
 
 Then open `http://127.0.0.1:5000`. To use a different local store without

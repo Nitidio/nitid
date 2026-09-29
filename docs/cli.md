@@ -281,7 +281,7 @@ uv run nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 wandb
 ```
 
 Add `mlflow=true` for Ultralytics-style local MLflow tracking. Logs default to
-`runs/mlflow`:
+a SQLite store in `runs/mlflow`:
 
 ```bash
 uv run nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 mlflow=true

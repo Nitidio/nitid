@@ -65,6 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `import nitid` works on servers and slim containers without `libGL`: the
   package depends on `opencv-python-headless`, and `Results.show()` falls back
   to matplotlib, or raises a clear error when no display is available.
+- MLflow tracking works with MLflow 3: a local tracking directory such as the
+  default `runs/mlflow` is stored as SQLite instead of MLflow's file store,
+  which MLflow 3 refuses by default.
 
 [Unreleased]: https://github.com/Vaelsys/nitid/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/Vaelsys/nitid/releases/tag/v0.1.0
