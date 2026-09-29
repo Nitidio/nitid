@@ -9,3 +9,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # One pull request for every action bump, so all workflows move together.
+    groups:
+      github-actions:
+        patterns: ["*"]

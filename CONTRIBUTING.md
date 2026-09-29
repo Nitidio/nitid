@@ -228,9 +228,8 @@ gh act push -W .github/workflows/release.yml -j build \
     -P ubuntu-latest=catthehacker/ubuntu:act-latest --artifact-server-path /tmp/act-artifacts
 ```
 
-The `act-latest` image has no `libGL`, which `opencv-python` needs, so the final
-"Verify installed" step fails there with `ImportError: libGL.so.1`; every earlier
-step is meaningful. GitHub-hosted runners ship `libGL`.
+The whole build job, including the clean-environment install check, passes under
+`act`: nitid depends on `opencv-python-headless`, so it does not need `libGL`.
 
 The publish jobs cannot run locally: trusted publishing needs the OIDC token
 that only GitHub-hosted runs receive.
