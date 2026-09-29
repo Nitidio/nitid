@@ -22,8 +22,8 @@ segmenter = NITID("nitid1s", task="segment")
 uv sync --extra dev --extra train
 uv run pytest tests/unit
 uv run pytest tests/integration
-uv run ruff check dfine nitid tools tests
-uv run ruff format --check dfine nitid tools tests
+uv run ruff check .
+uv run ruff format --check .
 uv run mypy dfine nitid tools
 ```
 

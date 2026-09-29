@@ -279,8 +279,8 @@ uv run pytest tests/unit
 uv run pytest
 
 # Lint and format
-uv run ruff check dfine tools tests
-uv run ruff format --check dfine tools tests
+uv run ruff check .
+uv run ruff format --check .
 
 # Type-check
 uv run mypy dfine tools
