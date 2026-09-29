@@ -14,6 +14,7 @@ class FakeMLflow:
     def __init__(self):
         self.uri = None
         self.experiment = None
+        self.created_experiments = {}
         self.autolog_calls = 0
         self.active = None
         self.start_calls = []
@@ -26,6 +27,12 @@ class FakeMLflow:
 
     def set_tracking_uri(self, uri):
         self.uri = uri
+
+    def get_experiment_by_name(self, name):
+        return self.created_experiments.get(name)
+
+    def create_experiment(self, name, artifact_location=None):
+        self.created_experiments[name] = artifact_location
 
     def set_experiment(self, experiment):
         self.experiment = experiment
@@ -63,6 +70,16 @@ class FakeMLflow:
         self.active = None
 
 
+@pytest.fixture(autouse=True)
+def _isolated_cwd(monkeypatch, tmp_path):
+    # The default tracking URI is the relative path runs/mlflow.
+    monkeypatch.chdir(tmp_path)
+
+
+def _sqlite_uri(store):
+    return f"sqlite:///{(store / 'mlflow.db').resolve().as_posix()}"
+
+
 @pytest.fixture
 def trainer(tmp_path):
     for filename in ("last.pth", "best.pth", "results.csv", "results.png", "ignored.txt"):
@@ -89,7 +106,11 @@ def test_mlflow_logs_params_metrics_artifacts_and_closes_owned_run(monkeypatch, 
     callback.on_train_epoch_end(trainer)
     callback.on_train_end(trainer)
 
-    assert fake.uri == str(tmp_path / "mlruns")
+    assert fake.uri == _sqlite_uri(tmp_path / "mlruns")
+    assert (tmp_path / "mlruns").is_dir()
+    assert fake.created_experiments == {
+        "detectors": (tmp_path / "mlruns" / "artifacts").resolve().as_uri()
+    }
     assert fake.experiment == "detectors"
     assert fake.start_calls == [{"run_name": "baseline"}]
     assert fake.params == trainer.train_args
@@ -116,6 +137,7 @@ def test_mlflow_environment_variables_take_precedence(monkeypatch, trainer):
     ).on_train_start(trainer)
 
     assert fake.uri == "http://tracker:5000"
+    assert fake.created_experiments == {}
     assert fake.experiment == "environment-project"
     assert fake.start_calls == [{"run_name": "environment-run"}]
 
@@ -210,7 +232,29 @@ def test_mlflow_missing_dependency_warns_without_raising(monkeypatch, trainer, c
     assert "not installed" in caplog.text
 
 
-def test_mlflow_real_local_file_backend(tmp_path):
+@pytest.mark.parametrize(
+    "uri", ["sqlite:///x.db", "file:///tmp/mlruns", "databricks", "http://h:5000"]
+)
+def test_mlflow_uris_with_a_scheme_are_passed_unchanged(monkeypatch, trainer, uri):
+    fake = FakeMLflow()
+    monkeypatch.setitem(sys.modules, "mlflow", fake)
+
+    MLflowCallback(tracking_uri=uri).on_train_start(trainer)
+
+    assert fake.uri == uri
+    assert fake.created_experiments == {}
+
+
+def test_mlflow_default_store_is_sqlite_under_runs_mlflow(monkeypatch, trainer, tmp_path):
+    fake = FakeMLflow()
+    monkeypatch.setitem(sys.modules, "mlflow", fake)
+
+    MLflowCallback().on_train_start(trainer)
+
+    assert fake.uri == _sqlite_uri(tmp_path / "runs" / "mlflow")
+
+
+def test_mlflow_real_local_backend(tmp_path):
     mlflow = pytest.importorskip("mlflow")
     mlflow.end_run()
     save_dir = tmp_path / "training"
@@ -236,8 +280,11 @@ def test_mlflow_real_local_file_backend(tmp_path):
     callback.on_train_epoch_end(local_trainer)
     callback.on_train_end(local_trainer)
 
-    run = mlflow.tracking.MlflowClient(tracking_uri=str(tracking_dir)).get_run(run_id)
+    client = mlflow.tracking.MlflowClient(tracking_uri=_sqlite_uri(tracking_dir))
+    run = client.get_run(run_id)
     assert run.data.params["epochs"] == "1"
     assert run.data.metrics["loss"] == pytest.approx(1.25)
-    artifacts = mlflow.tracking.MlflowClient(tracking_uri=str(tracking_dir)).list_artifacts(run_id)
+    artifacts = client.list_artifacts(run_id)
     assert {artifact.path for artifact in artifacts} == {"last.pth"}
+    assert (tracking_dir / "mlflow.db").is_file()
+    assert list((tracking_dir / "artifacts").rglob("last.pth"))

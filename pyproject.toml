@@ -71,7 +71,7 @@ wandb = [
 ]
 
 mlflow = [
-    "mlflow>=2.14,<3",
+    "mlflow>=2.14,<4",
 ]
 
 [project.scripts]

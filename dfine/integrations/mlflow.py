@@ -18,6 +18,19 @@ def _env_bool(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in _TRUE_VALUES
 
 
+def _local_store(uri: str) -> Path | None:
+    """Return the directory of a tracking URI given as a plain local path.
+
+    MLflow 3 refuses its file-store backend by default, so plain paths are
+    backed by a SQLite database inside that directory instead. URIs with an
+    explicit scheme (``http://``, ``sqlite://``, ``file:``, ``databricks``) are
+    passed to MLflow unchanged.
+    """
+    if "://" in uri or uri.startswith("file:") or uri == "databricks":
+        return None
+    return Path(uri).expanduser().resolve()
+
+
 def _sanitize_metrics(metrics: dict[str, object]) -> dict[str, float]:
     """Remove parentheses from metric names and retain numeric values."""
     sanitized: dict[str, float] = {}
@@ -73,6 +86,7 @@ class MLflowCallback:
             return
 
         uri = os.environ.get("MLFLOW_TRACKING_URI") or self.tracking_uri or "runs/mlflow"
+        store = _local_store(uri)
         experiment = (
             os.environ.get("MLFLOW_EXPERIMENT_NAME")
             or self.experiment_name
@@ -85,7 +99,14 @@ class MLflowCallback:
         )
 
         try:
+            if store is not None:
+                store.mkdir(parents=True, exist_ok=True)
+                uri = f"sqlite:///{(store / 'mlflow.db').as_posix()}"
             self._mlflow.set_tracking_uri(uri)
+            if store is not None and self._mlflow.get_experiment_by_name(experiment) is None:
+                self._mlflow.create_experiment(
+                    experiment, artifact_location=(store / "artifacts").as_uri()
+                )
             self._mlflow.set_experiment(experiment)
             if self.autolog:
                 self._mlflow.autolog()
@@ -99,7 +120,7 @@ class MLflowCallback:
                 self._mlflow.log_params(dict(trainer.train_args))
             self._active = True
             LOGGER.info("%slogging run_id(%s) to %s", _PREFIX, run_id, uri)
-            if Path(uri).is_dir():
+            if store is not None:
                 LOGGER.info(
                     "%sview at http://127.0.0.1:5000 with `mlflow server --backend-store-uri %s`",
                     _PREFIX,
