@@ -14,8 +14,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
 
-Train, validate, export and run vision models. The code and our pretrained
-weights are released under the Apache License 2.0, patent grant included, so you
+Train, validate, export and run vision models. The code is released under the Apache License 2.0, so you
 can ship them inside your own product without opening your code or paying for a
 license.
 
