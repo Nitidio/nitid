@@ -9,7 +9,7 @@ from pathlib import Path
 from dfine.model import DFINE
 from dfine.tasks import normalize_task
 
-_NITID_MODEL_RE = re.compile(r"^nitid(?P<version>\d+)(?P<size>[nsmxl])$")
+_NITID_MODEL_RE = re.compile(r"^model(?P<version>\d+)(?P<size>[nsmxl])$")
 _SUPPORTED_VERSION = 1
 
 
@@ -23,16 +23,16 @@ class NitidModelSpec:
 
 
 def parse_nitid_model_name(model: str | Path) -> NitidModelSpec:
-    """Parse a public model name such as ``nitid1s``."""
+    """Parse a public model name such as ``model1s``."""
     if not isinstance(model, str):
-        raise TypeError("NITID model names must be strings such as 'nitid1s'")
+        raise TypeError("NITID model names must be strings such as 'model1s'")
 
     normalized = model.lower().strip().replace("-", "").replace("_", "")
     match = _NITID_MODEL_RE.fullmatch(normalized)
     if match is None:
         raise ValueError(
             f"Unsupported NITID model {model!r}. Expected names like "
-            "'nitid1n', 'nitid1s', 'nitid1m', 'nitid1l', or 'nitid1x'."
+            "'model1n', 'model1s', 'model1m', 'model1l', or 'model1x'."
         )
 
     version = int(match.group("version"))
@@ -43,7 +43,7 @@ def parse_nitid_model_name(model: str | Path) -> NitidModelSpec:
         )
 
     size = match.group("size")
-    return NitidModelSpec(name=f"nitid{version}{size}", version=version, size=size)
+    return NitidModelSpec(name=f"model{version}{size}", version=version, size=size)
 
 
 def resolve_nitid_backend_model(model: str | Path, *, task: str) -> str:
@@ -53,8 +53,8 @@ def resolve_nitid_backend_model(model: str | Path, *, task: str) -> str:
 
     if resolved_task == "detect" and spec.size == "n":
         raise ValueError(
-            "NITID('nitid1n', task='detect') is not available because no official "
-            "DFINE-N detection checkpoint is registered. Use nitid1s/m/l/x or a "
+            "NITID('model1n', task='detect') is not available because no official "
+            "DFINE-N detection checkpoint is registered. Use model1s/m/l/x or a "
             "checkpoint path."
         )
 
@@ -64,7 +64,7 @@ def resolve_nitid_backend_model(model: str | Path, *, task: str) -> str:
 class NITID(DFINE):
     """Model-family-neutral public entry point for nitid models.
 
-    ``NITID`` accepts public model identifiers such as ``nitid1s`` and maps them
+    ``NITID`` accepts public model identifiers such as ``model1s`` and maps them
     to the concrete architecture backend for the requested task. Existing
     D-FINE behavior is reused while the public constructor moves away from
     assuming every model family is D-FINE.
@@ -72,7 +72,7 @@ class NITID(DFINE):
 
     def __init__(
         self,
-        model: str | Path = "nitid1s",
+        model: str | Path = "model1s",
         *,
         task: str = "detect",
         weights: str = "default",
@@ -93,7 +93,7 @@ class NITID(DFINE):
 
     @property
     def nitid_model(self) -> str:
-        """Public nitid model identifier, for example ``'nitid1s'``."""
+        """Public nitid model identifier, for example ``'model1s'``."""
         return self._nitid_model.name
 
     @property

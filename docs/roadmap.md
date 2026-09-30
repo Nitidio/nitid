@@ -15,9 +15,9 @@ The public API should stay compact:
 ```python
 from nitid import NITID
 
-detector = NITID("nitid1s", task="detect")
-segmenter = NITID("nitid1s", task="segment")
-semantic = NITID("nitid1s", task="semantic")
+detector = NITID("model1s", task="detect")
+segmenter = NITID("model1s", task="segment")
+semantic = NITID("model1s", task="semantic")
 ```
 
 Supported tasks are:

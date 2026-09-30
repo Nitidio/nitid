@@ -35,9 +35,9 @@ def _run(model: str) -> None:
 @pytest.mark.parametrize(
     ("model", "backend"),
     [
-        ("nitid1l", "dfine_l"),
-        ("NITID1S", "dfine_s"),
-        ("nitid1n", "dfine_n"),
+        ("model1l", "dfine_l"),
+        ("MODEL1S", "dfine_s"),
+        ("model1n", "dfine_n"),
         ("dfine_m", "dfine_m"),
     ],
 )
@@ -50,7 +50,7 @@ def test_model_accepts_public_and_dfine_names(captured, model, backend):
     assert config == make_model_config(backend, task="detect")
 
 
-@pytest.mark.parametrize("model", ["nitid2l", "nitid1q", "yolo11l"])
+@pytest.mark.parametrize("model", ["model2l", "model1q", "nitid1l", "yolo11l"])
 def test_model_rejects_unknown_names(captured, capsys, model):
     with pytest.raises(SystemExit) as exc:
         _run(model)

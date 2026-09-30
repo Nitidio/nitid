@@ -55,11 +55,11 @@ def _patch_checkpoint_loading(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str
 @pytest.mark.parametrize(
     ("name", "normalized", "version", "size"),
     [
-        ("nitid1n", "nitid1n", 1, "n"),
-        ("nitid1s", "nitid1s", 1, "s"),
-        ("NITID-1-M", "nitid1m", 1, "m"),
-        ("nitid_1_l", "nitid1l", 1, "l"),
-        (" nitid1x ", "nitid1x", 1, "x"),
+        ("model1n", "model1n", 1, "n"),
+        ("model1s", "model1s", 1, "s"),
+        ("MODEL-1-M", "model1m", 1, "m"),
+        ("model_1_l", "model1l", 1, "l"),
+        (" model1x ", "model1x", 1, "x"),
     ],
 )
 def test_parse_nitid_model_name(name: str, normalized: str, version: int, size: str) -> None:
@@ -72,7 +72,7 @@ def test_parse_nitid_model_name(name: str, normalized: str, version: int, size: 
     assert spec.size == size
 
 
-@pytest.mark.parametrize("name", ["dfine_s", "nitid", "nitid1", "nitid1tiny", "nitid2s"])
+@pytest.mark.parametrize("name", ["dfine_s", "model", "model1", "model1tiny", "model2s", "nitid1s"])
 def test_parse_nitid_model_name_rejects_invalid_names(name: str) -> None:
     from dfine.nitid import parse_nitid_model_name
 
@@ -83,9 +83,9 @@ def test_parse_nitid_model_name_rejects_invalid_names(name: str) -> None:
 @pytest.mark.parametrize(
     ("task", "public_name", "expected_backend"),
     [
-        ("detect", "nitid1s", "dfine_s"),
-        ("segment", "nitid1n", "dfine_n"),
-        ("semantic", "nitid1m", "dfine_m"),
+        ("detect", "model1s", "dfine_s"),
+        ("segment", "model1n", "dfine_n"),
+        ("semantic", "model1m", "dfine_m"),
     ],
 )
 def test_nitid_resolves_existing_tasks_to_backend_models(
@@ -111,14 +111,14 @@ def test_nitid_import_package_exposes_public_api() -> None:
 
     assert DFINE is not None
     assert NITID is not None
-    assert parse_nitid_model_name("nitid1s").size == "s"
+    assert parse_nitid_model_name("model1s").size == "s"
 
 
 def test_nitid_detect_n_rejected_until_detection_weights_exist() -> None:
     from dfine import NITID
 
-    with pytest.raises(ValueError, match="nitid1n.*detect"):
-        NITID("nitid1n", task="detect", device="cpu", verbose=False)
+    with pytest.raises(ValueError, match="model1n.*detect"):
+        NITID("model1n", task="detect", device="cpu", verbose=False)
 
 
 @pytest.mark.parametrize("task", ["pose", "obb"])
@@ -126,4 +126,4 @@ def test_nitid_rejects_removed_tasks(task: str) -> None:
     from dfine import NITID
 
     with pytest.raises(ValueError, match="Unsupported task"):
-        NITID("nitid1s", task=task, device="cpu", verbose=False)
+        NITID("model1s", task=task, device="cpu", verbose=False)

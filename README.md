@@ -113,7 +113,7 @@ The canonical quickstart lives in [docs/quickstart.md](docs/quickstart.md); use 
 ```python
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -121,7 +121,7 @@ results[0].save("out.jpg")
 Instance segmentation uses the same API and downloads the matching COCO mask checkpoint:
 
 ```python
-model = NITID("nitid1s", task="segment")
+model = NITID("model1s", task="segment")
 result = model.predict("image.jpg", conf=0.5)[0]
 print(result.masks.data.shape)  # [N, H, W]
 result.save("segmented.jpg")
@@ -130,7 +130,7 @@ result.save("segmented.jpg")
 Semantic segmentation returns one class ID per pixel:
 
 ```python
-model = NITID("nitid1s", task="semantic")
+model = NITID("model1s", task="semantic")
 result = model.predict("image.jpg", return_probs=True)[0]
 print(result.semantic.mask.shape)  # [H, W]
 result.save_semantic("class_ids.png")
@@ -188,7 +188,7 @@ attachable log:
 from nitid import NITID, bugreport
 
 with bugreport("prediction") as report:
-    model = NITID("nitid1s", task="detect")
+    model = NITID("model1s", task="detect")
     model.predict("image.jpg")
 
 print(report.path)
@@ -197,13 +197,13 @@ print(report.path)
 ### Command Line Interface
 
 ```bash
-nitid predict model=nitid1s task=detect source=image.jpg
+nitid predict model=model1s task=detect source=image.jpg
 nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
-nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
-nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50
-nitid val model=nitid1s task=detect data=my_dataset.yml
-nitid export model=nitid1s task=detect format=onnx
-nitid predict model=nitid1s source=image.jpg --report
+nitid track model=model1s source=video.mp4 conf=0.5 save=true
+nitid train model=model1s task=detect data=my_dataset.yml epochs=50
+nitid val model=model1s task=detect data=my_dataset.yml
+nitid export model=model1s task=detect format=onnx
+nitid predict model=model1s source=image.jpg --report
 nitid bugreport
 ```
 
@@ -222,7 +222,7 @@ mapping of the API and the behaviour that differs:
 
 ## Official Models
 
-> 💡 `NITID("nitid1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `nitid1` identifies the model generation. Supported tasks are `detect`, `segment`, and `semantic`.
+> 💡 `NITID("model1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `model1` identifies the model generation. Supported tasks are `detect`, `segment`, and `semantic`.
 
 Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 
@@ -263,7 +263,7 @@ uv sync --extra dev --extra train
 Inside the checkout, run the CLI and tools through the project environment:
 
 ```bash
-uv run nitid predict model=nitid1s task=detect source=image.jpg
+uv run nitid predict model=model1s task=detect source=image.jpg
 
 # Unit tests (no GPU, no checkpoint needed)
 uv run pytest tests/unit

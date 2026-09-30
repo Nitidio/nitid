@@ -116,10 +116,10 @@ def test_cli_passes_weights_to_model_constructor(monkeypatch):
     fake_module.NITID = FakeDFINE
     monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
-    main(["nitid", "predict", "model=nitid1s", "weights=coco", "source=image.jpg"])
+    main(["nitid", "predict", "model=model1s", "weights=coco", "source=image.jpg"])
 
     assert observed == {
-        "model": "nitid1s",
+        "model": "model1s",
         "task": "detect",
         "weights": "coco",
         "source": "image.jpg",
@@ -149,7 +149,7 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
         [
             "nitid",
             "track",
-            "model=nitid1s",
+            "model=model1s",
             "source=video.mp4",
             "conf=0.5",
             "save=true",
@@ -159,7 +159,7 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
     )
 
     assert observed == {
-        "model": "nitid1s",
+        "model": "model1s",
         "task": "detect",
         "weights": "default",
         "source": "video.mp4",
@@ -192,7 +192,7 @@ def test_cli_passes_segment_task_to_model(monkeypatch):
     fake_module.NITID = FakeDFINE
     monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
-    main(["nitid", "predict", "model=nitid1s", "task=segment", "source=image.jpg"])
+    main(["nitid", "predict", "model=model1s", "task=segment", "source=image.jpg"])
 
     assert observed["task"] == "segment"
 
@@ -340,7 +340,7 @@ def test_track_cli_requires_source(monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
     with pytest.raises(SystemExit) as error:
-        main(["nitid", "track", "model=nitid1s"])
+        main(["nitid", "track", "model=model1s"])
 
     assert error.value.code == 1
     assert "source= is required for track" in capsys.readouterr().out
