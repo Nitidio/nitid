@@ -206,7 +206,7 @@ needed when you want a *different* ordering than sorted order.
 ```python
 from nitid import NITID
 
-model = NITID("nitid1l", task="detect")
+model = NITID("model1l", task="detect")
 
 # The default recipe follows the task-native training path. For detection this
 # uses D-FINE-style defaults, matching, losses, and augmentations.
@@ -226,7 +226,7 @@ deim_metrics = model.train(
 )
 
 # Instance segmentation uses the same training API and mask-aware annotations.
-segmenter = NITID("nitid1s", task="segment")
+segmenter = NITID("model1s", task="segment")
 segment_metrics = segmenter.train(
     data="configs/datasets/my_segment_dataset.yml",
     epochs=50,
@@ -235,7 +235,7 @@ segment_metrics = segmenter.train(
 
 # Semantic models initialize shared features from the matching COCO
 # instance-segmentation checkpoint. The dense classifiers train on your taxonomy.
-semantic = NITID("nitid1s", task="semantic")
+semantic = NITID("model1s", task="semantic")
 semantic_metrics = semantic.train(
     data="configs/datasets/my_semantic_dataset.yml",
     epochs=50,
@@ -392,7 +392,7 @@ Enable logging directly from `train()`, in the same style as Ultralytics:
 ```python
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 model.train(
     data="data.yaml",
     epochs=50,
@@ -477,7 +477,7 @@ Enable MLflow directly on training:
 ```python
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 model.train(
     data="data.yaml",
     epochs=50,
@@ -572,7 +572,7 @@ this flag at safe lifecycle boundaries and finalizes the run cleanly.
 
 ```bash
 uv run nitid train \
-    model=nitid1l task=detect \
+    model=model1l task=detect \
     data=configs/datasets/my_dataset.yml \
     epochs=50 \
     batch=16
@@ -813,7 +813,7 @@ print(metrics)
 
 ```bash
 uv run nitid val \
-    model=nitid1l task=detect \
+    model=model1l task=detect \
     data=configs/datasets/my_dataset.yml \
     conf=0.001
 ```

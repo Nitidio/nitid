@@ -22,7 +22,7 @@ the same single-file format as the CLI's `--report` flag:
 from nitid import NITID, bugreport
 
 with bugreport("training") as report:
-    model = NITID("nitid1s", task="detect")
+    model = NITID("model1s", task="detect")
     model.train(data="data.yaml")
 
 print(report.path)
@@ -38,7 +38,7 @@ One report can cover multiple operations:
 
 ```python
 with bugreport("full-experiment") as report:
-    model = NITID("nitid1s", task="detect")
+    model = NITID("model1s", task="detect")
     model.train(data="data.yaml")
     model.val(data="data.yaml")
     model.export(format="onnx")
@@ -57,14 +57,14 @@ The recommended public class. Instantiate with a path to a nitid-wrapped `.pth`
 checkpoint, or use a registry model name and task.
 
 ```python
-detector = NITID("nitid1s", task="detect", device="cuda:0")
-segmenter = NITID("nitid1s", task="segment", device="cuda:0")
-semantic = NITID("nitid1s", task="semantic", device="cuda:0")
+detector = NITID("model1s", task="detect", device="cuda:0")
+segmenter = NITID("model1s", task="segment", device="cuda:0")
+semantic = NITID("model1s", task="semantic", device="cuda:0")
 ```
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str \| Path` | `"nitid1l"` | Checkpoint path or registry model name such as `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`, or `nitid1x` |
+| `model`   | `str \| Path` | `"model1l"` | Checkpoint path or registry model name such as `model1n`, `model1s`, `model1m`, `model1l`, or `model1x` |
 | `task` | `str` | `"detect"` | `"detect"`, `"segment"`, or `"semantic"` (`"sem_seg"` alias). Must match an explicit checkpoint's embedded task. |
 | `weights` | `str` | `"default"` | Official weight variant for the selected model/task. Do not combine a non-default value with a checkpoint path. |
 | `backend` | `str` | `"torch"` | `"torch"` (PyTorch, CPU/CUDA) or `"openvino"` (OpenVINO Runtime, CPU/Intel iGPU/Intel NPU). Changes what `device` means — see below. |
@@ -81,9 +81,9 @@ but new code should prefer `NITID(...)`.
 ```python
 from nitid import NITID
 
-model = NITID("nitid1s", backend="openvino", device="NPU")   # Intel NPU
-model = NITID("nitid1s", backend="openvino", device="GPU")   # Intel integrated GPU
-model = NITID("nitid1s", backend="openvino", device="AUTO")  # prefer NPU, then GPU, then CPU
+model = NITID("model1s", backend="openvino", device="NPU")   # Intel NPU
+model = NITID("model1s", backend="openvino", device="GPU")   # Intel integrated GPU
+model = NITID("model1s", backend="openvino", device="AUTO")  # prefer NPU, then GPU, then CPU
 results = model.predict("image.jpg", conf=0.5)
 ```
 

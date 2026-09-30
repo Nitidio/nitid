@@ -12,8 +12,8 @@ the `dfine` package.
 ```python
 from nitid import NITID
 
-detector = NITID("nitid1s", task="detect")
-segmenter = NITID("nitid1s", task="segment")
+detector = NITID("model1s", task="detect")
+segmenter = NITID("model1s", task="segment")
 ```
 
 ## Commands
@@ -42,7 +42,7 @@ uv run mypy dfine nitid tools
 - `dfine/nn/configs.py`: supported model-size configurations.
 - `dfine/utils/data.py`: COCO and YOLO detection/segmentation datasets.
 
-`NITID("nitid1s", task="detect")` and `NITID("nitid1s", task="segment")`
+`NITID("model1s", task="detect")` and `NITID("model1s", task="segment")`
 resolve separate pretrained registries. Explicit checkpoint paths must contain
 a self-contained `config`, `model`, and `names`, and their embedded task must
 match the requested task.
@@ -54,13 +54,13 @@ Raw checkpoints can be wrapped without a separate model config:
 ```bash
 uv run python -m nitid.convert_checkpoint \
     --weights dfine_l.pth \
-    --model nitid1l \
+    --model model1l \
     --task detect \
     --names configs/datasets/coco.yml \
-    --output nitid1l_detect.pth
+    --output model1l_detect.pth
 ```
 
-`--model` takes the public `nitid1{n,s,m,l,x}` names or their `dfine_*` equivalents.
+`--model` takes the public `model1{n,s,m,l,x}` names or their `dfine_*` equivalents.
 
 The converter prefers EMA weights when present. Model weights always come from the checkpoint, and class names come from its `names` mapping.
 

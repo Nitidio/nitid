@@ -79,14 +79,14 @@ See the [macOS Docker setup](macos_docker_setup.md) for details.
 
 ### What it means
 
-When you use a supported model name like `nitid1s`, nitid
+When you use a supported model name like `model1s`, nitid
 resolves the selected task, downloads the matching checkpoint when needed, and
 prepares it for the integrated runtime.
 
 The workflow is:
 
 ```text
-NITID("nitid1s", task="detect")
+NITID("model1s", task="detect")
 -> nitid checks the model registry
 -> resolves weights for the selected task
 -> downloads the official checkpoint when needed
@@ -101,24 +101,24 @@ If the internet connection or class names file is missing, the download or wrapp
 Try a direct download command:
 
 ```bash
-uv run nitid download model=nitid1s task=detect
+uv run nitid download model=model1s task=detect
 ```
 
 To save the model in a folder:
 
 ```bash
-uv run nitid download model=nitid1s task=detect output=models
+uv run nitid download model=model1s task=detect output=models
 ```
 
 To replace an existing wrapped checkpoint:
 
 ```bash
-uv run nitid download model=nitid1s task=detect output=models force=true
+uv run nitid download model=model1s task=detect output=models force=true
 ```
 
 Detection, instance segmentation, and semantic segmentation all use the same
-public model names (`nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`,
-`nitid1x`) with an explicit `task=...`.
+public model names (`model1n`, `model1s`, `model1m`, `model1l`,
+`model1x`) with an explicit `task=...`.
 
 ## Checkpoint gives `KeyError: 'config'`
 
@@ -137,13 +137,13 @@ If you are using an official model, use the model name and let nitid prepare it:
 ```python
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 ```
 
 Or use the CLI:
 
 ```bash
-uv run nitid download model=nitid1s task=detect
+uv run nitid download model=model1s task=detect
 ```
 
 If you are maintaining support for a new upstream checkpoint, see the maintainer
@@ -165,13 +165,13 @@ For CPU testing, let nitid choose the device automatically or use CPU:
 ```python
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect", device="cpu")
+model = NITID("model1s", task="detect", device="cpu")
 ```
 
 For CLI usage:
 
 ```bash
-uv run nitid predict model=nitid1s task=detect source=image.jpg
+uv run nitid predict model=model1s task=detect source=image.jpg
 ```
 
 For GPU usage, run on a Linux or Windows machine with an NVIDIA GPU and working drivers.
@@ -193,13 +193,13 @@ pip install --extra-index-url https://pypi.nvidia.com tensorrt>=8.6
 Then export:
 
 ```bash
-uv run nitid export model=nitid1s task=detect format=tensorrt
+uv run nitid export model=model1s task=detect format=tensorrt
 ```
 
 If you do not need TensorRT, export to ONNX instead:
 
 ```bash
-uv run nitid export model=nitid1s task=detect format=onnx
+uv run nitid export model=model1s task=detect format=onnx
 ```
 
 See the [export guide](export.md) for export options and constraints.

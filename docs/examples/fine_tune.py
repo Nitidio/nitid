@@ -2,7 +2,7 @@
 
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 
 metrics = model.train(
     data="my_dataset.yaml",

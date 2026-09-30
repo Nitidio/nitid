@@ -6,7 +6,7 @@ import cv2
 
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 
 # Option A: RTSP stream
 for result in model("rtsp://camera_ip/stream", stream=True, conf=0.4):

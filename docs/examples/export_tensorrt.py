@@ -2,7 +2,7 @@
 
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 
 # Step 1: ONNX
 onnx_path = model.export(format="onnx", imgsz=640, simplify=True, opset=17)

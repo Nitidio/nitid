@@ -2,7 +2,7 @@
 
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 results = model("image.jpg", conf=0.5)
 
 for r in results:

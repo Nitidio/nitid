@@ -19,7 +19,7 @@ weights are released under the Apache License 2.0, patent grant included, so you
 can ship them inside your own product without opening your code or paying for a
 license.
 
-*nitid*, from Latin *nitidus*: clear, transparent, precise.
+_nitid_, from Latin _nitidus_: clear, transparent, precise.
 
 **No AGPL, no surprises.**
 
@@ -42,7 +42,7 @@ Example prediction using D-FINE-S on a street image.
 
 Object detection, instance segmentation and semantic segmentation, through one
 API: `predict`, `track`, `train`, `val` and `export`. The DETR family moves fast
-— RT-DETR, D-FINE, DEIM — and nitid brings a curated selection into a single
+— RT-DETR, D-FINE — and nitid brings a curated selection into a single
 library, so getting from your dataset to an exported model does not mean
 following every paper.
 
@@ -76,12 +76,12 @@ pip install nitid
 
 Inference and export work out of the box. Other features are optional extras:
 
-| Extra | Adds |
-|:------|:-----|
-| `train` | Fine-tuning and COCO-style validation |
-| `track` | ByteTrack, BoT-SORT, and OC-SORT object tracking |
-| `openvino` | OpenVINO export and runtime for Intel CPU, iGPU, and NPU |
-| `wandb`, `mlflow` | Experiment tracking during training |
+| Extra             | Adds                                                     |
+| :---------------- | :------------------------------------------------------- |
+| `train`           | Fine-tuning and COCO-style validation                    |
+| `track`           | ByteTrack, BoT-SORT, and OC-SORT object tracking         |
+| `openvino`        | OpenVINO export and runtime for Intel CPU, iGPU, and NPU |
+| `wandb`, `mlflow` | Experiment tracking during training                      |
 
 ```bash
 pip install "nitid[train,track]"
@@ -113,7 +113,7 @@ The canonical quickstart lives in [docs/quickstart.md](docs/quickstart.md); use 
 ```python
 from nitid import NITID
 
-model = NITID("nitid1s", task="detect")
+model = NITID("model1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -121,7 +121,7 @@ results[0].save("out.jpg")
 Instance segmentation uses the same API and downloads the matching COCO mask checkpoint:
 
 ```python
-model = NITID("nitid1s", task="segment")
+model = NITID("model1s", task="segment")
 result = model.predict("image.jpg", conf=0.5)[0]
 print(result.masks.data.shape)  # [N, H, W]
 result.save("segmented.jpg")
@@ -130,7 +130,7 @@ result.save("segmented.jpg")
 Semantic segmentation returns one class ID per pixel:
 
 ```python
-model = NITID("nitid1s", task="semantic")
+model = NITID("model1s", task="semantic")
 result = model.predict("image.jpg", return_probs=True)[0]
 print(result.semantic.mask.shape)  # [H, W]
 result.save_semantic("class_ids.png")
@@ -142,11 +142,9 @@ result.save_semantic("class_ids.png")
 metrics = model.train(data="configs/datasets/my_dataset.yml", epochs=50)
 print(metrics["mAP50"], metrics["mAP50-95"])
 
-# Detection-only DEIM recipe for faster convergence experiments.
-deim_metrics = model.train(
+train_metrics = model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
-    recipe="deim",
 )
 ```
 
@@ -190,24 +188,22 @@ attachable log:
 from nitid import NITID, bugreport
 
 with bugreport("prediction") as report:
-    model = NITID("nitid1s", task="detect")
+    model = NITID("model1s", task="detect")
     model.predict("image.jpg")
 
 print(report.path)
 ```
 
-
 ### Command Line Interface
 
 ```bash
-nitid predict model=nitid1s task=detect source=image.jpg
+nitid predict model=model1s task=detect source=image.jpg
 nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
-nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
-nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50
-nitid train model=nitid1s task=detect data=my_dataset.yml epochs=50 recipe=deim
-nitid val model=nitid1s task=detect data=my_dataset.yml
-nitid export model=nitid1s task=detect format=onnx
-nitid predict model=nitid1s source=image.jpg --report
+nitid track model=model1s source=video.mp4 conf=0.5 save=true
+nitid train model=model1s task=detect data=my_dataset.yml epochs=50
+nitid val model=model1s task=detect data=my_dataset.yml
+nitid export model=model1s task=detect format=onnx
+nitid predict model=model1s source=image.jpg --report
 nitid bugreport
 ```
 
@@ -218,7 +214,6 @@ For the full guide:
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
 
-
 ## Migrating from YOLO
 
 If you are coming from a YOLO codebase, the quickstart has a side-by-side
@@ -227,33 +222,31 @@ mapping of the API and the behaviour that differs:
 
 ## Official Models
 
-> 💡 `NITID("nitid1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `nitid1` identifies the model generation. Supported tasks are `detect`, `segment`, and `semantic`.
+> 💡 `NITID("model1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `model1` identifies the model generation. Supported tasks are `detect`, `segment`, and `semantic`.
 
 Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 
-| Model | COCO mAP<sup>50-95</sup> *(vs YOLO11)* | Speed<sup>T4 TRT10 FP16</sup> *(vs YOLO11)* | Params | FLOPs | Config | Official Checkpoint |
-|:------|---------------------------------------:|--------------------------------------------:|-------:|------:|:------:|:-------------------:|
-| **D-FINE-N** | **42.8** *(40.9)* | **2.12 ms** *(1.70)* | 4.0M | 7B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth) |
-| **D-FINE-S** | **50.7** *(48.6)* | **3.49 ms** *(2.50)* | 10.0M | 25B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth) |
-| **D-FINE-M** | **55.1** *(53.1)* | **5.62 ms** *(4.70)* | 19.0M | 57B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth) |
-| **D-FINE-L** | **57.3** *(55.0)* | **8.07 ms** *(6.20)* | 31.0M | 91B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
-| **D-FINE-X** | **59.3** *(57.5)* | **12.89 ms** *(11.80)* | 62.0M | 202B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth) |
+| Model        | COCO mAP<sup>50-95</sup> _(vs YOLO11)_ | Speed<sup>T4 TRT10 FP16</sup> _(vs YOLO11)_ | Params | FLOPs |                                                    Config                                                    |                                       Official Checkpoint                                        |
+| :----------- | -------------------------------------: | ------------------------------------------: | -----: | ----: | :----------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------: |
+| **D-FINE-N** |                      **42.8** _(40.9)_ |                        **2.12 ms** _(1.70)_ |   4.0M |    7B |        [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml)         |     [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth)     |
+| **D-FINE-S** |                      **50.7** _(48.6)_ |                        **3.49 ms** _(2.50)_ |  10.0M |   25B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth)   |
+| **D-FINE-M** |                      **55.1** _(53.1)_ |                        **5.62 ms** _(4.70)_ |  19.0M |   57B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth)   |
+| **D-FINE-L** |                      **57.3** _(55.0)_ |                        **8.07 ms** _(6.20)_ |  31.0M |   91B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
+| **D-FINE-X** |                      **59.3** _(57.5)_ |                      **12.89 ms** _(11.80)_ |  62.0M |  202B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth)   |
 
-*Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference.*
-
+_Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference._
 
 ## Documentation
 
-| Doc | Description |
-|-----|-------------|
-| [docs/quickstart.md](docs/quickstart.md) | Full quickstart |
-| [docs/fine_tuning.md](docs/fine_tuning.md) | Training, validation, AMP, EMA, dataset formats |
-| [docs/export.md](docs/export.md) | ONNX, OpenVINO, TorchScript, and TensorRT export |
-| [docs/cli.md](docs/cli.md) | Command-line reference |
-| [docs/api_reference.md](docs/api_reference.md) | Full Python API reference |
+| Doc                                                | Description                                                             |
+| -------------------------------------------------- | ----------------------------------------------------------------------- |
+| [docs/quickstart.md](docs/quickstart.md)           | Full quickstart                                                         |
+| [docs/fine_tuning.md](docs/fine_tuning.md)         | Training, validation, AMP, EMA, dataset formats                         |
+| [docs/export.md](docs/export.md)                   | ONNX, OpenVINO, TorchScript, and TensorRT export                        |
+| [docs/cli.md](docs/cli.md)                         | Command-line reference                                                  |
+| [docs/api_reference.md](docs/api_reference.md)     | Full Python API reference                                               |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
-| [docs/brand.md](docs/brand.md) | Brand: logo, palette, typography, and what the project announces |
-
+| [docs/brand.md](docs/brand.md)                     | Brand: logo, palette, typography, and what the project announces        |
 
 ## Development
 
@@ -270,7 +263,7 @@ uv sync --extra dev --extra train
 Inside the checkout, run the CLI and tools through the project environment:
 
 ```bash
-uv run nitid predict model=nitid1s task=detect source=image.jpg
+uv run nitid predict model=model1s task=detect source=image.jpg
 
 # Unit tests (no GPU, no checkpoint needed)
 uv run pytest tests/unit
@@ -297,7 +290,7 @@ required.
 
 ## Acknowledgements
 
-nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), with smaller portions from RT-DETR, DETR, PaddleDetection, and DEIM. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
+nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), with smaller portions from RT-DETR, DETR and PaddleDetection. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
 
 ```bibtex
 @article{peng2024dfine,
