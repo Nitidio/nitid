@@ -31,7 +31,8 @@ use the light variant instead.
 
 | Asset | Source |
 |-------|--------|
-| [`assets/nitid-demo.png`](assets/nitid-demo.png) | Original image by Jorge Abrines, contributed for nitid's documentation; detections drawn by `model1s` |
+| [`assets/nitid-demo.jpg`](assets/nitid-demo.jpg) | Frame at 00:38 of [DiagonalCrosswalkYongeDundas.webm](https://commons.wikimedia.org/wiki/File:DiagonalCrosswalkYongeDundas.webm) by Raysonho (Wikimedia Commons, CC0). Left: `task="detect"`; right: `task="segment"`, both `model1s`, `conf=0.5` |
+| [`assets/nitid-track.gif`](assets/nitid-track.gif) | 00:33–00:38 of the same CC0 video. `model1s` detection with `track()` (ByteTrack), `vid_stride=2`, 600 px wide at 8 fps |
 
 Every image the documentation shows must have a recorded source here, and its
 licence must allow redistribution.

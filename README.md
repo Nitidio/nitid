@@ -24,9 +24,14 @@ _nitid_, from Latin _nitidus_: clear, transparent, precise.
 
 **No AGPL, no surprises.**
 
-![nitid detection demo](docs/assets/nitid-demo.png)
+![Object detection and instance segmentation with model1s](docs/assets/nitid-demo.jpg)
 
-Example detection with `model1s`.
+Object detection and instance segmentation with `model1s`, and tracking with
+persistent IDs:
+
+<p align="center">
+  <img src="docs/assets/nitid-track.gif" alt="Tracking pedestrians with persistent IDs" width="600">
+</p>
 
 ## Why nitid?
 
