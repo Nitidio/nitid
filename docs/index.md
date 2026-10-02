@@ -30,7 +30,8 @@ Object detection, instance segmentation and semantic segmentation, through one
 API: `predict`, `track`, `train`, `val` and `export`.
 
 - Python API and command line
-- Automatic download of supported official checkpoints
+- Automatic download of the official COCO checkpoints for detection and
+  instance segmentation; semantic segmentation is fine-tuned on your own masks
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - Tracking with video, webcam and RTSP input
 

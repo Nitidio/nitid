@@ -7,7 +7,7 @@ Thank you for your interest in contributing to nitid!
 Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
 
 ```bash
-git clone https://github.com/vaelsys/nitid.git
+git clone https://github.com/Nitidio/nitid.git
 cd nitid
 uv sync --extra dev
 ```
@@ -23,6 +23,12 @@ uv sync --extra dev --extra train
 
 If you are working on export support, you may also need format-specific
 dependencies such as ONNX or TensorRT extras depending on the target.
+
+## Questions and ideas
+
+Ask usage questions and share what you built in
+[GitHub Discussions](https://github.com/Nitidio/nitid/discussions). Keep issues
+for bugs and concrete, scoped feature requests.
 
 ## Development workflow
 

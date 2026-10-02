@@ -27,6 +27,15 @@ Keep clear space around the logo of at least the diameter of the lime dot, do
 not recolour the nodes, and do not set the navy wordmark on a dark background:
 use the light variant instead.
 
+## Demo images
+
+| Asset | Source |
+|-------|--------|
+| [`assets/nitid-demo.png`](assets/nitid-demo.png) | Original image by Jorge Abrines, contributed for nitid's documentation; detections drawn by `model1s` |
+
+Every image the documentation shows must have a recorded source here, and its
+licence must allow redistribution.
+
 ## Colour
 
 The dark palette is the product palette: it is what nitid looks like on the
@@ -102,6 +111,13 @@ messaging announces exactly those. The library, its documentation and the pitch
 describe the same scope, which keeps the promise narrow and the "three tasks,
 five operations" framing honest. The five operations are `predict`, `track`,
 `train`, `val` and `export`.
+
+**Semantic segmentation is fine-tune only.** Detection and instance
+segmentation ship pretrained COCO checkpoints; semantic segmentation does not.
+`task="semantic"` starts from the instance-segmentation checkpoint and is
+trained on the user's own masks. Say so wherever the three tasks are announced,
+and never show semantic predictions from the untrained starting point (decided
+2026-10-02, #220).
 
 **The README is the pitch, not the manual.** It covers the three announced
 tasks and the five operations; details belong on the documentation site. Pose
