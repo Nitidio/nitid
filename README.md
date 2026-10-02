@@ -197,6 +197,14 @@ model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
 
+| Deployment Target | Supported Hardware | Export Format | Dependencies / Notes |
+| :--- | :--- | :--- | :--- |
+| **PyTorch (Native)** | NVIDIA GPU (CUDA), Apple Silicon (MPS), CPU | Direct `.pth` | Out of the box |
+| **ONNX Runtime** | Universal cross-platform (CPU, GPU) | `format="onnx"` | Default |
+| **OpenVINO** | Intel Core/Xeon CPUs, Arc/Iris iGPUs, NPUs | `format="openvino"` | `pip install "nitid[openvino]"` |
+| **TensorRT** | NVIDIA GPUs (Jetson, RTX, Data Center) | `format="tensorrt"` | `tensorrt>=8.6` |
+| **TorchScript** | C++ production runtimes (LibTorch) | `format="torchscript"` | Default |
+
 Capture Python API output, environment details, and failure tracebacks in one
 attachable log:
 
@@ -284,6 +292,7 @@ mapping of the API and the behaviour that differs:
 | [docs/cli.md](docs/cli.md)                         | Command-line reference                                                  |
 | [docs/api_reference.md](docs/api_reference.md)     | Full Python API reference                                               |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
+| [docs/macos_docker_setup.md](docs/macos_docker_setup.md) | macOS / Apple Silicon development environment with Docker         |
 | [docs/brand.md](docs/brand.md)                     | Brand: logo, palette, typography, and what the project announces        |
 
 
@@ -324,6 +333,16 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that
 builds a small D-FINE-S model with random weights at test time — no download
 required.
 
+### Docker Environment
+
+For developers on macOS (Apple Silicon) or environments needing isolated Linux containers, a preconfigured `Dockerfile` and `docker-compose.yml` are provided:
+
+```bash
+docker compose run --rm nitid-dev
+```
+
+See [macOS Docker Setup](docs/macos_docker_setup.md) for the setup guide.
+
 - [docs/onboarding.md](docs/onboarding.md) — **start here if you're new to the
 codebase**: architecture, conventions, gotchas
 - [CONTRIBUTING.md](CONTRIBUTING.md) — branch workflow, commit conventions, and
@@ -331,16 +350,32 @@ the PR checklist
 
 
 
-## Acknowledgements
+## Acknowledgements & Citation
 
-nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), with smaller portions from RT-DETR, DETR and PaddleDetection. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
+nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE) and [D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg), with smaller portions from RT-DETR, DETR and PaddleDetection. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [Apache 2.0 License](LICENSE).
+
+If you use nitid in your research or product, please cite:
 
 ```bibtex
+@software{nitid2026,
+  title={nitid: Real-Time Open Source Computer Vision},
+  author={{Vaelsys}},
+  year={2026},
+  url={https://github.com/Vaelsys/nitid}
+}
+
 @article{peng2024dfine,
   title={D-FINE: Redefine Regression Task in DETRs as Fine-grained Distribution Refinement},
   author={Peng, Yansong and Shi, Hongtao and Li, Shiyu and Wang, Yan and Li, Hongbin and Liu, Guozheng and Li, Bing and Hu, Weiming},
   journal={arXiv preprint arXiv:2410.13842},
   year={2024}
+}
+
+@article{saakyan2026dfineseg,
+  title={D-FINE-seg: Object Detection and Instance Segmentation Framework with multi-backend deployment},
+  author={Saakyan, Argo},
+  journal={arXiv preprint arXiv:2602.23043},
+  year={2026}
 }
 ```
 
