@@ -58,10 +58,10 @@ What comes with it:
 
 ## What "open" means here
 
-The nitid code is released under the
-[Apache License 2.0](LICENSE). You can use, modify and ship it commercially and ship it in closed products. The public datasets
+The nitid code is released under the [Apache License 2.0](LICENSE). You can use
+it commercially, modify it, and ship it in closed products. The public datasets
 used for pretraining keep their own terms: the official checkpoints listed in
-[Official Models](#official-models) are trained on COCO and Objects365.
+[Verified models](#verified-models) are trained on COCO and Objects365.
 
 ## Installation
 
