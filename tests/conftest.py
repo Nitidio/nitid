@@ -34,6 +34,18 @@ def _seeded(seed: int = _FIXTURE_SEED):
         yield
 
 
+@pytest.fixture(autouse=True)
+def _isolated_cwd(tmp_path, monkeypatch):
+    """Run every test from its own temporary directory.
+
+    Official model names download into the cwd and train/val/export default to
+    ``runs/`` under it. From a checkout, that left fake checkpoints next to real
+    ones, where the next ``NITID("model1s")`` loaded them, plus an ever-growing
+    ``runs/`` tree (#219).
+    """
+    monkeypatch.chdir(tmp_path)
+
+
 @pytest.fixture(scope="session")
 def tiny_checkpoint(tmp_path_factory):
     """

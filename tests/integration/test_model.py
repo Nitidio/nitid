@@ -152,10 +152,6 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     assert len(download_calls) == 1
     assert download_calls[0] == ("dfine_s", "detect", "obj2coco", None)
     assert load_calls[0] == "dfine_s_obj2coco_wrapped.pth"
-    import os
-
-    if os.path.exists("dfine_s_obj2coco_wrapped.pth"):
-        os.remove("dfine_s_obj2coco_wrapped.pth")
 
     # 2. Test specifying path with .pth suffix (e.g. path/to/dfine_s.pth)
     download_calls.clear()
