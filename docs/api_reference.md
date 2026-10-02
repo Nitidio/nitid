@@ -64,8 +64,8 @@ semantic = NITID("model1s", task="semantic", device="cuda:0")
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str \| Path` | `"model1l"` | Checkpoint path or registry model name such as `model1n`, `model1s`, `model1m`, `model1l`, or `model1x` |
-| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, or `"semantic"` (`"sem_seg"` alias). Must match an explicit checkpoint's embedded task. |
+| `model`   | `str \| Path` | `"model1s"` | Checkpoint path or registry model name such as `model1n`, `model1s`, `model1m`, `model1l`, or `model1x` |
+| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, or `"semantic"` (`"sem_seg"` alias). Must match an explicit checkpoint's embedded task. Registry names for `"semantic"` build an untrained dense head on top of the instance-segmentation checkpoint: fine-tune before predicting. |
 | `weights` | `str` | `"default"` | Official weight variant for the selected model/task. Do not combine a non-default value with a checkpoint path. |
 | `backend` | `str` | `"torch"` | `"torch"` (PyTorch, CPU/CUDA) or `"openvino"` (OpenVINO Runtime, CPU/Intel iGPU/Intel NPU). Changes what `device` means — see below. |
 | `device`  | `str \| int \| None` | `None` | For `backend="torch"`: a PyTorch device selector (`"cuda"`, `"cpu"`, `"cuda:N"`); omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. For `backend="openvino"`: an OpenVINO device string (`"CPU"`, `"GPU"` for Intel integrated GPU, `"NPU"`), or `"auto"`/omit to prefer NPU, then GPU, then CPU. |

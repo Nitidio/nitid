@@ -112,6 +112,13 @@ tag.
 **The repository is the source of truth for the API.** Where marketing material
 and the code disagree about names or signatures, the code wins and the
 marketing material gets corrected.
+**Semantic segmentation is fine-tune only.** Detection and instance
+segmentation ship pretrained COCO checkpoints; semantic segmentation does not.
+`task="semantic"` starts from the instance-segmentation checkpoint and is
+trained on the user's own masks. Say so wherever the three tasks are announced,
+and never show semantic predictions from the untrained starting point (decided
+2026-10-02, #220).
+
 
 **Products built on top of nitid are announced elsewhere.** Operating systems,
 certified hardware and licensing live on the Vaelsys website. This repository

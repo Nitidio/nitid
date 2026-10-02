@@ -50,7 +50,8 @@ following every paper.
 What comes with it:
 
 - Python API and command line
-- Automatic download of supported official checkpoints
+- Automatic download of the official COCO checkpoints for detection and
+  instance segmentation; semantic segmentation is fine-tuned on your own masks
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
   video output
@@ -261,6 +262,12 @@ mapping of the API and the behaviour that differs:
 | `model1m` | **D-FINE-Seg-M** | `dfine_seg_m_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
 | `model1l` | **D-FINE-Seg-L** | `dfine_seg_l_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
 | `model1x` | **D-FINE-Seg-X** | `dfine_seg_x_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+
+### Semantic Segmentation (`task="semantic"`)
+
+There are no pretrained semantic checkpoints. `NITID("model1s", task="semantic")` starts
+from the instance-segmentation checkpoint of the same size and is meant for
+[fine-tuning](docs/fine_tuning.md) on your own masks.
 
 ## Documentation
 
