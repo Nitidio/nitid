@@ -77,13 +77,15 @@ unavailable.
 
 ## Voice
 
-nitid's pitch is not "a familiar API". It is that the whole thing — code and
-pretrained weights — is genuinely usable in a commercial product.
+nitid's pitch is not "a familiar API". It is that the code is genuinely usable
+in a commercial product. For now the public messaging announces the Apache 2.0
+licence of the code only; the licence of the pretrained weights is not announced
+until it is decided ([#227](https://github.com/Nitidio/nitid/issues/227)).
 
 - **Headline:** Object detection that's actually open source.
-- **Supporting line:** Train, validate, export and run vision models. Code and
-  pretrained weights under Apache 2.0, so you can ship them in your product
-  without opening your code or paying a license.
+- **Supporting line:** Train, validate, export and run vision models. The code
+  is under Apache 2.0, so you can ship it in your product without opening your
+  code or paying a license.
 - **Short form:** No AGPL, no surprises.
 
 The four things that make nitid different, in this order:

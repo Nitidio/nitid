@@ -17,7 +17,7 @@
 </p>
 
 Train, validate, export and run vision models. The code is released under the Apache License 2.0, so you
-can ship them inside your own product without opening your code or paying for a
+can ship it inside your own product without opening your code or paying for a
 license.
 
 _nitid_, from Latin _nitidus_: clear, transparent, precise.
