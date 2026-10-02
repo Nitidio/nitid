@@ -24,6 +24,12 @@ uv sync --extra dev --extra train
 If you are working on export support, you may also need format-specific
 dependencies such as ONNX or TensorRT extras depending on the target.
 
+## Questions and ideas
+
+Ask usage questions and share what you built in
+[GitHub Discussions](https://github.com/Nitidio/nitid/discussions). Keep issues
+for bugs and concrete, scoped feature requests.
+
 ## Development workflow
 
 The project follows a lightweight branch-based workflow:
