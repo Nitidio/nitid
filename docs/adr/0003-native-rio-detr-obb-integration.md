@@ -17,7 +17,7 @@ constructor:
 ```python
 from nitid import NITID
 
-model = NITID("nitid1s", task="obb")
+model = NITID("model1s", task="obb")
 ```
 
 The local `RiO-DETR-master` checkout contains the OBB implementation chosen for this integration. The
@@ -120,7 +120,7 @@ Suggested nitid aliases:
 | `dota_ms` | `dota_1_ms` |
 | `diorr` | `diorr` |
 
-`NITID("nitid1s", task="obb", weights="default")` should resolve to the RT-DETRv2-OBB-S DOTA-v1.0
+`NITID("model1s", task="obb", weights="default")` should resolve to the RT-DETRv2-OBB-S DOTA-v1.0
 single-scale checkpoint unless later benchmarks justify a different default.
 
 ## Dataset contract
@@ -181,7 +181,7 @@ The integration will proceed in this order:
 
 1. add the model-family-neutral `NITID` registry and model-name parser;
 2. port the minimal RT-DETRv2-OBB architecture, postprocessor, criterion, matcher, and OBB utilities;
-3. register cleaned OBB configs for `nitid1{n,s,m,l,x}`;
+3. register cleaned OBB configs for `model1{n,s,m,l,x}`;
 4. add task-aware pretrained weight resolution from the RiO-DETR manifests;
 5. add native `Results.obb` representation and plotting;
 6. enable prediction and export;

@@ -39,7 +39,7 @@ fixture.
 Choose option 2. DETRPose support will be implemented natively inside `dfine`; neither a Git submodule
 nor a runtime dependency on the reference repository will be shipped.
 
-- The public API is `NITID("nitid1{s,m,l,...}", task="pose")`; internally this maps to the
+- The public API is `NITID("model1{s,m,l,...}", task="pose")`; internally this maps to the
   matching DETRPose architecture family.
 - The operational task registry advertises pose only for compatible pose model configurations.
 - Shared HGNetV2 and encoder machinery may be reused only where state and numerical compatibility are
