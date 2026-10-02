@@ -229,3 +229,8 @@ __marimo__/
 
 # Local Python configuration
 .python-version
+
+# Notebook outputs
+/outputs/
+/tutorials/outputs/
+/tutorials/runs/
