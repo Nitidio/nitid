@@ -195,10 +195,9 @@ Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly w
 
 ---
 
-## Coming from Ultralytics
+## Coming from YOLO
 
-nitid mirrors the `ultralytics.YOLO` interface closely, so most migrations are
-a one-line import swap.
+nitid has a simple and familiar interface, so most migrations are a one-line import swap.
 
 ### Loading a model
 

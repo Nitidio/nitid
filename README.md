@@ -1,24 +1,26 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/nitid-logo-on-dark.png">
-    <img src="docs/assets/brand/nitid-logo-on-light.png" alt="nitid" width="240">
+    <img src="docs/assets/brand/nitid-logo-on-light.png" alt="nitid" width="280">
   </picture>
 </p>
 
-<p align="center"><strong>Object detection that's actually open source.</strong></p>
+<p align="center"><strong>Real-time Computer Vision that's actually open source.</strong></p>
 
-[![CI](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml/badge.svg)](https://github.com/Vaelsys/nitid/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Vaelsys.github.io/nitid/)
-[![codecov](https://codecov.io/gh/Vaelsys/nitid/graph/badge.svg)](https://codecov.io/gh/Vaelsys/nitid)
-[![License](https://img.shields.io/github/license/Vaelsys/nitid)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#installation)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb)
+<p align="center">
+  <a href="https://github.com/Vaelsys/nitid/actions/workflows/ci.yml"><img src="https://github.com/Vaelsys/nitid/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://Vaelsys.github.io/nitid/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
+  <a href="https://codecov.io/gh/Vaelsys/nitid"><img src="https://codecov.io/gh/Vaelsys/nitid/graph/badge.svg" alt="codecov"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green.svg" alt="License"></a>
+  <a href="#installation"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python"></a>
+  <a href="https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
+</p>
 
 Train, validate, export and run vision models. The code is released under the Apache License 2.0, so you
 can ship them inside your own product without opening your code or paying for a
 license.
 
-_nitid_, from Latin _nitidus_: clear, transparent, precise.
+*nitid*, from Latin *nitidus*: clear, transparent, precise.
 
 **No AGPL, no surprises.**
 
@@ -29,13 +31,15 @@ Example prediction using D-FINE-S on a street image.
 ## Why nitid?
 
 - **Edge first.** The models are designed to run at the edge, on the hardware
-  next to your cameras, not only on a datacenter GPU.
+next to your cameras, not only on a datacenter GPU.
 - **Self-contained checkpoints.** Every checkpoint carries the config and the
-  class names it needs to be reproduced and checked — one file per model.
+class names it needs to be reproduced and checked — one file per model.
 - **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
-  conversion step, and the inconsistencies real datasets have are tolerated.
+conversion step, and the inconsistencies real datasets have are tolerated.
 - **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same
-  checkpoint.
+checkpoint.
+
+
 
 ## One library, three tasks, five operations
 
@@ -51,7 +55,9 @@ What comes with it:
 - Automatic download of supported official checkpoints
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
-  video output
+video output
+
+
 
 ## What "open" means here
 
@@ -75,12 +81,14 @@ pip install nitid
 
 Inference and export work out of the box. Other features are optional extras:
 
+
 | Extra             | Adds                                                     |
-| :---------------- | :------------------------------------------------------- |
+| ----------------- | -------------------------------------------------------- |
 | `train`           | Fine-tuning and COCO-style validation                    |
 | `track`           | ByteTrack, BoT-SORT, and OC-SORT object tracking         |
 | `openvino`        | OpenVINO export and runtime for Intel CPU, iGPU, and NPU |
 | `wandb`, `mlflow` | Experiment tracking during training                      |
+
 
 ```bash
 pip install "nitid[train,track]"
@@ -95,13 +103,6 @@ TensorRT export needs NVIDIA's package as well:
 ```bash
 pip install --extra-index-url https://pypi.nvidia.com "tensorrt>=8.6"
 ```
-
-## Public names
-
-Use `nitid` for the Python package and command, and `NITID` for the public
-model class. Existing `from dfine import ...` imports and the `dfine` command
-remain supported compatibility aliases for the 0.1 release series. New code
-should use the Nitid names shown below.
 
 ## Quick Start
 
@@ -138,13 +139,12 @@ result.save_semantic("class_ids.png")
 ### Training
 
 ```python
-metrics = model.train(data="configs/datasets/my_dataset.yml", epochs=50)
-print(metrics["mAP50"], metrics["mAP50-95"])
-
-train_metrics = model.train(
+metrics = model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
+    batch=8,
 )
+print(f"mAP50: {metrics['mAP50']:.4f}, mAP50-95: {metrics['mAP50-95']:.4f}")
 ```
 
 See [fine-tuning](docs/fine_tuning.md) for COCO, YOLO, and semantic-mask dataset formats.
@@ -171,6 +171,8 @@ metrics = model.val(
 # saves validation plots to runs/val/exp by default
 ```
 
+
+
 ### Export
 
 ```python
@@ -193,6 +195,8 @@ with bugreport("prediction") as report:
 print(report.path)
 ```
 
+
+
 ### Command Line Interface
 
 ```bash
@@ -213,11 +217,17 @@ For the full guide:
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
 
-## Migrating from YOLO
+
+
+## Migrating from YOLO & Compatibility
 
 If you are coming from a YOLO codebase, the quickstart has a side-by-side
 mapping of the API and the behaviour that differs:
-[Coming from Ultralytics](docs/quickstart.md#coming-from-ultralytics).
+[Coming from YOLO](docs/quickstart.md#coming-from-yolo).
+
+> **Compatibility Note:** Existing `from dfine import ...` imports and the `dfine` command
+> remain supported compatibility aliases for the 0.1 release series. New code
+> should use the canonical `nitid` package and `NITID` model class.
 
 ## Official Models
 
@@ -225,17 +235,20 @@ mapping of the API and the behaviour that differs:
 
 Segmentation checkpoints are published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg).
 
-| Model        | COCO mAP<sup>50-95</sup> _(vs YOLO11)_ | Speed<sup>T4 TRT10 FP16</sup> _(vs YOLO11)_ | Params | FLOPs |                                                    Config                                                    |                                       Official Checkpoint                                        |
-| :----------- | -------------------------------------: | ------------------------------------------: | -----: | ----: | :----------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------: |
-| **D-FINE-N** |                      **42.8** _(40.9)_ |                        **2.12 ms** _(1.70)_ |   4.0M |    7B |        [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml)         |     [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth)     |
-| **D-FINE-S** |                      **50.7** _(48.6)_ |                        **3.49 ms** _(2.50)_ |  10.0M |   25B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth)   |
-| **D-FINE-M** |                      **55.1** _(53.1)_ |                        **5.62 ms** _(4.70)_ |  19.0M |   57B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth)   |
-| **D-FINE-L** |                      **57.3** _(55.0)_ |                        **8.07 ms** _(6.20)_ |  31.0M |   91B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
-| **D-FINE-X** |                      **59.3** _(57.5)_ |                      **12.89 ms** _(11.80)_ |  62.0M |  202B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth)   |
 
-_Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference._
+| Model        | COCO mAP50-95 *(vs YOLO11)* | SpeedT4 TRT10 FP16 *(vs YOLO11)* | Params | FLOPs | Config                                                                                                       | Official Checkpoint                                                                              |
+| ------------ | --------------------------- | -------------------------------- | ------ | ----- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| **D-FINE-N** | **42.8** *(40.9)*           | **2.12 ms** *(1.70)*             | 4.0M   | 7B    | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml)                | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth)         |
+| **D-FINE-S** | **50.7** *(48.6)*           | **3.49 ms** *(2.50)*             | 10.0M  | 25B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth)     |
+| **D-FINE-M** | **55.1** *(53.1)*           | **5.62 ms** *(4.70)*             | 19.0M  | 57B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth)     |
+| **D-FINE-L** | **57.3** *(55.0)*           | **8.07 ms** *(6.20)*             | 31.0M  | 91B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
+| **D-FINE-X** | **59.3** *(57.5)*           | **12.89 ms** *(11.80)*           | 62.0M  | 202B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth)     |
+
+
+*Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference.*
 
 ## Documentation
+
 
 | Doc                                                | Description                                                             |
 | -------------------------------------------------- | ----------------------------------------------------------------------- |
@@ -246,6 +259,9 @@ _Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l
 | [docs/api_reference.md](docs/api_reference.md)     | Full Python API reference                                               |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 | [docs/brand.md](docs/brand.md)                     | Brand: logo, palette, typography, and what the project announces        |
+
+
+
 
 ## Development
 
@@ -283,9 +299,11 @@ builds a small D-FINE-S model with random weights at test time — no download
 required.
 
 - [docs/onboarding.md](docs/onboarding.md) — **start here if you're new to the
-  codebase**: architecture, conventions, gotchas
+codebase**: architecture, conventions, gotchas
 - [CONTRIBUTING.md](CONTRIBUTING.md) — branch workflow, commit conventions, and
-  the PR checklist
+the PR checklist
+
+
 
 ## Acknowledgements
 
@@ -299,3 +317,4 @@ nitid contains code derived from [D-FINE](https://github.com/Peterande/D-FINE), 
   year={2024}
 }
 ```
+
