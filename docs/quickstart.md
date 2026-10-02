@@ -11,7 +11,7 @@ pip install "nitid[train]"
 ```
 
 Until v0.1.0 is published on PyPI, install from GitHub instead:
-`pip install "nitid[train] @ git+https://github.com/Vaelsys/nitid.git"`.
+`pip install "nitid[train] @ git+https://github.com/Nitidio/nitid.git"`.
 
 Add extras only when you need them:
 
@@ -21,7 +21,7 @@ pip install "nitid[openvino]"  # OpenVINO IR export and runtime
 ```
 
 Working on nitid itself? That uses a source
-checkout with `uv` — see [Development](https://github.com/Vaelsys/nitid#development)
+checkout with `uv` — see [Development](https://github.com/Nitidio/nitid#development)
 in the README.
 
 ## First Run
@@ -55,10 +55,13 @@ result.save("segmented.jpg")
 Segmentation defaults to the official COCO-pretrained mask weights.
 
 For dense semantic segmentation, read the original-resolution class map from
-`result.semantic.mask`:
+`result.semantic.mask`. There are no pretrained semantic weights yet:
+`NITID("model1s", task="semantic")` initializes the shared features from the COCO
+instance-segmentation checkpoint and is meant for [fine-tuning](fine_tuning.md).
+Predict with your fine-tuned checkpoint:
 
 ```python
-semantic = NITID("model1s", task="semantic")
+semantic = NITID("semantic_best.pth", task="semantic")
 result = semantic.predict("image.jpg", save=True, return_probs=True)[0]
 
 class_map = result.semantic.mask       # int64 [H, W]

@@ -5,54 +5,39 @@
   </picture>
 </p>
 
-<p align="center">
-  <strong>Real-time Computer Vision that's actually open source.</strong><br>
-  <em>Object Detection, Instance Segmentation & Semantic Segmentation — Apache 2.0 code and weights.</em>
-</p>
+<p align="center"><strong>Object detection that's actually open source.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Vaelsys/nitid/actions/workflows/ci.yml"><img src="https://github.com/Vaelsys/nitid/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://Vaelsys.github.io/nitid/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
-  <a href="https://codecov.io/gh/Vaelsys/nitid"><img src="https://codecov.io/gh/Vaelsys/nitid/graph/badge.svg" alt="codecov"></a>
+  <a href="https://github.com/Nitidio/nitid/actions/workflows/ci.yml"><img src="https://github.com/Nitidio/nitid/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://nitidio.github.io/nitid/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
+  <a href="https://codecov.io/gh/Nitidio/nitid"><img src="https://codecov.io/gh/Nitidio/nitid/graph/badge.svg" alt="codecov"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green.svg" alt="License"></a>
   <a href="#installation"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python"></a>
-  <a href="https://colab.research.google.com/github/Vaelsys/nitid/blob/main/examples/tutorial.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
-  <a href="https://huggingface.co/ArgoSA/D-FINE-seg"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Models-orange" alt="Hugging Face"></a>
+  <a href="https://colab.research.google.com/github/Nitidio/nitid/blob/main/examples/tutorial.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
 </p>
 
 Train, validate, export and run vision models. The code is released under the Apache License 2.0, so you
 can ship them inside your own product without opening your code or paying for a
 license.
 
-*nitid*, from Latin *nitidus*: clear, transparent, precise.
+_nitid_, from Latin _nitidus_: clear, transparent, precise.
 
 **No AGPL, no surprises.**
 
 ![nitid detection demo](docs/assets/nitid-demo.png)
 
-Example prediction using D-FINE-S on a street image.
+Example detection with `model1s`.
 
 ## Why nitid?
 
-- **Edge first & NMS-Free.** The models run at the edge, on the hardware next to your cameras, not only on datacenter GPUs. Being real-time DETRs, inference is end-to-end and NMS-free—eliminating non-maximum suppression latency bottlenecks and brittle IoU threshold tuning.
-- **Self-contained checkpoints.** Every checkpoint carries the config and the class names it needs to be reproduced and checked — one file per model.
-- **Handles messy datasets.** COCO and YOLO layouts are read directly, with no conversion step, and the inconsistencies real datasets have are tolerated.
-- **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same checkpoint.
-
-## Comparison
-
-| Feature | nitid | Ultralytics YOLO | Academic Repos (D-FINE / RT-DETR) |
-| :--- | :--- | :--- | :--- |
-| **Code License** | **Apache 2.0** (Permissive) | AGPL-3.0 (Copyleft / commercial restrictions) | Apache 2.0 / MIT |
-| **Weights License** | **Apache 2.0** | Restrictive under commercial terms | Varies (Apache / MIT / Non-commercial) |
-| **Architecture** | **Real-Time DETR (D-FINE)** | CNN / Anchor-free | Transformers / DETR |
-| **Post-processing** | **NMS-Free** (Zero NMS latency) | Requires NMS | NMS-Free |
-| **API** | Unified (`predict`, `track`, `train`, `val`, `export`) | Unified | Research scripts (`main.py`, `.sh`) |
-| **Checkpoints** | Self-contained (config + weights + classes in 1 file) | Self-contained | Decoupled weights and YAML configs |
-| **Edge Export** | ONNX, OpenVINO, TensorRT, TorchScript | Multiple formats | Manual / experimental |
-| **Video Tracking** | Integrated ByteTrack, BoT-SORT, OC-SORT | Integrated | Not included out-of-the-box |
-
-
+- **Edge first.** The models are designed to run at the edge, on the hardware
+  next to your cameras, not only on a datacenter GPU.
+- **Self-contained checkpoints.** Every checkpoint carries the config and the
+  class names it needs to be reproduced and checked — one file per model.
+- **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
+  conversion step, and the inconsistencies real datasets have are tolerated.
+- **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same
+  checkpoint.
 
 ## One library, three tasks, five operations
 
@@ -68,9 +53,7 @@ What comes with it:
 - Automatic download of supported official checkpoints
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
-video output
-
-
+  video output
 
 ## What "open" means here
 
@@ -90,18 +73,16 @@ pip install nitid
 
 > nitid is not on PyPI yet — the first release, v0.1.0, is being prepared.
 > Until it lands, install straight from GitHub:
-> `pip install "nitid @ git+https://github.com/Vaelsys/nitid.git"`
+> `pip install "nitid @ git+https://github.com/Nitidio/nitid.git"`
 
 Inference and export work out of the box. Other features are optional extras:
 
-
 | Extra             | Adds                                                     |
-| ----------------- | -------------------------------------------------------- |
+| :---------------- | :------------------------------------------------------- |
 | `train`           | Fine-tuning and COCO-style validation                    |
 | `track`           | ByteTrack, BoT-SORT, and OC-SORT object tracking         |
 | `openvino`        | OpenVINO export and runtime for Intel CPU, iGPU, and NPU |
 | `wandb`, `mlflow` | Experiment tracking during training                      |
-
 
 ```bash
 pip install "nitid[train,track]"
@@ -144,10 +125,12 @@ print(result.masks.data.shape)  # [N, H, W]
 result.save("segmented.jpg")
 ```
 
-Semantic segmentation returns one class ID per pixel:
+Semantic segmentation returns one class ID per pixel. There are no pretrained
+semantic weights yet: `NITID("model1s", task="semantic")` is a starting point for
+[fine-tuning](docs/fine_tuning.md), so predict with your fine-tuned checkpoint:
 
 ```python
-model = NITID("model1s", task="semantic")
+model = NITID("semantic_best.pth", task="semantic")
 result = model.predict("image.jpg", return_probs=True)[0]
 print(result.semantic.mask.shape)  # [H, W]
 result.save_semantic("class_ids.png")
@@ -197,13 +180,13 @@ model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
 
-| Deployment Target | Supported Hardware | Export Format | Dependencies / Notes |
+| Deployment target | Hardware | Export format | Extra install |
 | :--- | :--- | :--- | :--- |
-| **PyTorch (Native)** | NVIDIA GPU (CUDA), Apple Silicon (MPS), CPU | Direct `.pth` | Out of the box |
-| **ONNX Runtime** | Universal cross-platform (CPU, GPU) | `format="onnx"` | Default |
-| **OpenVINO** | Intel Core/Xeon CPUs, Arc/Iris iGPUs, NPUs | `format="openvino"` | `pip install "nitid[openvino]"` |
-| **TensorRT** | NVIDIA GPUs (Jetson, RTX, Data Center) | `format="tensorrt"` | `tensorrt>=8.6` |
-| **TorchScript** | C++ production runtimes (LibTorch) | `format="torchscript"` | Default |
+| **PyTorch** | NVIDIA GPU (CUDA), CPU | `.pth` checkpoint | None |
+| **ONNX** | Any ONNX runtime (CPU, GPU) | `format="onnx"` | A runtime, e.g. `pip install onnxruntime` |
+| **OpenVINO** | Intel CPU, iGPU and NPU | `format="openvino"` | `pip install "nitid[openvino]"` |
+| **TensorRT** | NVIDIA GPU (Jetson, RTX, data center) | `format="tensorrt"` | `tensorrt>=8.6` (see [Installation](#installation)) |
+| **TorchScript** | LibTorch (C++) | `format="torchscript"` | None |
 
 Capture Python API output, environment details, and failure tracebacks in one
 attachable log:
@@ -238,8 +221,6 @@ For the full guide:
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
 
-
-
 ## Migrating from YOLO & Compatibility
 
 If you are coming from a YOLO codebase, the quickstart has a side-by-side
@@ -271,18 +252,17 @@ mapping of the API and the behaviour that differs:
 
 ### Instance Segmentation (`task="segment"`)
 
-*Based on D-FINE-seg with polygon mask prediction. Published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg). Official checkpoints download automatically upon first use.*
+*Based on D-FINE-seg. Published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg). Official checkpoints download automatically upon first use.*
 
-| Model Alias | Architecture | COCO Box AP | Backing Checkpoint | Weights & Checkpoints |
-| :--- | :--- | :---: | :---: | :---: |
-| `model1n` | **D-FINE-Seg-N** | 42.8 | `dfine_seg_n_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
-| `model1s` | **D-FINE-Seg-S** | 48.5 | `dfine_seg_s_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
-| `model1m` | **D-FINE-Seg-M** | 52.3 | `dfine_seg_m_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
-| `model1l` | **D-FINE-Seg-L** | 54.0 | `dfine_seg_l_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
-| `model1x` | **D-FINE-Seg-X** | 55.8 | `dfine_seg_x_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| Model Alias | Architecture | Backing Checkpoint | Weights |
+| :--- | :--- | :---: | :---: |
+| `model1n` | **D-FINE-Seg-N** | `dfine_seg_n_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| `model1s` | **D-FINE-Seg-S** | `dfine_seg_s_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| `model1m` | **D-FINE-Seg-M** | `dfine_seg_m_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| `model1l` | **D-FINE-Seg-L** | `dfine_seg_l_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| `model1x` | **D-FINE-Seg-X** | `dfine_seg_x_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
 
 ## Documentation
-
 
 | Doc                                                | Description                                                             |
 | -------------------------------------------------- | ----------------------------------------------------------------------- |
@@ -292,11 +272,8 @@ mapping of the API and the behaviour that differs:
 | [docs/cli.md](docs/cli.md)                         | Command-line reference                                                  |
 | [docs/api_reference.md](docs/api_reference.md)     | Full Python API reference                                               |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
-| [docs/macos_docker_setup.md](docs/macos_docker_setup.md) | macOS / Apple Silicon development environment with Docker         |
+| [docs/macos_docker_setup.md](docs/macos_docker_setup.md) | macOS / Apple Silicon development environment with Docker |
 | [docs/brand.md](docs/brand.md)                     | Brand: logo, palette, typography, and what the project announces        |
-
-
-
 
 ## Development
 
@@ -306,7 +283,7 @@ dependency versions pinned in `uv.lock` — including CUDA 12.1 PyTorch wheels o
 Linux and Windows.
 
 ```bash
-git clone https://github.com/Vaelsys/nitid.git && cd nitid
+git clone https://github.com/Nitidio/nitid.git && cd nitid
 uv sync --extra dev --extra train
 ```
 
@@ -333,6 +310,11 @@ Integration tests use a session-scoped fixture in `tests/conftest.py` that
 builds a small D-FINE-S model with random weights at test time — no download
 required.
 
+- [docs/onboarding.md](docs/onboarding.md) — **start here if you're new to the
+  codebase**: architecture, conventions, gotchas
+- [CONTRIBUTING.md](CONTRIBUTING.md) — branch workflow, commit conventions, and
+  the PR checklist
+
 ### Docker Environment
 
 For developers on macOS (Apple Silicon) or environments needing isolated Linux containers, a preconfigured `Dockerfile` and `docker-compose.yml` are provided:
@@ -342,13 +324,6 @@ docker compose run --rm nitid-dev
 ```
 
 See [macOS Docker Setup](docs/macos_docker_setup.md) for the setup guide.
-
-- [docs/onboarding.md](docs/onboarding.md) — **start here if you're new to the
-codebase**: architecture, conventions, gotchas
-- [CONTRIBUTING.md](CONTRIBUTING.md) — branch workflow, commit conventions, and
-the PR checklist
-
-
 
 ## Acknowledgements & Citation
 
@@ -361,7 +336,7 @@ If you use nitid in your research or product, please cite:
   title={nitid: Real-Time Open Source Computer Vision},
   author={{Vaelsys}},
   year={2026},
-  url={https://github.com/Vaelsys/nitid}
+  url={https://github.com/Nitidio/nitid}
 }
 
 @article{peng2024dfine,
@@ -373,9 +348,8 @@ If you use nitid in your research or product, please cite:
 
 @article{saakyan2026dfineseg,
   title={D-FINE-seg: Object Detection and Instance Segmentation Framework with multi-backend deployment},
-  author={Saakyan, Argo},
+  author={Saakyan, Argo and Solntsev, Dmitry},
   journal={arXiv preprint arXiv:2602.23043},
   year={2026}
 }
 ```
-
