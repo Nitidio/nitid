@@ -33,6 +33,11 @@ jobs:
             exit 1
           fi
 
+      # PyPI cannot resolve repository-relative paths, so point the README's
+      # images and links at this ref on GitHub before building.
+      - name: Make README links absolute for PyPI
+        run: python scripts/pypi_readme.py --ref "$GITHUB_REF_NAME"
+
       - name: Build distributions
         run: uv build
 
