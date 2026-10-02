@@ -7,7 +7,7 @@ Thank you for your interest in contributing to nitid!
 Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
 
 ```bash
-git clone https://github.com/vaelsys/nitid.git
+git clone https://github.com/Nitidio/nitid.git
 cd nitid
 uv sync --extra dev
 ```

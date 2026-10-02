@@ -69,5 +69,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default `runs/mlflow` is stored as SQLite instead of MLflow's file store,
   which MLflow 3 refuses by default.
 
-[Unreleased]: https://github.com/Vaelsys/nitid/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Vaelsys/nitid/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Nitidio/nitid/releases/tag/v0.1.0

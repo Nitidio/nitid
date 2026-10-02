@@ -9,7 +9,7 @@ Welcome to **nitid** — a compact, Apache-2.0 library around the [D-FINE](https
 Prerequisites: Python 3.10+, [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
-git clone https://github.com/Vaelsys/nitid.git && cd nitid
+git clone https://github.com/Nitidio/nitid.git && cd nitid
 uv sync --extra dev                # installs runtime + pytest, ruff, mypy
 ```
 

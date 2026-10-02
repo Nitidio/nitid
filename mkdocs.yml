@@ -1,6 +1,6 @@
 site_name: nitid
 site_description: Object detection that's actually open source — Apache 2.0 code and weights
-repo_url: https://github.com/Vaelsys/nitid
+repo_url: https://github.com/Nitidio/nitid
 
 theme:
   name: material

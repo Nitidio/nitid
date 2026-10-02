@@ -14,7 +14,7 @@ uv run nitid predict model=semantic_best.pth task=semantic source=image.jpg save
 Complete the repository installation first:
 
 ```bash
-git clone https://github.com/Vaelsys/nitid.git
+git clone https://github.com/Nitidio/nitid.git
 cd nitid
 uv sync
 ```
