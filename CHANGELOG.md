@@ -54,8 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   streams, screen capture, NumPy arrays, and tensors.
 - Hardened training defaults and validation behavior for reproducible,
   convergent fine-tuning.
-- Public messaging leads with the Apache 2.0 licensing of both code and
-  weights, and announces three tasks: detection, instance segmentation, and
+- Public messaging leads with the Apache 2.0 licensing of the code, and
+  announces three tasks: detection, instance segmentation, and
   semantic segmentation.
 
 ### Fixed

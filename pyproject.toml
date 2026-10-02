@@ -8,7 +8,7 @@ include = ["dfine*", "nitid*"]
 [project]
 name = "nitid"
 version = "0.1.0"
-description = "Object detection, instance segmentation and semantic segmentation, Apache 2.0 code and weights"
+description = "Object detection, instance segmentation and semantic segmentation, Apache 2.0 code"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
