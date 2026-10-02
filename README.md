@@ -58,9 +58,8 @@ What comes with it:
 
 ## What "open" means here
 
-The nitid code and our pretrained weights are released under the
-[Apache License 2.0](LICENSE), including its patent grant. You can use them
-commercially, modify them, and ship them in closed products. The public datasets
+The nitid code is released under the
+[Apache License 2.0](LICENSE). You can use, modify and ship it commercially and ship it in closed products. The public datasets
 used for pretraining keep their own terms: the official checkpoints listed in
 [Official Models](#official-models) are trained on COCO and Objects365.
 
@@ -79,7 +78,7 @@ pip install nitid
 Inference and export work out of the box. Other features are optional extras:
 
 | Extra             | Adds                                                     |
-| :---------------- | :------------------------------------------------------- |
+|:----------------- |:-------------------------------------------------------- |
 | `train`           | Fine-tuning and COCO-style validation                    |
 | `track`           | ByteTrack, BoT-SORT, and OC-SORT object tracking         |
 | `openvino`        | OpenVINO export and runtime for Intel CPU, iGPU, and NPU |
@@ -181,13 +180,13 @@ model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
 
-| Deployment target | Hardware | Export format | Extra install |
-| :--- | :--- | :--- | :--- |
-| **PyTorch** | NVIDIA GPU (CUDA), CPU | `.pth` checkpoint | None |
-| **ONNX** | Any ONNX runtime (CPU, GPU) | `format="onnx"` | A runtime, e.g. `pip install onnxruntime` |
-| **OpenVINO** | Intel CPU, iGPU and NPU | `format="openvino"` | `pip install "nitid[openvino]"` |
-| **TensorRT** | NVIDIA GPU (Jetson, RTX, data center) | `format="tensorrt"` | `tensorrt>=8.6` (see [Installation](#installation)) |
-| **TorchScript** | LibTorch (C++) | `format="torchscript"` | None |
+| Deployment target | Hardware                              | Export format          | Extra install                                       |
+|:----------------- |:------------------------------------- |:---------------------- |:--------------------------------------------------- |
+| **PyTorch**       | NVIDIA GPU (CUDA), CPU                | `.pth` checkpoint      | None                                                |
+| **ONNX**          | Any ONNX runtime (CPU, GPU)           | `format="onnx"`        | A runtime, e.g. `pip install onnxruntime`           |
+| **OpenVINO**      | Intel CPU, iGPU and NPU               | `format="openvino"`    | `pip install "nitid[openvino]"`                     |
+| **TensorRT**      | NVIDIA GPU (Jetson, RTX, data center) | `format="tensorrt"`    | `tensorrt>=8.6` (see [Installation](#installation)) |
+| **TorchScript**   | LibTorch (C++)                        | `format="torchscript"` | None                                                |
 
 Capture Python API output, environment details, and failure tracebacks in one
 attachable log:
@@ -228,11 +227,7 @@ If you are coming from a YOLO codebase, the quickstart has a side-by-side
 mapping of the API and the behaviour that differs:
 [Coming from YOLO](docs/quickstart.md#coming-from-yolo).
 
-> **Compatibility Note:** Existing `from dfine import ...` imports and the `dfine` command
-> remain supported compatibility aliases for the 0.1 release series. New code
-> should use the canonical `nitid` package and `NITID` model class.
-
-## Official Models
+## Verified models
 
 > 💡 `NITID("model1s", task=...)` is the canonical constructor. The trailing size letter selects the model size, and `model1` identifies the model generation. Supported tasks are `detect`, `segment`, and `semantic`.
 
@@ -240,13 +235,13 @@ mapping of the API and the behaviour that differs:
 
 *Evaluated on COCO val2017 at 640x640 resolution.*
 
-| Model Alias | Architecture | COCO mAP<sup>50-95</sup> *(vs YOLO11)* | Speed<sup>T4 TRT10 FP16</sup> *(vs YOLO11)* | Params | FLOPs | Config | Official Checkpoint |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| `model1n`* | **D-FINE-N** | **42.8** *(40.9)* | **2.12 ms** *(1.70 ms)* | 4.0M | 7B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth) |
-| `model1s` | **D-FINE-S** | **50.7** *(48.6)* | **3.49 ms** *(2.50 ms)* | 10.0M | 25B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth) |
-| `model1m` | **D-FINE-M** | **55.1** *(53.1)* | **5.62 ms** *(4.70 ms)* | 19.0M | 57B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth) |
-| `model1l` | **D-FINE-L** | **57.3** *(55.0)* | **8.07 ms** *(6.20 ms)* | 31.0M | 91B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
-| `model1x` | **D-FINE-X** | **59.3** *(57.5)* | **12.89 ms** *(11.80 ms)* | 62.0M | 202B | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth) |
+| Model Alias | Architecture | COCO mAP<sup>50-95</sup> *(vs YOLO11)* | Speed<sup>T4 TRT10 FP16</sup> *(vs YOLO11)* | Params | FLOPs | Config                                                                                                       | Official Checkpoint                                                                              |
+|:----------- |:------------ |:--------------------------------------:|:-------------------------------------------:|:------:|:-----:|:------------------------------------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------:|
+| `model1n`*  | **D-FINE-N** | **42.8** *(40.9)*                      | **2.12 ms** *(1.70 ms)*                     | 4.0M   | 7B    | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml)                | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth)         |
+| `model1s`   | **D-FINE-S** | **50.7** *(48.6)*                      | **3.49 ms** *(2.50 ms)*                     | 10.0M  | 25B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth)     |
+| `model1m`   | **D-FINE-M** | **55.1** *(53.1)*                      | **5.62 ms** *(4.70 ms)*                     | 19.0M  | 57B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth)     |
+| `model1l`   | **D-FINE-L** | **57.3** *(55.0)*                      | **8.07 ms** *(6.20 ms)*                     | 31.0M  | 91B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
+| `model1x`   | **D-FINE-X** | **59.3** *(57.5)*                      | **12.89 ms** *(11.80 ms)*                   | 62.0M  | 202B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth)     |
 
 *Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference.*  
 *\* Official checkpoints for `model1s/m/l/x` download automatically upon first use. `model1n` detection requires a checkpoint path or custom weights.*
@@ -255,13 +250,13 @@ mapping of the API and the behaviour that differs:
 
 *Based on D-FINE-seg. Published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg). Official checkpoints download automatically upon first use.*
 
-| Model Alias | Architecture | Backing Checkpoint | Weights |
-| :--- | :--- | :---: | :---: |
-| `model1n` | **D-FINE-Seg-N** | `dfine_seg_n_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
-| `model1s` | **D-FINE-Seg-S** | `dfine_seg_s_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
-| `model1m` | **D-FINE-Seg-M** | `dfine_seg_m_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
-| `model1l` | **D-FINE-Seg-L** | `dfine_seg_l_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
-| `model1x` | **D-FINE-Seg-X** | `dfine_seg_x_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| Model Alias | Architecture     | Backing Checkpoint    | Weights                                                                  |
+|:----------- |:---------------- |:---------------------:|:------------------------------------------------------------------------:|
+| `model1n`   | **D-FINE-Seg-N** | `dfine_seg_n_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| `model1s`   | **D-FINE-Seg-S** | `dfine_seg_s_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| `model1m`   | **D-FINE-Seg-M** | `dfine_seg_m_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| `model1l`   | **D-FINE-Seg-L** | `dfine_seg_l_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
+| `model1x`   | **D-FINE-Seg-X** | `dfine_seg_x_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
 
 ### Semantic Segmentation (`task="semantic"`)
 
@@ -271,16 +266,16 @@ from the instance-segmentation checkpoint of the same size and is meant for
 
 ## Documentation
 
-| Doc                                                | Description                                                             |
-| -------------------------------------------------- | ----------------------------------------------------------------------- |
-| [docs/quickstart.md](docs/quickstart.md)           | Full quickstart                                                         |
-| [docs/fine_tuning.md](docs/fine_tuning.md)         | Training, validation, AMP, EMA, dataset formats                         |
-| [docs/export.md](docs/export.md)                   | ONNX, OpenVINO, TorchScript, and TensorRT export                        |
-| [docs/cli.md](docs/cli.md)                         | Command-line reference                                                  |
-| [docs/api_reference.md](docs/api_reference.md)     | Full Python API reference                                               |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
-| [docs/macos_docker_setup.md](docs/macos_docker_setup.md) | macOS / Apple Silicon development environment with Docker |
-| [docs/brand.md](docs/brand.md)                     | Brand: logo, palette, typography, and what the project announces        |
+| Doc                                                          | Description                                                             |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| [docs/quickstart.md](docs/quickstart.md)                     | Full quickstart                                                         |
+| [docs/fine_tuning.md](docs/fine_tuning.md)                   | Training, validation, AMP, EMA, dataset formats                         |
+| [docs/export.md](docs/export.md)                             | ONNX, OpenVINO, TorchScript, and TensorRT export                        |
+| [docs/cli.md](docs/cli.md)                                   | Command-line reference                                                  |
+| [docs/api_reference.md](docs/api_reference.md)               | Full Python API reference                                               |
+| [docs/troubleshooting.md](docs/troubleshooting.md)           | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
+| [docs/macos_docker_setup.md](docs/macos_docker_setup.md)     | macOS / Apple Silicon development environment with Docker               |
+| [docs/brand.md](docs/brand.md)                               | Brand: logo, palette, typography, and what the project announces        |
 
 ## Development
 
