@@ -193,6 +193,17 @@ metrics = model.train(
 # final summary lives at the top level; per-epoch rows are in metrics["history"]
 ```
 
+For a complete runnable example, train on COCO128:
+
+```bash
+uv run python examples/train_coco128.py
+uv run python examples/train_coco128_seg.py
+```
+
+These examples use `configs/datasets/coco128.yml` and
+`configs/datasets/coco128-seg.yml`, which download the tiny Ultralytics COCO128
+datasets on first use.
+
 Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly with
 `NITID("epoch50.pth", task="detect")` — config and names travel with the weights.
 

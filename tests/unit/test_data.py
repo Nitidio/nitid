@@ -1,6 +1,8 @@
 """Unit tests for dataset-format detection and YOLO conversion."""
 
 import json
+import shutil
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +11,7 @@ import torch
 import yaml
 from PIL import Image
 
+import dfine.utils.data as data_utils
 from dfine.utils.augmentations import (
     AugmentationConfig,
     horizontal_flip,
@@ -411,6 +414,96 @@ def test_resolve_detection_split_detects_yolo_images_first_layout(tmp_path):
     assert spec.format == "yolo"
     assert spec.label_dir == root / "labels" / "train"
     assert spec.ann_file.exists()
+
+
+def test_resolve_detection_split_downloads_declared_missing_dataset(tmp_path, monkeypatch):
+    source = tmp_path / "source" / "coco128"
+    image_dir = source / "images" / "train2017"
+    label_dir = source / "labels" / "train2017"
+    image_dir.mkdir(parents=True)
+    label_dir.mkdir(parents=True)
+    Image.fromarray(np.zeros((32, 32, 3), dtype=np.uint8)).save(image_dir / "000000000009.jpg")
+    (label_dir / "000000000009.txt").write_text("0 0.5 0.5 0.25 0.25\n")
+
+    archive_path = tmp_path / "coco128.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for path in source.rglob("*"):
+            if path.is_file():
+                archive.write(path, path.relative_to(source.parent))
+
+    def fake_urlretrieve(url, filename):
+        assert url == "https://example.test/coco128.zip"
+        shutil.copyfile(archive_path, filename)
+        return filename, None
+
+    monkeypatch.setattr(data_utils, "urlretrieve", fake_urlretrieve)
+
+    config_dir = tmp_path / "configs" / "datasets"
+    config_dir.mkdir(parents=True)
+    data_yaml = config_dir / "coco128.yml"
+    data_yaml.write_text(
+        yaml.safe_dump(
+            {
+                "path": "../../datasets/coco128",
+                "train": "images/train2017",
+                "val": "images/train2017",
+                "download": "https://example.test/coco128.zip",
+                "names": {0: "person"},
+            }
+        )
+    )
+
+    spec = resolve_detection_split(data_yaml, "train")
+
+    assert spec.format == "yolo"
+    assert spec.img_dir == tmp_path / "datasets" / "coco128" / "images" / "train2017"
+    assert spec.label_dir == tmp_path / "datasets" / "coco128" / "labels" / "train2017"
+    assert spec.ann_file.exists()
+
+
+def test_segment_loader_downloads_declared_missing_polygon_dataset(tmp_path, monkeypatch):
+    source = tmp_path / "source" / "coco128-seg"
+    image_dir = source / "images" / "train2017"
+    label_dir = source / "labels" / "train2017"
+    image_dir.mkdir(parents=True)
+    label_dir.mkdir(parents=True)
+    Image.fromarray(np.zeros((32, 32, 3), dtype=np.uint8)).save(image_dir / "000000000009.jpg")
+    (label_dir / "000000000009.txt").write_text("0 0.25 0.25 0.75 0.25 0.75 0.75 0.25 0.75\n")
+
+    archive_path = tmp_path / "coco128-seg.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for path in source.rglob("*"):
+            if path.is_file():
+                archive.write(path, path.relative_to(source.parent))
+
+    def fake_urlretrieve(url, filename):
+        assert url == "https://example.test/coco128-seg.zip"
+        shutil.copyfile(archive_path, filename)
+        return filename, None
+
+    monkeypatch.setattr(data_utils, "urlretrieve", fake_urlretrieve)
+
+    config_dir = tmp_path / "configs" / "datasets"
+    config_dir.mkdir(parents=True)
+    data_yaml = config_dir / "coco128-seg.yml"
+    data_yaml.write_text(
+        yaml.safe_dump(
+            {
+                "path": "../../datasets/coco128-seg",
+                "train": "images/train2017",
+                "val": "images/train2017",
+                "download": "https://example.test/coco128-seg.zip",
+                "names": {0: "person"},
+            }
+        )
+    )
+
+    loader = build_detection_dataloader(data_yaml, "train", 64, 1, task="segment")
+    _, targets = next(iter(loader))
+
+    assert targets[0]["masks"].shape[0] == 1
+    assert targets[0]["masks"].shape[1:] == (64, 64)
+    assert targets[0]["masks"].sum() > 0
 
 
 def test_resolve_detection_split_detects_yolo_split_first_layout(tmp_path):

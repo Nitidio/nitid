@@ -201,6 +201,95 @@ needed when you want a *different* ordering than sorted order.
 
 ## Fine-tuning
 
+### COCO128 example
+
+The repository includes a small COCO128 detection example for exercising the
+full training path. COCO128 has only 128 images, so it is a smoke-test dataset,
+not an accuracy benchmark.
+
+```python
+from nitid import NITID
+
+model = NITID("model1s", task="detect")
+metrics = model.train(
+    data="configs/datasets/coco128.yml",
+    epochs=5,
+    imgsz=640,
+    batch=8,
+    project="runs/train",
+    name="coco128",
+)
+print(metrics)
+```
+
+The dataset YAML contains the Ultralytics COCO128 download URL. If
+`datasets/coco128/` is missing, nitid downloads and extracts the dataset before
+training, then converts the YOLO labels to cached COCO JSON internally.
+
+The same example is available as a script:
+
+```bash
+uv run python examples/train_coco128.py
+```
+
+The equivalent CLI command is:
+
+```bash
+uv run nitid train \
+    model=model1s task=detect \
+    data=configs/datasets/coco128.yml \
+    epochs=5 \
+    imgsz=640 \
+    batch=8 \
+    project=runs/train \
+    name=coco128
+```
+
+### COCO128-seg example
+
+COCO128-seg is the matching tiny instance-segmentation dataset from
+Ultralytics. It uses polygon labels, so it exercises mask-aware training without
+requiring a large local dataset.
+
+```python
+from nitid import NITID
+
+model = NITID("model1s", task="segment")
+metrics = model.train(
+    data="configs/datasets/coco128-seg.yml",
+    epochs=5,
+    imgsz=640,
+    batch=8,
+    project="runs/train",
+    name="coco128-seg",
+)
+print(metrics)
+```
+
+The dataset YAML contains the Ultralytics COCO128-seg download URL. If
+`datasets/coco128-seg/` is missing, nitid downloads and extracts the dataset
+before training, then converts the YOLO polygon labels to cached COCO JSON
+internally.
+
+The same example is available as a script:
+
+```bash
+uv run python examples/train_coco128_seg.py
+```
+
+The equivalent CLI command is:
+
+```bash
+uv run nitid train \
+    model=model1s task=segment \
+    data=configs/datasets/coco128-seg.yml \
+    epochs=5 \
+    imgsz=640 \
+    batch=8 \
+    project=runs/train \
+    name=coco128-seg
+```
+
 ### Python API
 
 ```python
