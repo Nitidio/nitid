@@ -36,6 +36,7 @@ nav:
   - Quick Start: quickstart.md
   - Command Line: cli.md
   - Fine-tuning: fine_tuning.md
+  - "Guide: CUDA and OpenVINO": training_cuda_openvino.md
   - Export: export.md
   - API Reference: api_reference.md
   - Troubleshooting: troubleshooting.md

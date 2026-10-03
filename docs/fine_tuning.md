@@ -1,5 +1,9 @@
 # Fine-tuning
 
+For a step-by-step run from a fresh machine, on an NVIDIA GPU or on an Intel
+machine with OpenVINO, see
+[Training on CUDA and OpenVINO machines](training_cuda_openvino.md).
+
 ## Requirements
 
 Fine-tuning and validation require `pycocotools`. Install the `train` extras:
