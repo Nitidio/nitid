@@ -12,6 +12,19 @@ import torch.nn.functional as torch_f
 import torchvision.transforms.functional as F
 from PIL import Image
 
+# Smallest crop side, as a fraction of the input side, that ``random_iou_crop`` samples.
+IOU_CROP_MIN_FRACTION = 0.3
+
+
+def zoom_out_short_side_limit(output_size: int) -> int:
+    """Smallest zoom-out canvas side that keeps every IoU crop at or above ``output_size``.
+
+    The detection recipe stretches the IoU crop to ``output_size``. A crop is at least
+    ``IOU_CROP_MIN_FRACTION`` of the canvas on each axis, so a canvas whose shorter side
+    reaches this value never has to be upsampled; any extra resolution is discarded.
+    """
+    return int(np.ceil(output_size / IOU_CROP_MIN_FRACTION))
+
 
 @dataclass(frozen=True)
 class AugmentationConfig:
@@ -333,12 +346,29 @@ def random_zoom_out(
     p: float = 1.0,
     fill: tuple[int, int, int] = (0, 0, 0),
     max_scale: float = 4.0,
+    short_side_limit: int | None = None,
 ) -> tuple[Image.Image, torch.Tensor]:
-    """Place the image on a larger canvas, matching D-FINE's zoom-out role."""
+    """Place the image on a larger canvas, matching D-FINE's zoom-out role.
+
+    When ``short_side_limit`` is given, the image is first downscaled (keeping its aspect ratio)
+    so the canvas's shorter side does not exceed ``short_side_limit``. Without that bound a
+    high-resolution photo zoomed out by up to ``max_scale`` produces a canvas of up to
+    ``max_scale**2`` times its pixels, which wastes memory and can trip Pillow's
+    decompression-bomb guard in the following crop (#218).
+    """
     if p <= 0.0 or rng.random() >= p:
         return image, boxes
     width, height = image.size
     scale = rng.uniform(1.0, max_scale)
+    if short_side_limit is not None and scale * min(width, height) > short_side_limit:
+        factor = short_side_limit / (scale * min(width, height))
+        resized_w, resized_h = max(1, round(width * factor)), max(1, round(height * factor))
+        boxes = boxes.clone()
+        if boxes.numel():
+            boxes[:, [0, 2]] *= resized_w / width
+            boxes[:, [1, 3]] *= resized_h / height
+        image = image.resize((resized_w, resized_h), Image.Resampling.BILINEAR)
+        width, height = resized_w, resized_h
     new_w, new_h = max(width, round(width * scale)), max(height, round(height * scale))
     left = rng.randint(0, max(new_w - width, 0))
     top = rng.randint(0, max(new_h - height, 0))
@@ -369,8 +399,8 @@ def random_iou_crop(
         return image, boxes, labels
 
     for _ in range(trials):
-        crop_w = rng.uniform(0.3, 1.0) * width
-        crop_h = rng.uniform(0.3, 1.0) * height
+        crop_w = rng.uniform(IOU_CROP_MIN_FRACTION, 1.0) * width
+        crop_h = rng.uniform(IOU_CROP_MIN_FRACTION, 1.0) * height
         aspect = crop_w / max(crop_h, 1e-6)
         if not 0.5 <= aspect <= 2.0:
             continue

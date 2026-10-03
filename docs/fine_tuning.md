@@ -703,7 +703,11 @@ Mosaic is applied before that profile when enabled. Every geometric transform
 operates on absolute `xyxy` boxes, clips them to the visible image, removes empty
 boxes and labels, and only then converts targets to the normalized `cxcywh`
 format expected by the model. The sample/epoch seed makes transform choices
-independent of DataLoader worker scheduling.
+independent of DataLoader worker scheduling. Zoom-out downscales high-resolution
+images first, so its canvas's shorter side never exceeds `ceil(imgsz / 0.3)`
+(2134 px at `imgsz=640`): the smallest IoU crop then still covers at least
+`imgsz` pixels per axis, so no detail reaching the model is lost, and large photos
+no longer produce canvases of up to 16x their pixel count.
 
 `recipe="deim"` enables its recipe Mosaic default and batch-level MixUp for
 detection. Without DEIM, Mosaic and dataset-level MixUp remain explicit opt-ins.
