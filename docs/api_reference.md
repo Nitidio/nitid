@@ -631,9 +631,13 @@ shape `[B, C, H, W]`. Apply softmax and argmax in the consuming runtime.
 model.names   # {0: "person", 1: "bicycle", ...}  — class index → name
 model.device  # "cpu" or "cuda:0"                 — device the model lives on
 model.task    # "detect", "segment", or "semantic"
+model.nitid_model  # "model1s"                    — public model name (NITID only)
+model.size         # "s"                          — model size suffix (NITID only)
 ```
 
-`names` is the class mapping embedded in the checkpoint.
+`names` is the class mapping embedded in the checkpoint. For a model loaded from
+a checkpoint path, `nitid_model` and `size` are inferred from the checkpoint's
+architecture, and are `None` if it matches no supported size.
 
 ---
 
