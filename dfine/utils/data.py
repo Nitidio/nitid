@@ -134,36 +134,70 @@ def _maybe_download_dataset(data: str | Path, cfg: dict, split: str) -> None:
     parsed = urlparse(download)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("Data YAML 'download' must be an http(s) URL")
+    if not parsed.path.lower().endswith(".zip"):
+        raise ValueError(f"Dataset download must be a .zip archive: {download}")
+
+    expected_sha256 = cfg.get("download_sha256")
+    if expected_sha256 is not None and not isinstance(expected_sha256, str):
+        raise ValueError("Data YAML 'download_sha256' must be a hex string")
+
+    if root.exists():
+        raise FileNotFoundError(
+            f"Dataset split {split!r} not found at {root / split_value}. The dataset directory "
+            f"{root} exists, so it is not downloaded again; remove it to re-download {download}"
+        )
 
     LOGGER.info("Dataset split %s is missing; downloading dataset from %s", split, download)
-    _download_dataset_archive(download, root)
+    _download_dataset_archive(download, root, expected_sha256)
 
 
-def _download_dataset_archive(url: str, dataset_root: Path) -> None:
-    """Download and safely extract a dataset zip next to its configured root."""
+def _download_dataset_archive(
+    url: str, dataset_root: Path, expected_sha256: str | None = None
+) -> None:
+    """Download, verify and safely extract a dataset zip next to its configured root.
+
+    The archive is extracted into a temporary directory first and its dataset
+    directory is moved into place only once extraction succeeded, so an
+    interrupted download never leaves a partial dataset behind.
+    """
     dataset_root = dataset_root.expanduser().resolve()
     extract_dir = dataset_root.parent
     extract_dir.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="nitid-dataset-") as tmp_dir:
+    with tempfile.TemporaryDirectory(prefix=".nitid-dataset-", dir=extract_dir) as tmp_dir:
         archive_path = Path(tmp_dir) / Path(urlparse(url).path).name
-        if not archive_path.name:
-            archive_path = Path(tmp_dir) / "dataset.zip"
         urlretrieve(url, archive_path)
+        if expected_sha256 is not None:
+            digest = _file_sha256(archive_path)
+            if digest != expected_sha256.lower():
+                raise RuntimeError(
+                    f"Checksum mismatch for downloaded dataset {archive_path.name}: "
+                    f"expected {expected_sha256}, got {digest}"
+                )
 
-        if archive_path.suffix.lower() != ".zip":
-            raise ValueError(f"Dataset download must be a .zip archive: {url}")
-
+        staging_dir = Path(tmp_dir) / "extracted"
         with zipfile.ZipFile(archive_path) as archive:
-            _safe_extract_zip(archive, extract_dir)
+            _safe_extract_zip(archive, staging_dir)
 
-    if not dataset_root.exists():
-        raise FileNotFoundError(
-            f"Downloaded dataset archive did not create the configured dataset path: {dataset_root}"
-        )
+        extracted_root = staging_dir / dataset_root.name
+        if not extracted_root.is_dir():
+            raise FileNotFoundError(
+                "Downloaded dataset archive did not create the configured dataset path: "
+                f"{dataset_root}"
+            )
+        extracted_root.replace(dataset_root)
+
+
+def _file_sha256(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def _safe_extract_zip(archive: zipfile.ZipFile, extract_dir: Path) -> None:
+    extract_dir.mkdir(parents=True, exist_ok=True)
     extract_dir = extract_dir.resolve()
     for member in archive.infolist():
         target = (extract_dir / member.filename).resolve()

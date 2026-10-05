@@ -201,35 +201,45 @@ needed when you want a *different* ordering than sorted order.
 
 ## Fine-tuning
 
-### COCO128 example
+### COCO-mini example
 
-The repository includes a small COCO128 detection example for exercising the
-full training path. COCO128 has only 128 images, so it is a smoke-test dataset,
-not an accuracy benchmark.
+The repository includes COCO-mini, a small COCO-format dataset for exercising
+the full training path. It has 128 train and 32 val images, so it is a
+smoke-test dataset, not an accuracy benchmark. The same dataset serves
+`task="detect"` and `task="segment"`, because COCO annotations carry both boxes
+and instance masks.
 
 ```python
 from nitid import NITID
 
-model = NITID("model1s", task="detect")
+model = NITID("model1s", task="detect")  # or task="segment"
 metrics = model.train(
-    data="configs/datasets/coco128.yml",
+    data="configs/datasets/coco-mini.yml",
     epochs=5,
     imgsz=640,
     batch=8,
     project="runs/train",
-    name="coco128",
+    name="coco-mini",
 )
 print(metrics)
 ```
 
-The dataset YAML contains the Ultralytics COCO128 download URL. If
-`datasets/coco128/` is missing, nitid downloads and extracts the dataset before
-training, then converts the YOLO labels to cached COCO JSON internally.
+If `datasets/coco-mini/` is missing, nitid downloads the archive declared in
+the YAML's `download` key, checks it against `download_sha256` and extracts it
+before training. If the directory exists but a split is missing, nitid stops
+with an error instead of overwriting it.
+
+COCO-mini is built from COCO 2017 val with
+[`tools/build_coco_mini.py`](https://github.com/Nitidio/nitid/blob/develop/tools/build_coco_mini.py),
+keeping only images licensed CC BY 2.0, "No known copyright restrictions" or
+"United States Government Work". The archive includes an `ATTRIBUTION.md` with
+the source and licence of every image; the COCO annotations are CC BY 4.0.
 
 The same example is available as a script:
 
 ```bash
-uv run python examples/train_coco128.py
+uv run python examples/train_coco_mini.py --task detect
+uv run python examples/train_coco_mini.py --task segment
 ```
 
 The equivalent CLI command is:
@@ -237,57 +247,12 @@ The equivalent CLI command is:
 ```bash
 uv run nitid train \
     model=model1s task=detect \
-    data=configs/datasets/coco128.yml \
+    data=configs/datasets/coco-mini.yml \
     epochs=5 \
     imgsz=640 \
     batch=8 \
     project=runs/train \
-    name=coco128
-```
-
-### COCO128-seg example
-
-COCO128-seg is the matching tiny instance-segmentation dataset from
-Ultralytics. It uses polygon labels, so it exercises mask-aware training without
-requiring a large local dataset.
-
-```python
-from nitid import NITID
-
-model = NITID("model1s", task="segment")
-metrics = model.train(
-    data="configs/datasets/coco128-seg.yml",
-    epochs=5,
-    imgsz=640,
-    batch=8,
-    project="runs/train",
-    name="coco128-seg",
-)
-print(metrics)
-```
-
-The dataset YAML contains the Ultralytics COCO128-seg download URL. If
-`datasets/coco128-seg/` is missing, nitid downloads and extracts the dataset
-before training, then converts the YOLO polygon labels to cached COCO JSON
-internally.
-
-The same example is available as a script:
-
-```bash
-uv run python examples/train_coco128_seg.py
-```
-
-The equivalent CLI command is:
-
-```bash
-uv run nitid train \
-    model=model1s task=segment \
-    data=configs/datasets/coco128-seg.yml \
-    epochs=5 \
-    imgsz=640 \
-    batch=8 \
-    project=runs/train \
-    name=coco128-seg
+    name=coco-mini
 ```
 
 ### Python API

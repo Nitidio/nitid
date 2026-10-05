@@ -1,11 +1,17 @@
-# COCO128-seg instance-segmentation smoke-test dataset.
+# COCO-mini: a small COCO-format dataset for smoke-testing training.
 #
-# The archive is downloaded on first use if ../../datasets/coco128-seg is missing.
-path: ../../datasets/coco128-seg
-train: images/train2017
-val: images/train2017
+# 128 train and 32 val images from COCO 2017 val, restricted to images licensed
+# CC BY 2.0, "No known copyright restrictions" or "US Government Work". The
+# archive includes ATTRIBUTION.md with every image's source and licence, and is
+# built by tools/build_coco_mini.py. It serves both task=detect and task=segment.
+#
+# The archive is downloaded on first use if ../../datasets/coco-mini is missing.
+path: ../../datasets/coco-mini
+train: images/train
+val: images/val
 
-download: https://github.com/ultralytics/assets/releases/download/v0.0.0/coco128-seg.zip
+download: https://github.com/Nitidio/nitid/releases/download/datasets-v1/coco-mini.zip
+download_sha256: 6b5cbb22ead37ac2109e0951560f00eb2dd64eb17985c32374c7f902eee86688
 
 nc: 80
 names:

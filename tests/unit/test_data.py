@@ -1,5 +1,6 @@
 """Unit tests for dataset-format detection and YOLO conversion."""
 
+import hashlib
 import json
 import shutil
 import zipfile
@@ -504,6 +505,84 @@ def test_segment_loader_downloads_declared_missing_polygon_dataset(tmp_path, mon
     assert targets[0]["masks"].shape[0] == 1
     assert targets[0]["masks"].shape[1:] == (64, 64)
     assert targets[0]["masks"].sum() > 0
+
+
+def _write_download_yaml(tmp_path, **extra):
+    config_dir = tmp_path / "configs" / "datasets"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    data_yaml = config_dir / "mini.yml"
+    data_yaml.write_text(
+        yaml.safe_dump(
+            {
+                "path": "../../datasets/mini",
+                "train": "images/train",
+                "val": "images/val",
+                "download": "https://example.test/mini.zip",
+                "names": {0: "person"},
+                **extra,
+            }
+        )
+    )
+    return data_yaml
+
+
+def _fake_archive_download(tmp_path, monkeypatch):
+    archive_path = tmp_path / "mini.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("mini/images/train/a.jpg", b"not an image")
+    calls = []
+
+    def fake_urlretrieve(url, filename):
+        calls.append(url)
+        shutil.copyfile(archive_path, filename)
+        return filename, None
+
+    monkeypatch.setattr(data_utils, "urlretrieve", fake_urlretrieve)
+    return calls
+
+
+def test_dataset_download_rejects_checksum_mismatch_without_partial_dataset(tmp_path, monkeypatch):
+    _fake_archive_download(tmp_path, monkeypatch)
+    data_yaml = _write_download_yaml(tmp_path, download_sha256="0" * 64)
+
+    with pytest.raises(RuntimeError, match="Checksum mismatch"):
+        resolve_detection_split(data_yaml, "train")
+
+    assert not (tmp_path / "datasets" / "mini").exists()
+    assert list((tmp_path / "datasets").iterdir()) == []
+
+
+def test_dataset_download_accepts_matching_checksum(tmp_path, monkeypatch):
+    _fake_archive_download(tmp_path, monkeypatch)
+    digest = hashlib.sha256((tmp_path / "mini.zip").read_bytes()).hexdigest()
+    data_yaml = _write_download_yaml(tmp_path, download_sha256=digest)
+
+    data_utils._maybe_download_dataset(data_yaml, yaml.safe_load(data_yaml.read_text()), "train")
+
+    assert (tmp_path / "datasets" / "mini" / "images" / "train" / "a.jpg").exists()
+
+
+def test_dataset_download_does_not_overwrite_existing_dataset_dir(tmp_path, monkeypatch):
+    calls = _fake_archive_download(tmp_path, monkeypatch)
+    data_yaml = _write_download_yaml(tmp_path)
+    (tmp_path / "datasets" / "mini" / "mine.txt").parent.mkdir(parents=True)
+    (tmp_path / "datasets" / "mini" / "mine.txt").write_text("user data")
+
+    with pytest.raises(FileNotFoundError, match="remove it to re-download"):
+        resolve_detection_split(data_yaml, "train")
+
+    assert calls == []
+    assert (tmp_path / "datasets" / "mini" / "mine.txt").read_text() == "user data"
+
+
+def test_dataset_download_rejects_non_zip_url_before_downloading(tmp_path, monkeypatch):
+    calls = _fake_archive_download(tmp_path, monkeypatch)
+    data_yaml = _write_download_yaml(tmp_path, download="https://example.test/mini.tar.gz")
+
+    with pytest.raises(ValueError, match=".zip archive"):
+        resolve_detection_split(data_yaml, "train")
+
+    assert calls == []
 
 
 def test_resolve_detection_split_detects_yolo_split_first_layout(tmp_path):
