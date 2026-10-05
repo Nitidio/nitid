@@ -52,9 +52,18 @@ native package integration and model construction.
 
 ## DEIM
 
-The matchability-aware classification loss (`loss_labels_mal`) in
-`dfine/nn/losses/criterion.py` follows the formulation and code of DEIM. This
-attribution does not imply that Nitid offers the complete DEIM model family.
+The following follow the formulation and code of DEIM:
+
+- the matchability-aware classification loss (`loss_labels_mal`) in
+  `dfine/nn/losses/criterion.py`;
+- the flat-cosine learning-rate schedule (`FlatCosineLRScheduler`) in
+  `dfine/trainer.py`;
+- the batch-level MixUp collate (`DetectionBatchCollate`) in
+  `dfine/utils/data.py`;
+- the `recipe="deim"` training defaults in `dfine/training_recipes.py`.
+
+This attribution does not imply that Nitid offers the complete DEIM model
+family.
 
 - DEIM, Copyright (c) 2024 The DEIM Authors. All Rights Reserved.
   The upstream license also states: Copyright (C) INTELLINDUST INFORMATION
