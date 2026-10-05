@@ -274,6 +274,14 @@ uv run nitid train model=model1s task=detect data=my_dataset.yml epochs=50
 uv run nitid train model=model1s task=detect data=my_dataset.yml epochs=50 recipe=deim
 ```
 
+Run the built-in COCO-mini training example. The dataset downloads automatically
+if the configured dataset directory is missing:
+
+```bash
+uv run nitid train model=model1s task=detect data=configs/datasets/coco-mini.yml epochs=5 batch=8
+uv run nitid train model=model1s task=segment data=configs/datasets/coco-mini.yml epochs=5 batch=8
+```
+
 By default, training saves wrapped epoch checkpoints under `runs/train/exp/`.
 Add `wandb=true` to log the run to the default `nitid` WandB project:
 

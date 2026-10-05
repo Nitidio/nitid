@@ -39,10 +39,14 @@ import math
 import os
 import random
 import sys
+import tempfile
+import zipfile
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Sequence
+from urllib.parse import urlparse
+from urllib.request import urlretrieve
 
 import numpy as np
 import torch
@@ -99,6 +103,109 @@ def load_data_yaml(path: str | Path) -> dict:
         return yaml.safe_load(f)
 
 
+def _resolve_dataset_root(data: str | Path, cfg: dict) -> Path:
+    root_value = cfg.get("path")
+    if not isinstance(root_value, (str, Path)):
+        raise ValueError("Data YAML must define a dataset 'path'")
+    root = Path(root_value).expanduser()
+    if not root.is_absolute():
+        root = (Path(data).resolve().parent / root).resolve()
+    return root
+
+
+def _maybe_download_dataset(data: str | Path, cfg: dict, split: str) -> None:
+    """Download a missing dataset archive declared by an Ultralytics-style YAML."""
+    if split not in cfg:
+        raise KeyError(f"Data YAML does not define split {split!r}")
+
+    root = _resolve_dataset_root(data, cfg)
+    split_value = cfg[split]
+    if not isinstance(split_value, (str, Path)):
+        raise ValueError(f"Data YAML {split!r} must be a directory path")
+    if (root / split_value).is_dir():
+        return
+
+    download = cfg.get("download")
+    if download is None:
+        return
+    if not isinstance(download, str):
+        raise ValueError("Data YAML 'download' must be a URL string")
+
+    parsed = urlparse(download)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Data YAML 'download' must be an http(s) URL")
+    if not parsed.path.lower().endswith(".zip"):
+        raise ValueError(f"Dataset download must be a .zip archive: {download}")
+
+    expected_sha256 = cfg.get("download_sha256")
+    if expected_sha256 is not None and not isinstance(expected_sha256, str):
+        raise ValueError("Data YAML 'download_sha256' must be a hex string")
+
+    if root.exists():
+        raise FileNotFoundError(
+            f"Dataset split {split!r} not found at {root / split_value}. The dataset directory "
+            f"{root} exists, so it is not downloaded again; remove it to re-download {download}"
+        )
+
+    LOGGER.info("Dataset split %s is missing; downloading dataset from %s", split, download)
+    _download_dataset_archive(download, root, expected_sha256)
+
+
+def _download_dataset_archive(
+    url: str, dataset_root: Path, expected_sha256: str | None = None
+) -> None:
+    """Download, verify and safely extract a dataset zip next to its configured root.
+
+    The archive is extracted into a temporary directory first and its dataset
+    directory is moved into place only once extraction succeeded, so an
+    interrupted download never leaves a partial dataset behind.
+    """
+    dataset_root = dataset_root.expanduser().resolve()
+    extract_dir = dataset_root.parent
+    extract_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix=".nitid-dataset-", dir=extract_dir) as tmp_dir:
+        archive_path = Path(tmp_dir) / Path(urlparse(url).path).name
+        urlretrieve(url, archive_path)
+        if expected_sha256 is not None:
+            digest = _file_sha256(archive_path)
+            if digest != expected_sha256.lower():
+                raise RuntimeError(
+                    f"Checksum mismatch for downloaded dataset {archive_path.name}: "
+                    f"expected {expected_sha256}, got {digest}"
+                )
+
+        staging_dir = Path(tmp_dir) / "extracted"
+        with zipfile.ZipFile(archive_path) as archive:
+            _safe_extract_zip(archive, staging_dir)
+
+        extracted_root = staging_dir / dataset_root.name
+        if not extracted_root.is_dir():
+            raise FileNotFoundError(
+                "Downloaded dataset archive did not create the configured dataset path: "
+                f"{dataset_root}"
+            )
+        extracted_root.replace(dataset_root)
+
+
+def _file_sha256(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _safe_extract_zip(archive: zipfile.ZipFile, extract_dir: Path) -> None:
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    extract_dir = extract_dir.resolve()
+    for member in archive.infolist():
+        target = (extract_dir / member.filename).resolve()
+        if target != extract_dir and extract_dir not in target.parents:
+            raise ValueError(f"Refusing to extract unsafe zip member: {member.filename}")
+    archive.extractall(extract_dir)
+
+
 def normalize_names(cfg: dict) -> dict[int, str]:
     """Return names as a dense int->str mapping."""
     names = cfg.get("names")
@@ -116,12 +223,8 @@ def normalize_names(cfg: dict) -> dict[int, str]:
 def resolve_detection_split(data: str | Path, split: str) -> DetectionSplitSpec:
     """Resolve one split to either a COCO annotation file or YOLO label directory."""
     cfg = load_data_yaml(data)
-    root_value = cfg.get("path")
-    if not isinstance(root_value, (str, Path)):
-        raise ValueError("Data YAML must define a dataset 'path'")
-    root = Path(root_value).expanduser()
-    if not root.is_absolute():
-        root = (Path(data).resolve().parent / root).resolve()
+    _maybe_download_dataset(data, cfg, split)
+    root = _resolve_dataset_root(data, cfg)
     img_dir = root / cfg[split]
 
     ann_file = _find_coco_annotation(root, cfg, split, img_dir)

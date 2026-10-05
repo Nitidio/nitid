@@ -201,6 +201,60 @@ needed when you want a *different* ordering than sorted order.
 
 ## Fine-tuning
 
+### COCO-mini example
+
+The repository includes COCO-mini, a small COCO-format dataset for exercising
+the full training path. It has 128 train and 32 val images, so it is a
+smoke-test dataset, not an accuracy benchmark. The same dataset serves
+`task="detect"` and `task="segment"`, because COCO annotations carry both boxes
+and instance masks.
+
+```python
+from nitid import NITID
+
+model = NITID("model1s", task="detect")  # or task="segment"
+metrics = model.train(
+    data="configs/datasets/coco-mini.yml",
+    epochs=5,
+    imgsz=640,
+    batch=8,
+    project="runs/train",
+    name="coco-mini",
+)
+print(metrics)
+```
+
+If `datasets/coco-mini/` is missing, nitid downloads the archive declared in
+the YAML's `download` key, checks it against `download_sha256` and extracts it
+before training. If the directory exists but a split is missing, nitid stops
+with an error instead of overwriting it.
+
+COCO-mini is built from COCO 2017 val with
+[`tools/build_coco_mini.py`](https://github.com/Nitidio/nitid/blob/develop/tools/build_coco_mini.py),
+keeping only images licensed CC BY 2.0, "No known copyright restrictions" or
+"United States Government Work". The archive includes an `ATTRIBUTION.md` with
+the source and licence of every image; the COCO annotations are CC BY 4.0.
+
+The same example is available as a script:
+
+```bash
+uv run python examples/train_coco_mini.py --task detect
+uv run python examples/train_coco_mini.py --task segment
+```
+
+The equivalent CLI command is:
+
+```bash
+uv run nitid train \
+    model=model1s task=detect \
+    data=configs/datasets/coco-mini.yml \
+    epochs=5 \
+    imgsz=640 \
+    batch=8 \
+    project=runs/train \
+    name=coco-mini
+```
+
 ### Python API
 
 ```python

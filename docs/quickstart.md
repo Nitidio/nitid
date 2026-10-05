@@ -193,6 +193,16 @@ metrics = model.train(
 # final summary lives at the top level; per-epoch rows are in metrics["history"]
 ```
 
+For a complete runnable example, train on COCO-mini:
+
+```bash
+uv run python examples/train_coco_mini.py --task detect
+uv run python examples/train_coco_mini.py --task segment
+```
+
+The example uses `configs/datasets/coco-mini.yml`, which downloads a small
+COCO-format dataset with redistributable image licences on first use.
+
 Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly with
 `NITID("epoch50.pth", task="detect")` — config and names travel with the weights.
 
