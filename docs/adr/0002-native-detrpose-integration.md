@@ -5,6 +5,7 @@
   preserved in the `archive/pose-obb-gstreamer` tag.
 - **Date**: 2026-08-19
 - **Deciders**: nitid maintainers
+- **Related**: [DETRPose](https://github.com/SebastianJanampa/DETRPose)
 
 ## Context
 
@@ -30,8 +31,7 @@ fixture.
    packaging and device support.
 2. **Port the pose-specific components and reuse nitid's compatible native core.** This avoids parallel
    frameworks while retaining checkpoint compatibility and one public API.
-   architecture and is not compatible with official DETRPose weights.
-4. **Depend on the upstream repository at runtime.** The upstream project is not distributed as a
+3. **Depend on the upstream repository at runtime.** The upstream project is not distributed as a
    library and would leak its environment and framework constraints into nitid.
 
 ## Decision

@@ -6,6 +6,3 @@ and how the phases are sequenced.
 
 **The canonical roadmap lives at [docs/roadmap.md](docs/roadmap.md)**, and is published at
 <https://nitidio.github.io/nitid/roadmap/>. This file is a pointer so the two cannot drift.
-
-Related reading:
-
