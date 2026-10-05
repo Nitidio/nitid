@@ -118,7 +118,8 @@ uv run nitid download model=model1s task=detect output=models force=true
 
 Detection, instance segmentation, and semantic segmentation all use the same
 public model names (`model1n`, `model1s`, `model1m`, `model1l`,
-`model1x`) with an explicit `task=...`.
+`model1x`) with an explicit `task=...`. `model1n` is available only for
+`task=segment` and `task=semantic`.
 
 ## Checkpoint gives `KeyError: 'config'`
 

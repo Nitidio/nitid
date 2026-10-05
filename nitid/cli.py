@@ -450,6 +450,10 @@ def _execute(argv: list[str]) -> None:
         force = kwargs.pop("force", False)
         from dfine.utils.downloads import download_model
 
+        if str(model_name).lower().startswith("model"):
+            from dfine.nitid import resolve_nitid_backend_model
+
+            model_name = resolve_nitid_backend_model(model_name, task=task)
         path = download_model(
             model=model_name,
             task=task,
