@@ -344,3 +344,43 @@ def test_track_cli_requires_source(monkeypatch, capsys):
 
     assert error.value.code == 1
     assert "source= is required for track" in capsys.readouterr().out
+
+
+@pytest.fixture()
+def captured_download(monkeypatch, tmp_path):
+    from dfine.utils import downloads
+
+    calls: list[dict] = []
+
+    def fake_download_model(model, **kwargs):
+        calls.append({"model": model, **kwargs})
+        return tmp_path / "wrapped.pth"
+
+    monkeypatch.setattr(downloads, "download_model", fake_download_model)
+    return calls
+
+
+@pytest.mark.parametrize(
+    ("args", "model", "task"),
+    [
+        ([], "dfine_l", "detect"),
+        (["model=model1s"], "dfine_s", "detect"),
+        (["model=MODEL1X", "task=segment"], "dfine_x", "segment"),
+        (["model=model1n", "task=segment"], "dfine_n", "segment"),
+        (["model=dfine_m"], "dfine_m", "detect"),
+    ],
+)
+def test_download_cli_maps_public_model_names(captured_download, capsys, args, model, task):
+    main(["nitid", "download", *args])
+
+    assert len(captured_download) == 1
+    assert captured_download[0]["model"] == model
+    assert captured_download[0]["task"] == task
+    assert "Downloaded wrapped checkpoint" in capsys.readouterr().out
+
+
+def test_download_cli_rejects_model1n_detection(captured_download):
+    with pytest.raises(ValueError, match="model1n"):
+        main(["nitid", "download", "model=model1n"])
+
+    assert captured_download == []

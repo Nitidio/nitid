@@ -102,9 +102,10 @@ uv run nitid download model=model1s task=detect
 ```
 
 Supported nitid model names are `model1n`, `model1s`, `model1m`, `model1l`,
-and `model1x`. Select the task explicitly with `task=detect`, `task=segment`,
-or `task=semantic`. Select a weight variant explicitly
-when needed:
+and `model1x`; the equivalent `dfine_*` names are also accepted. Select the
+task explicitly with `task=detect`, `task=segment`, or `task=semantic`.
+`model1n` has no detection checkpoint, so use it with `task=segment` or
+`task=semantic`. Select a weight variant explicitly when needed:
 
 ```bash
 uv run nitid download model=model1s task=detect weights=coco
