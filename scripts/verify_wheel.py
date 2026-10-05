@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 
 REQUIRED_FILES = {
+    "dfine/data/coco_names.yml",
     "dfine/model.py",
     "dfine/nn/architecture/decoder.py",
     "dfine/nn/losses/criterion.py",

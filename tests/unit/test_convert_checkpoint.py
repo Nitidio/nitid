@@ -58,3 +58,20 @@ def test_model_rejects_unknown_names(captured, capsys, model):
     assert exc.value.code == 2
     assert "--model" in capsys.readouterr().err
     assert captured == []
+
+
+def test_names_default_to_bundled_coco_names(monkeypatch):
+    calls: list[tuple] = []
+
+    def fake_convert(weights, config, names_file, output):
+        # The bundled resource is only guaranteed to be a real file inside as_file().
+        with open(names_file) as f:
+            calls.append((names_file, f.read()))
+
+    monkeypatch.setattr(convert_checkpoint, "convert", fake_convert)
+    convert_checkpoint.main(["--weights", "raw.pth", "--model", "model1s", "--output", "out.pth"])
+
+    assert len(calls) == 1
+    names_file, content = calls[0]
+    assert names_file.endswith("coco_names.yml")
+    assert "79: toothbrush" in content

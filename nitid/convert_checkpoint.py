@@ -9,11 +9,10 @@ Usage:
         --weights dfine_l.pth \
         --model   model1l \
         --task    detect \
-        --names   configs/datasets/coco.yml \
         --output  model1l_detect.pth
 
 ``--model`` takes the public ``model1{n,s,m,l,x}`` names or their ``dfine_*``
-equivalents.
+equivalents. ``--names`` defaults to the COCO class names bundled with the package.
 """
 
 from __future__ import annotations
@@ -136,7 +135,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     source.add_argument("--config", help="Path to a self-contained YAML config")
     p.add_argument("--task", choices=["detect", "segment", "semantic"], default="detect")
-    p.add_argument("--names", required=True)
+    p.add_argument(
+        "--names",
+        help="YAML file with a names mapping (default: the bundled COCO class names)",
+    )
     p.add_argument("--output", required=True)
     args = p.parse_args(argv)
     if args.model:
@@ -145,7 +147,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         config = make_model_config(args.model, task=args.task)
     else:
         config = args.config
-    convert(args.weights, config, args.names, args.output)
+    if args.names:
+        convert(args.weights, config, args.names, args.output)
+        return
+    from importlib.resources import as_file
+
+    from dfine.data import COCO_NAMES
+
+    with as_file(COCO_NAMES) as names:
+        convert(args.weights, config, str(names), args.output)
 
 
 if __name__ == "__main__":

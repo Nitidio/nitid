@@ -174,9 +174,11 @@ uv run python -m nitid.convert_checkpoint \
     --weights upstream_checkpoint.pth \
     --model   model1l \
     --task    detect \
-    --names   configs/datasets/coco.yml \
     --output  model1l_detect.pth
 ```
+
+Class names default to the COCO names bundled with the package; pass
+`--names my_dataset.yml` (a YAML file with a `names` mapping) for other datasets.
 
 ---
 
