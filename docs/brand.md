@@ -81,7 +81,7 @@ unavailable.
 nitid's pitch is not "a familiar API". It is that the code is genuinely usable
 in a commercial product. For now the public messaging announces the Apache 2.0
 licence of the code only; the licence of the pretrained weights is not announced
-until it is decided ([#227](https://github.com/Nitidio/nitid/issues/227)).
+until it is decided ([#17](https://github.com/Nitidio/nitid/issues/17)).
 
 - **Headline:** Object detection that's actually open source.
 - **Supporting line:** Train, validate, export and run vision models. The code
@@ -120,7 +120,7 @@ segmentation ship pretrained COCO checkpoints; semantic segmentation does not.
 `task="semantic"` starts from the instance-segmentation checkpoint and is
 trained on the user's own masks. Say so wherever the three tasks are announced,
 and never show semantic predictions from the untrained starting point (decided
-2026-10-02, #220).
+2026-10-02).
 
 **The README is the pitch, not the manual.** It covers the three announced
 tasks and the five operations; details belong on the documentation site. Pose

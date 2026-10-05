@@ -1,7 +1,7 @@
 # ADR-0003: Native RiO-DETR OBB integration
 
 - **Status**: Superseded (previously Proposed) —
-  Pose/OBB support was removed from the library on 2026-09-25 (#193/#194). The implementation is
+  Pose/OBB support was removed from the library on 2026-09-25. The implementation is
   preserved in the `archive/pose-obb-gstreamer` tag.
 - **Date**: 2026-09-07
 - **Deciders**: nitid maintainers
