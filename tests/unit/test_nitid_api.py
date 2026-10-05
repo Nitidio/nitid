@@ -127,3 +127,33 @@ def test_nitid_rejects_removed_tasks(task: str) -> None:
 
     with pytest.raises(ValueError, match="Unsupported task"):
         NITID("model1s", task=task, device="cpu", verbose=False)
+
+
+@pytest.mark.parametrize("size", ["n", "s", "m", "l", "x"])
+def test_infer_nitid_model_spec_from_checkpoint_config(size: str) -> None:
+    from dfine.nitid import infer_nitid_model_spec
+    from dfine.nn.configs import make_model_config
+
+    config = make_model_config(f"dfine_{size}", task="segment")
+    # Training-time overrides must not change the inferred size.
+    config["DFINETransformer"]["num_layers"] = 1
+    config["HybridEncoder"]["depth_mult"] = 0.1
+
+    spec = infer_nitid_model_spec(config)
+
+    assert spec is not None
+    assert spec.name == f"model1{size}"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"task": "detect"},
+        {"HGNetv2": {"name": "B0"}, "HybridEncoder": {"hidden_dim": 192}},
+        {"HGNetv2": "B0", "HybridEncoder": {"hidden_dim": 256}},
+    ],
+)
+def test_infer_nitid_model_spec_returns_none_for_unknown_configs(config: dict) -> None:
+    from dfine.nitid import infer_nitid_model_spec
+
+    assert infer_nitid_model_spec(config) is None
