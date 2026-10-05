@@ -75,6 +75,7 @@ from dfine.utils.augmentations import (
     scale_translate_semantic,
     stretch_resize,
     to_tensor,
+    zoom_out_short_side_limit,
 )
 from dfine.utils.logging import LOGGER
 
@@ -505,7 +506,13 @@ class CocoFinetuneDataset(Dataset):
         elif detection_recipe_aug:
             assert cfg is not None
             image = random_photometric_distort(image, rng, cfg.photometric)
-            image, boxes = random_zoom_out(image, boxes, rng, cfg.zoomout)
+            image, boxes = random_zoom_out(
+                image,
+                boxes,
+                rng,
+                cfg.zoomout,
+                short_side_limit=zoom_out_short_side_limit(self.imgsz),
+            )
             image, boxes, labels = random_iou_crop(image, boxes, labels, rng, cfg.iou_crop)
             boxes, labels = sanitize(boxes, labels, image.size[0], image.size[1])
             image, boxes = stretch_resize(image, boxes, self.imgsz)

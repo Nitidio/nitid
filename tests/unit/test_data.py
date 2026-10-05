@@ -91,6 +91,72 @@ def test_random_zoom_out_offsets_boxes_and_expands_canvas():
     assert torch.all(transformed[:, 2:] > transformed[:, :2])
 
 
+def test_random_zoom_out_short_side_limit_bounds_canvas_and_keeps_boxes_aligned():
+    import random
+
+    image = Image.new("RGB", (400, 300))
+    image.paste((255, 255, 255), (100, 75, 300, 225))
+    boxes = torch.tensor([[100.0, 75.0, 300.0, 225.0]])
+    for seed in range(20):
+        canvas, transformed = random_zoom_out(
+            image, boxes, random.Random(seed), p=1.0, short_side_limit=200
+        )
+
+        assert min(canvas.size) <= 201
+        assert canvas.size[0] / canvas.size[1] == pytest.approx(400 / 300, rel=0.03)
+        # The box still frames the white patch after the downscale and the placement.
+        ys, xs = np.nonzero(np.asarray(canvas.convert("L")) > 127)
+        white = torch.tensor([xs.min(), ys.min(), xs.max() + 1, ys.max() + 1], dtype=torch.float32)
+        assert torch.allclose(transformed[0], white, atol=1.5)
+
+
+def test_zoom_out_short_side_limit_never_upsamples_the_smallest_iou_crop():
+    from dfine.utils.augmentations import IOU_CROP_MIN_FRACTION, zoom_out_short_side_limit
+
+    for size in (64, 320, 640, 1280):
+        assert zoom_out_short_side_limit(size) * IOU_CROP_MIN_FRACTION >= size
+
+
+@pytest.mark.filterwarnings("ignore::PIL.Image.DecompressionBombWarning")
+def test_detection_recipe_bounds_zoom_out_canvas_for_large_images(tmp_path, monkeypatch):
+    """Regression for #218: high-resolution images tripped Pillow's decompression-bomb guard."""
+    img_dir = tmp_path / "images" / "train"
+    img_dir.mkdir(parents=True)
+    Image.new("RGB", (1200, 900), (90, 90, 90)).save(img_dir / "big.jpg")
+    ann = tmp_path / "train.json"
+    ann.write_text(
+        json.dumps(
+            {
+                "images": [{"id": 1, "file_name": "big.jpg", "width": 1200, "height": 900}],
+                "annotations": [
+                    {
+                        "id": 1,
+                        "image_id": 1,
+                        "category_id": 1,
+                        "bbox": [500, 400, 200, 150],
+                        "area": 30000,
+                        "iscrowd": 0,
+                    }
+                ],
+                "categories": [{"id": 1, "name": "object"}],
+            }
+        )
+    )
+    from dfine.utils.data import CocoFinetuneDataset
+
+    augmentation = AugmentationConfig(profile="deim", photometric=0.0, zoomout=1.0, iou_crop=1.0)
+    dataset = CocoFinetuneDataset(img_dir, ann, imgsz=64, augment=augmentation, seed=0)
+    # Scale Pillow's guard down so a 1200x900 image zoomed out by up to 4x exceeds it, as a
+    # 24 MP photo does against the real 179 MP limit. The bounded canvas stays far below it.
+    # Pillow raises above twice the limit and only warns between one and two times it.
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 600_000)
+    for epoch in range(30):
+        dataset.set_epoch(epoch, mosaic=False)
+        image, target = dataset[0]
+        assert image.shape == (3, 64, 64)
+        assert target["boxes"].shape[0] == target["labels"].shape[0]
+
+
 def test_random_iou_crop_keeps_labels_aligned_and_boxes_valid():
     import random
 
