@@ -10,7 +10,7 @@ run the exported model. It covers two machines:
   PyTorch. The trained model then runs through OpenVINO Runtime on the Intel
   CPU, integrated GPU, or NPU.
 
-The runs are deliberately tiny (80 images, 1–2 epochs). They check that every
+The runs are deliberately tiny (160 images, 1–2 epochs). They check that every
 step works on the machine; they do not produce a useful model.
 
 ## What OpenVINO does in nitid
@@ -34,23 +34,21 @@ such a model.
 
 ## Before you start
 
-> **Current limitations (v0.1.0 development branch).** Keep these in mind while
-> following the guide:
->
-> - `NITID(...)` accepts registry names such as `"model1s"`, but not a path to a
->   checkpoint. To load a trained checkpoint such as `best.pth`, this guide uses
->   `DFINE(...)`, the class `NITID` builds on, which takes the same arguments.
-> - For the same reason, the `nitid` command cannot load a trained checkpoint:
->   `nitid val model=runs/train/.../best.pth` fails. Use the command line only
->   for training, and Python for the steps after it.
-> - `nitid download model=model1s` fails with `Unknown model 'model1s'`. You do
->   not need it: `NITID("model1s", ...)` downloads the weights itself.
-
 **Repository access.** nitid is not on PyPI yet and the repository is private,
 so you install it from a git clone. The machine needs read access to
 `Nitidio/nitid` on GitHub, either through an SSH key added to your GitHub
 account or through the GitHub CLI (`gh auth login`). Once v0.1.0 is published,
 `pip install "nitid[train]"` will replace the clone.
+
+While the repository is private, its release files cannot be downloaded
+anonymously, so the automatic dataset download in step 2 fails with
+`HTTP Error 404`. Download the archive with the GitHub CLI instead, from the
+repository root:
+
+```bash
+gh release download datasets-v1 --repo Nitidio/nitid --pattern coco-mini.zip --dir datasets
+unzip -q datasets/coco-mini.zip -d datasets && rm datasets/coco-mini.zip
+```
 
 **Pretrained weights.** These are not stored in the nitid repository.
 `NITID("model1s", task="detect")` downloads the original D-FINE weights from a
@@ -58,9 +56,9 @@ public GitHub release (`github.com/Peterande/storage`). Instance segmentation
 weights come from a public Hugging Face repository (`huggingface.co/ArgoSA/D-FINE-seg`).
 No account or token is needed. The machine needs outbound HTTPS to `github.com`,
 `objects.githubusercontent.com`, `huggingface.co`, `pypi.org`,
-`download.pytorch.org`, and `images.cocodataset.org` (for the dataset). The
-wrapped checkpoint is saved in the current directory, so run every command
-from the repository root.
+and `download.pytorch.org`. The dataset in step 2 also downloads from
+`github.com`. The wrapped checkpoint is saved in the current directory, so run
+every command from the repository root.
 
 **Operating system.** The commands are for Linux on x86_64. They were run on
 Ubuntu 24.04. The lock file also resolves on Windows x86_64, but the driver
@@ -124,34 +122,25 @@ uv run python -c "import torch; print(torch.__version__, torch.version.cuda, tor
 
 ## Step 2: Get a small dataset (both machines)
 
-`docs/examples/make_coco_subset.py` builds a small COCO-format detection and
-instance-segmentation dataset from COCO val2017, with no account or API key:
-
-```bash
-uv run python docs/examples/make_coco_subset.py --out ~/nitid-data/coco-mini
-```
-
-The script:
-
-- downloads the official COCO 2017 annotations once (about 250 MB) and keeps
-  them in `~/nitid-data/coco-mini/.cache`
-- keeps only images published under CC BY 2.0, and lists each image's Flickr
-  source in `ATTRIBUTION.txt`; the annotations are CC BY 4.0
-- downloads 64 training and 16 validation images (about 13 MB); use `--train`
-  and `--val` to change the counts
-- writes `data.yaml` with an absolute `path:` and the 80 COCO class names
-
-The result uses nitid's COCO JSON layout:
+The guide uses COCO-mini, the example dataset declared in
+`configs/datasets/coco-mini.yml`. It has 128 training and 32 validation images
+from COCO val2017, in COCO JSON format with boxes and instance masks. Nothing
+needs to be run in this step: the first `train()` or `val()` call downloads the
+archive (about 26 MB) from the `datasets-v1` release, checks its sha256, and
+extracts it to `datasets/coco-mini/`:
 
 ```text
-~/nitid-data/coco-mini/
-  data.yaml
-  ATTRIBUTION.txt
-  images/train/*.jpg   (64)
-  images/val/*.jpg     (16)
+datasets/coco-mini/
+  ATTRIBUTION.md
+  images/train/*.jpg   (128)
+  images/val/*.jpg     (32)
   annotations/instances_train.json
   annotations/instances_val.json
 ```
+
+Only images licensed CC BY 2.0, "No known copyright restrictions" or "United
+States Government Work" are included; `ATTRIBUTION.md` lists each image's
+Flickr source and licence, and the annotations are CC BY 4.0.
 
 The class list is the same as that of the pretrained COCO checkpoints, so
 fine-tuning keeps the pretrained class head and predictions make sense straight
@@ -159,8 +148,8 @@ away. With your own classes, nitid rebuilds the class head automatically; see
 [Fine-tuning](fine_tuning.md#data-yaml). YOLO `.txt` datasets work the same way.
 
 Because the images come from COCO val2017, which the pretrained models never
-trained on, the metrics are reasonable, but 80 images and two epochs say nothing
-about real accuracy.
+trained on, the metrics are reasonable, but 160 images and two epochs say
+nothing about real accuracy.
 
 ## Path A: NVIDIA GPU with CUDA
 
@@ -201,11 +190,9 @@ Python API:
 
 ```bash
 cat > train_cuda.py <<'EOF'
-from pathlib import Path
-
 from nitid import NITID
 
-data = str(Path("~/nitid-data/coco-mini/data.yaml").expanduser())
+data = "configs/datasets/coco-mini.yml"
 
 model = NITID("model1s", task="detect", device="cuda:0")
 metrics = model.train(
@@ -222,12 +209,11 @@ EOF
 uv run python train_cuda.py
 ```
 
-The same run from the command line (the CLI does not expand `~`, so `$HOME` is
-used instead):
+The same run from the command line:
 
 ```bash
 uv run nitid train model=model1s task=detect \
-    data=$HOME/nitid-data/coco-mini/data.yaml \
+    data=configs/datasets/coco-mini.yml \
     epochs=2 imgsz=640 batch=8 workers=4 device=cuda:0 name=cuda-smoke-cli
 ```
 
@@ -246,14 +232,12 @@ Each epoch prints one summary line:
 
 ```bash
 cat > after_cuda.py <<'EOF'
-from pathlib import Path
+from nitid import NITID
 
-from dfine import DFINE  # NITID cannot load a checkpoint path yet
+data = "configs/datasets/coco-mini.yml"
+image = "datasets/coco-mini/images/val/000000347930.jpg"
 
-data = str(Path("~/nitid-data/coco-mini/data.yaml").expanduser())
-image = str(Path("~/nitid-data/coco-mini/images/val/000000043314.jpg").expanduser())
-
-model = DFINE("runs/train/cuda-smoke/best.pth", task="detect", device="cuda:0")
+model = NITID("runs/train/cuda-smoke/best.pth", task="detect", device="cuda:0")
 
 metrics = model.val(data=data, batch=8, project="runs/val", name="cuda-smoke")
 print("mAP50-95:", metrics["mAP50-95"], "mAP50:", metrics["mAP50"])
@@ -272,8 +256,8 @@ TensorRT export is optional and needs NVIDIA's package; see
 ### A5. Expected run time
 
 The CUDA path was not timed for this guide. On any supported GPU the two
-epochs over 64 images should take on the order of a minute, plus the first-run
-weight download.
+epochs over 128 images should take on the order of a minute, plus the
+first-run weight download.
 
 ## Path B: Intel machine with OpenVINO
 
@@ -351,11 +335,9 @@ Python API:
 
 ```bash
 cat > train_cpu.py <<'EOF'
-from pathlib import Path
-
 from nitid import NITID
 
-data = str(Path("~/nitid-data/coco-mini/data.yaml").expanduser())
+data = "configs/datasets/coco-mini.yml"
 
 model = NITID("model1s", task="detect", device="cpu")
 metrics = model.train(
@@ -377,30 +359,29 @@ Command line:
 
 ```bash
 uv run nitid train model=model1s task=detect \
-    data=$HOME/nitid-data/coco-mini/data.yaml \
+    data=configs/datasets/coco-mini.yml \
     epochs=2 imgsz=640 batch=4 workers=2 amp=false device=cpu name=cpu-smoke-cli
 ```
 
 Keep `imgsz=640`. Export and OpenVINO inference use the checkpoint's evaluation
 size, 640 for the pretrained models.
 
-On an Intel Core Ultra 5 225H (14 cores) the two epochs took about 6 minutes:
-about 5 seconds per batch of 4 images, plus validation after each epoch. Peak
-memory was about 5 GB. For a quicker first check, add `fraction=0.25` to train
-on a quarter of the images.
+On an Intel Core Ultra 5 225H (14 cores), two epochs over 64 images took about
+6 minutes: about 5 seconds per batch of 4 images, plus validation after each
+epoch. Peak memory was about 5 GB. COCO-mini has 128 training images, so expect
+about twice that. For a quicker first check, add `fraction=0.25` to train on a
+quarter of the images.
 
 ### B4. Validate and predict with PyTorch
 
 ```bash
 cat > after_cpu.py <<'EOF'
-from pathlib import Path
+from nitid import NITID
 
-from dfine import DFINE  # NITID cannot load a checkpoint path yet
+data = "configs/datasets/coco-mini.yml"
+image = "datasets/coco-mini/images/val/000000347930.jpg"
 
-data = str(Path("~/nitid-data/coco-mini/data.yaml").expanduser())
-image = str(Path("~/nitid-data/coco-mini/images/val/000000043314.jpg").expanduser())
-
-model = DFINE("runs/train/cpu-smoke/best.pth", task="detect", device="cpu")
+model = NITID("runs/train/cpu-smoke/best.pth", task="detect", device="cpu")
 
 metrics = model.val(data=data, batch=4, project="runs/val", name="cpu-smoke")
 print("mAP50-95:", metrics["mAP50-95"], "mAP50:", metrics["mAP50"])
@@ -411,15 +392,16 @@ EOF
 uv run python after_cpu.py
 ```
 
-Validation of the 16 images took about 30 seconds on the CPU.
+Validation of 16 images took about 30 seconds on the CPU, so the 32 COCO-mini
+validation images take about a minute.
 
 ### B5. Export to OpenVINO IR
 
 ```bash
 cat > export_openvino.py <<'EOF'
-from dfine import DFINE
+from nitid import NITID
 
-model = DFINE("runs/train/cpu-smoke/best.pth", task="detect", device="cpu")
+model = NITID("runs/train/cpu-smoke/best.pth", task="detect", device="cpu")
 print(model.export(format="openvino", project="runs/export", name="cpu-smoke-openvino"))
 print(model.export(format="onnx", project="runs/export", name="cpu-smoke-onnx"))
 EOF
@@ -437,16 +419,14 @@ same `Results` objects as the PyTorch backend:
 
 ```bash
 cat > predict_openvino.py <<'EOF'
-from pathlib import Path
-
 import openvino as ov
 
-from dfine import DFINE  # NITID cannot load a checkpoint path yet
+from nitid import NITID
 
-image = str(Path("~/nitid-data/coco-mini/images/val/000000043314.jpg").expanduser())
+image = "datasets/coco-mini/images/val/000000347930.jpg"
 
 for device in ov.Core().available_devices:       # e.g. ['CPU', 'GPU', 'NPU']
-    model = DFINE("runs/train/cpu-smoke/best.pth", task="detect",
+    model = NITID("runs/train/cpu-smoke/best.pth", task="detect",
                   backend="openvino", device=device)
     model.predict(image, conf=0.5, verbose=False)   # first call compiles the model
     results = model.predict(image, conf=0.5, save=True,
@@ -472,7 +452,10 @@ Measured on the Core Ultra 5 225H with the checkpoint trained above, one
 | OpenVINO, `"GPU"` (Arc iGPU) | 7 s | 15–20 ms |
 | OpenVINO, `"NPU"` (AI Boost) | 22 s | 50–60 ms |
 
-All four returned the same three objects. On this machine the integrated GPU
+PyTorch and OpenVINO on the CPU and GPU returned the same objects. The NPU
+computes in reduced precision and can drop a detection scored just above
+`conf` (in one run, 0.51 against `conf=0.5`), so expect small differences
+between devices near the threshold. On this machine the integrated GPU
 is the fastest device. `device="auto"` prefers the NPU, then the GPU, then the
 CPU, so pass `device="GPU"` explicitly when the GPU is faster on your hardware.
 
@@ -506,10 +489,11 @@ for label, box, score in zip(labels[0][keep], boxes, scores[0][keep]):
     print(int(label), round(float(score), 3), box.round(1).tolist())
 EOF
 uv run python run_ir.py runs/export/cpu-smoke-openvino/dfine_640.xml \
-    ~/nitid-data/coco-mini/images/val/000000043314.jpg GPU
+    datasets/coco-mini/images/val/000000347930.jpg GPU
 ```
 
-Labels are 0-based indices into the `names:` list of `data.yaml`. The boxes
+Labels are 0-based indices into the `names:` list of
+`configs/datasets/coco-mini.yml`. The boxes
 match the PyTorch predictions to within a pixel; nitid's own preprocessing
 resizes with PIL rather than OpenCV, so scores can differ slightly.
 
@@ -576,8 +560,7 @@ the GPU (`nvidia-smi` lists them).
 
 ### CPU training is very slow or the machine runs out of memory
 
-CPU training is expected to be slow. Use `fraction=0.25`, fewer epochs, or a
-smaller `--train` count in step 2. If memory runs out, lower `batch` to 2 and
+CPU training is expected to be slow. Use `fraction=0.25` or fewer epochs. If memory runs out, lower `batch` to 2 and
 `workers` to 0. Other heavy processes on the same CPU slow training
 considerably.
 
@@ -624,17 +607,12 @@ export, and `nanobind: leaked ... instances!` when Python exits after an
 OpenVINO export, are expected and harmless. The export is complete when nitid
 prints `OpenVINO IR export saved to ...`.
 
-### `ValueError: Unsupported NITID model '.../best.pth'`
-
-`NITID(...)` and the `nitid` command do not accept checkpoint paths yet. Load
-checkpoints with `from dfine import DFINE` as shown in this guide.
-
 ## Verification status
 
 | Step | Status |
 |------|--------|
 | Install with `uv sync`, PyTorch 2.5.1+cu121, OpenVINO 2026.2 | Run on Ubuntu 24.04 |
-| Dataset script | Run, including the 250 MB annotation download |
+| COCO-mini dataset and checkpoint paths in `NITID(...)` | Steps B3 to B7 re-run as written on the Core Ultra 5 225H (2026-10-05): two epochs, mAP50-95 0.60 on the 32 validation images |
 | CPU training, Python API and CLI | Run on an Intel Core Ultra 5 225H |
 | Validation, prediction, ONNX and OpenVINO export | Run on the CPU |
 | `backend="openvino"` on `"CPU"`, `"GPU"`, `"NPU"`, and the standalone IR script | Run on the Core Ultra 5 225H (Arc iGPU, AI Boost NPU) |
