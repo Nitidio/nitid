@@ -56,13 +56,12 @@ uv run python -m nitid.convert_checkpoint \
     --weights dfine_l.pth \
     --model model1l \
     --task detect \
-    --names configs/datasets/coco.yml \
     --output model1l_detect.pth
 ```
 
 `--model` takes the public `model1{n,s,m,l,x}` names or their `dfine_*` equivalents.
 
-The converter prefers EMA weights when present. Model weights always come from the checkpoint, and class names come from its `names` mapping.
+The converter prefers EMA weights when present. Model weights always come from the checkpoint, and class names come from `--names` (a YAML file with a `names` mapping), defaulting to the COCO names bundled in `dfine/data/coco_names.yml`.
 
 ## Testing
 

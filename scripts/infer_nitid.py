@@ -15,7 +15,6 @@ Notes:
             --weights dfine_l.pth \
             --model   model1l \
             --task    detect \
-            --names   configs/datasets/coco.yml \
             --output  model1l_detect.pth
     - Output image saved to nitid_result.jpg
 """
