@@ -276,6 +276,7 @@ from the instance-segmentation checkpoint of the same size and is meant for
 | [docs/quickstart.md](docs/quickstart.md)                     | Full quickstart                                                         |
 | [docs/fine_tuning.md](docs/fine_tuning.md)                   | Training, validation, AMP, EMA, dataset formats                         |
 | [docs/export.md](docs/export.md)                             | ONNX, OpenVINO, TorchScript, and TensorRT export                        |
+| [docs/training_cuda_openvino.md](docs/training_cuda_openvino.md) | End-to-end run on an NVIDIA GPU or an Intel machine with OpenVINO |
 | [docs/cli.md](docs/cli.md)                                   | Command-line reference                                                  |
 | [docs/api_reference.md](docs/api_reference.md)               | Full Python API reference                                               |
 | [docs/troubleshooting.md](docs/troubleshooting.md)           | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
