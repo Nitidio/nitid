@@ -31,7 +31,7 @@ use the light variant instead.
 
 | Asset | Source |
 |-------|--------|
-| [`assets/nitid-demo.jpg`](assets/nitid-demo.jpg) | AI-generated image; no photographic source or third-party rights. Detection with `nitid predict source=nitid-demo.jpg model=model1s` (default settings) |
+| [`assets/nitid-demo.jpg`](assets/nitid-demo.jpg) | AI-generated image (Google Gemini); no photographic source or third-party rights. Detection with `nitid predict source=nitid-demo.jpg model=model1x conf=0.5` on the unannotated original |
 | [`assets/nitid-demo-street.jpg`](assets/nitid-demo-street.jpg) | Frame at 00:38 of [DiagonalCrosswalkYongeDundas.webm](https://commons.wikimedia.org/wiki/File:DiagonalCrosswalkYongeDundas.webm) by Raysonho (Wikimedia Commons, CC0). Left: `task="detect"`; right: `task="segment"`, both `model1s`, `conf=0.5` |
 | [`assets/nitid-track.gif`](assets/nitid-track.gif) | 00:33–00:38 of the same CC0 video. `model1s` detection with `track()` (ByteTrack), `vid_stride=2`, 600 px wide at 8 fps |
 
