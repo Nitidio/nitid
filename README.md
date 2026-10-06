@@ -24,7 +24,7 @@ _nitid_, from Latin _nitidus_: clear, transparent, precise.
 
 **No AGPL, no surprises.**
 
-![Object detection with model1s](docs/assets/nitid-demo.jpg)
+![Object detection with model1m](docs/assets/nitid-demo.jpg)
 
 ## Why nitid?
 
