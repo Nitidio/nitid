@@ -35,8 +35,8 @@ persistent IDs:
 
 ## Why nitid?
 
-- **Edge first.** The models are designed to run at the edge, on the hardware
-  next to your cameras, not only on a datacenter GPU.
+- **Edge first.** The models are designed to run at the edge — on the CPU, iGPU
+  or NPU next to your cameras — not only on a datacenter GPU.
 - **Self-contained checkpoints.** Every checkpoint carries the config and the
   class names it needs to be reproduced and checked — one file per model.
 - **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
@@ -48,7 +48,7 @@ persistent IDs:
 
 Object detection, instance segmentation and semantic segmentation, through one
 API: `predict`, `track`, `train`, `val` and `export`. The DETR family moves fast
-— RT-DETR, D-FINE — and nitid brings a curated selection into a single
+— RT-DETR, D-FINE — and nitid brings a curated selection into one easy-to-use
 library, so getting from your dataset to an exported model does not mean
 following every paper.
 
