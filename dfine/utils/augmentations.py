@@ -354,7 +354,7 @@ def random_zoom_out(
     so the canvas's shorter side does not exceed ``short_side_limit``. Without that bound a
     high-resolution photo zoomed out by up to ``max_scale`` produces a canvas of up to
     ``max_scale**2`` times its pixels, which wastes memory and can trip Pillow's
-    decompression-bomb guard in the following crop (#218).
+    decompression-bomb guard in the following crop.
     """
     if p <= 0.0 or rng.random() >= p:
         return image, boxes

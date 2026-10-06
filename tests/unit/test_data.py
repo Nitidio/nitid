@@ -119,7 +119,7 @@ def test_zoom_out_short_side_limit_never_upsamples_the_smallest_iou_crop():
 
 @pytest.mark.filterwarnings("ignore::PIL.Image.DecompressionBombWarning")
 def test_detection_recipe_bounds_zoom_out_canvas_for_large_images(tmp_path, monkeypatch):
-    """Regression for #218: high-resolution images tripped Pillow's decompression-bomb guard."""
+    """Regression: high-resolution images tripped Pillow's decompression-bomb guard."""
     img_dir = tmp_path / "images" / "train"
     img_dir.mkdir(parents=True)
     Image.new("RGB", (1200, 900), (90, 90, 90)).save(img_dir / "big.jpg")

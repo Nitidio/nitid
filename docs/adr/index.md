@@ -4,8 +4,8 @@ An ADR records a decision that shaped the project, the context that forced it, a
 accepted along with it. It is written once and then left alone: superseded, never rewritten.
 
 nitid keeps ADRs for a specific reason beyond tidiness. The
-[certified LTS runtime](https://github.com/Nitidio/nitid/issues/125) and
-[hardware support matrix](https://github.com/Nitidio/nitid/issues/126) both commit the project to
+[certified LTS runtime](https://github.com/Nitidio/nitid/issues/12) and
+[hardware support matrix](https://github.com/Nitidio/nitid/issues/13) both commit the project to
 answering audit questions — *why is this dependency here, who decided, when, and what did you consider
 instead?* — with something better than a commit message and a memory. A dated, immutable record is the
 cheapest way to be able to answer.
@@ -14,8 +14,8 @@ cheapest way to be able to answer.
 
 | ADR | Title | Status | Date |
 |---|---|---|---|
-| [0002](0002-native-detrpose-integration.md) | Native DETRPose integration | Superseded (removed, #193) | 2026-08-19 |
-| [0003](0003-native-rio-detr-obb-integration.md) | Native RiO-DETR OBB integration | Superseded (removed, #194) | 2026-09-07 |
+| [0002](0002-native-detrpose-integration.md) | Native DETRPose integration | Superseded (removed) | 2026-08-19 |
+| [0003](0003-native-rio-detr-obb-integration.md) | Native RiO-DETR OBB integration | Superseded (removed) | 2026-09-07 |
 
 ## Convention
 

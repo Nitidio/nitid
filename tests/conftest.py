@@ -41,7 +41,7 @@ def _isolated_cwd(tmp_path, monkeypatch):
     Official model names download into the cwd and train/val/export default to
     ``runs/`` under it. From a checkout, that left fake checkpoints next to real
     ones, where the next ``NITID("model1s")`` loaded them, plus an ever-growing
-    ``runs/`` tree (#219).
+    ``runs/`` tree.
     """
     monkeypatch.chdir(tmp_path)
 
