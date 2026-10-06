@@ -9,7 +9,7 @@ from dfine.nitid import NITID
 from dfine.results import SemanticMask
 from dfine.utils.reporting import BugReport, bugreport
 
-__version__ = "0.1.0"
+__version__ = "0.9.1"
 __all__ = [
     "BugReport",
     "DFINE",

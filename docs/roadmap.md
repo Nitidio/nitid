@@ -81,11 +81,11 @@ Known gaps:
 ## Path to public release
 
 nitid is not yet public. The remaining work to publish the repository and ship
-`pip install nitid` at v0.1.0 is tracked in the
+`pip install nitid` at v0.9.1 is tracked in the
 [launch blockers milestone](https://github.com/Nitidio/nitid/milestone/1), which is release and
 publication work rather than features: third-party attribution, the published
 import/CLI name, wheel namespacing, branch and changelog sync, and the PyPI
-pipeline. The known gaps above are documented gaps for v0.1.0, not blockers.
+pipeline. The known gaps above are documented gaps for v0.9.1, not blockers.
 
 ## Near-term priorities
 

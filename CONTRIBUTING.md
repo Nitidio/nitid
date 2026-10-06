@@ -219,7 +219,7 @@ trusted publisher, so no API token is stored in the repository.
 1. Fast-forward `main` to `develop`.
 2. In one commit on `develop`, set `version` in `pyproject.toml` and the release
    date in `CHANGELOG.md`, then fast-forward `main` again.
-3. Tag that commit and push the tag: `git tag v0.1.0 && git push origin v0.1.0`.
+3. Tag that commit and push the tag: `git tag v0.9.1 && git push origin v0.9.1`.
    The workflow checks that the tag matches the package version, builds the
    sdist and wheel, runs `scripts/verify_wheel.py`, installs the wheel into a
    clean environment, runs `scripts/verify_install.py`, and publishes.
