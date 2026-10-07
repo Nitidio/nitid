@@ -5,12 +5,10 @@
   </picture>
 </p>
 
-<p align="center"><strong>Object detection that's actually open source.</strong></p>
+<p align="center"><strong>One library. DETR made simple.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Nitidio/nitid/actions/workflows/ci.yml"><img src="https://github.com/Nitidio/nitid/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://nitidio.github.io/nitid/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
-  <a href="https://codecov.io/gh/Nitidio/nitid"><img src="https://codecov.io/gh/Nitidio/nitid/graph/badge.svg" alt="codecov"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green.svg" alt="License"></a>
   <a href="#installation"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python"></a>
   <a href="https://colab.research.google.com/github/Nitidio/nitid/blob/main/examples/tutorial.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
@@ -33,6 +31,13 @@ persistent IDs:
   <img src="docs/assets/nitid-track.gif" alt="Tracking pedestrians with persistent IDs" width="600">
 </p>
 
+<p align="center">
+  <a href="#installation">Installation</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#verified-models">Models</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
+
 ## Why nitid?
 
 - **Edge first.** The models are designed to run at the edge, on the hardware
@@ -41,7 +46,7 @@ persistent IDs:
   class names it needs to be reproduced and checked — one file per model.
 - **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
   conversion step, and the inconsistencies real datasets have are tolerated.
-- **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same
+- **Export anywhere.** OpenVINO, ONNX, TorchScript and TensorRT, from the same
   checkpoint.
 
 ## One library, three tasks, five operations
@@ -95,12 +100,7 @@ pip install "nitid[train,track]"
 pip installs the default PyTorch build for your platform. If you need a
 specific CUDA version, install PyTorch first following
 [pytorch.org](https://pytorch.org/get-started/locally/), then install nitid.
-
-TensorRT export needs NVIDIA's package as well:
-
-```bash
-pip install --extra-index-url https://pypi.nvidia.com "tensorrt>=8.6"
-```
+TensorRT export has its own requirements; see [docs/export.md](docs/export.md#tensorrt).
 
 ## Quick Start
 
@@ -178,19 +178,19 @@ metrics = model.val(
 ### Export
 
 ```python
-model.export(format="onnx")
 model.export(format="openvino")
+model.export(format="onnx")
 model.export(format="torchscript")
 model.export(format="tensorrt")
 ```
 
-| Deployment target | Hardware                              | Export format          | Extra install                                       |
-| :---------------- | :------------------------------------ | :--------------------- | :-------------------------------------------------- |
-| **PyTorch**       | NVIDIA GPU (CUDA), CPU                | `.pth` checkpoint      | None                                                |
-| **ONNX**          | Any ONNX runtime (CPU, GPU)           | `format="onnx"`        | A runtime, e.g. `pip install onnxruntime`           |
-| **OpenVINO**      | Intel CPU, iGPU and NPU               | `format="openvino"`    | `pip install "nitid[openvino]"`                     |
-| **TensorRT**      | NVIDIA GPU (Jetson, RTX, data center) | `format="tensorrt"`    | `tensorrt>=8.6` (see [Installation](#installation)) |
-| **TorchScript**   | LibTorch (C++)                        | `format="torchscript"` | None                                                |
+| Deployment target | Hardware                              | Export format          | Extra install                                             |
+| :---------------- | :------------------------------------ | :--------------------- | :-------------------------------------------------------- |
+| **OpenVINO**      | Intel CPU, iGPU and NPU               | `format="openvino"`    | `pip install "nitid[openvino]"`                           |
+| **ONNX**          | Any ONNX runtime (CPU, GPU)           | `format="onnx"`        | A runtime, e.g. `pip install onnxruntime`                 |
+| **PyTorch**       | CPU, CUDA GPU                         | `.pth` checkpoint      | None                                                      |
+| **TorchScript**   | LibTorch (C++)                        | `format="torchscript"` | None                                                      |
+| **TensorRT**      | NVIDIA GPU (Jetson, RTX, data center) | `format="tensorrt"`    | `tensorrt>=8.6` (see [docs/export.md](docs/export.md#tensorrt)) |
 
 Capture Python API output, environment details, and failure tracebacks in one
 attachable log:
@@ -274,7 +274,7 @@ from the instance-segmentation checkpoint of the same size and is meant for
 | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
 | [docs/quickstart.md](docs/quickstart.md)                     | Full quickstart                                                         |
 | [docs/fine_tuning.md](docs/fine_tuning.md)                   | Training, validation, AMP, EMA, dataset formats                         |
-| [docs/export.md](docs/export.md)                             | ONNX, OpenVINO, TorchScript, and TensorRT export                        |
+| [docs/export.md](docs/export.md)                             | OpenVINO, ONNX, TorchScript, and TensorRT export                        |
 | [docs/training_cuda_openvino.md](docs/training_cuda_openvino.md) | End-to-end run on an NVIDIA GPU or an Intel machine with OpenVINO |
 | [docs/cli.md](docs/cli.md)                                   | Command-line reference                                                  |
 | [docs/api_reference.md](docs/api_reference.md)               | Full Python API reference                                               |

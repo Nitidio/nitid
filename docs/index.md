@@ -3,7 +3,7 @@
 ![nitid](assets/brand/nitid-logo-on-light.png#only-light)
 ![nitid](assets/brand/nitid-logo-on-dark.png#only-dark)
 
-**Object detection that's actually open source.**
+**One library. DETR made simple.**
 
 Train, validate, export and run vision models. The code is released under the
 Apache License 2.0, patent grant included, so you can ship it inside your own
@@ -20,7 +20,7 @@ surprises.**
   class names it needs to be reproduced and checked.
 - **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
   conversion step.
-- **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same
+- **Export anywhere.** OpenVINO, ONNX, TorchScript and TensorRT, from the same
   checkpoint.
 
 ## One library, three tasks, five operations

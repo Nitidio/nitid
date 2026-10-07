@@ -83,7 +83,7 @@ in a commercial product. For now the public messaging announces the Apache 2.0
 licence of the code only; the licence of the pretrained weights is not announced
 until it is decided ([#17](https://github.com/Nitidio/nitid/issues/17)).
 
-- **Headline:** Object detection that's actually open source.
+- **Headline:** One library. DETR made simple.
 - **Supporting line:** Train, validate, export and run vision models. The code
   is under Apache 2.0, so you can ship it in your product without opening your
   code or paying a license.
@@ -97,7 +97,7 @@ The four things that make nitid different, in this order:
    reproduced and checked.
 3. **Handles messy datasets.** COCO and YOLO formats are read directly, with no
    conversion step.
-4. **Export anywhere.** ONNX, OpenVINO, TorchScript and TensorRT, from the same
+4. **Export anywhere.** OpenVINO, ONNX, TorchScript and TensorRT, from the same
    checkpoint.
 
 Write plainly: short sentences, no superlatives, no comparisons to competitors

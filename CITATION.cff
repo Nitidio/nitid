@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use nitid in your research or product, please cite it as below."
+type: software
+title: "nitid: Real-Time Open Source Computer Vision"
+abstract: >-
+  Train, validate, export and run vision models: object detection, instance
+  segmentation and semantic segmentation built on DETR models.
+authors:
+  - name: Vaelsys
+license: Apache-2.0
+repository-code: "https://github.com/Nitidio/nitid"
+url: "https://nitid.io"
+keywords:
+  - computer-vision
+  - detr
+  - object-detection
+  - instance-segmentation
+  - semantic-segmentation
+  - pytorch
+  - openvino
+  - edge-ai
