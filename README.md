@@ -35,8 +35,8 @@ persistent IDs:
 
 ## Why nitid?
 
-- **Edge first.** The models are designed to run at the edge — on the CPU, iGPU
-  or NPU next to your cameras — not only on a datacenter GPU.
+- **Edge first.** The models are designed to run at the edge, on the hardware
+  next to your cameras, not only on a datacenter GPU or NPU.
 - **Self-contained checkpoints.** Every checkpoint carries the config and the
   class names it needs to be reproduced and checked — one file per model.
 - **Handles messy datasets.** COCO and YOLO layouts are read directly, with no
@@ -48,9 +48,8 @@ persistent IDs:
 
 Object detection, instance segmentation and semantic segmentation, through one
 API: `predict`, `track`, `train`, `val` and `export`. The DETR family moves fast
-— RT-DETR, D-FINE — and nitid brings a curated selection into one easy-to-use
-library, so getting from your dataset to an exported model does not mean
-following every paper.
+— RT-DETR, D-FINE — and nitid brings the best DETR made easy, so getting
+from your dataset to an exported model does not mean following every paper.
 
 What comes with it:
 
@@ -83,7 +82,7 @@ pip install nitid
 Inference and export work out of the box. Other features are optional extras:
 
 | Extra             | Adds                                                     |
-|:----------------- |:-------------------------------------------------------- |
+| :---------------- | :------------------------------------------------------- |
 | `train`           | Fine-tuning and COCO-style validation                    |
 | `track`           | ByteTrack, BoT-SORT, and OC-SORT object tracking         |
 | `openvino`        | OpenVINO export and runtime for Intel CPU, iGPU, and NPU |
@@ -186,7 +185,7 @@ model.export(format="tensorrt")
 ```
 
 | Deployment target | Hardware                              | Export format          | Extra install                                       |
-|:----------------- |:------------------------------------- |:---------------------- |:--------------------------------------------------- |
+| :---------------- | :------------------------------------ | :--------------------- | :-------------------------------------------------- |
 | **PyTorch**       | NVIDIA GPU (CUDA), CPU                | `.pth` checkpoint      | None                                                |
 | **ONNX**          | Any ONNX runtime (CPU, GPU)           | `format="onnx"`        | A runtime, e.g. `pip install onnxruntime`           |
 | **OpenVINO**      | Intel CPU, iGPU and NPU               | `format="openvino"`    | `pip install "nitid[openvino]"`                     |
@@ -238,25 +237,25 @@ mapping of the API and the behaviour that differs:
 
 ### Object Detection (`task="detect"`)
 
-*Evaluated on COCO val2017 at 640x640 resolution.*
+_Evaluated on COCO val2017 at 640x640 resolution._
 
-| Model Alias | Architecture | COCO mAP<sup>50-95</sup> *(vs YOLO11)* | Speed<sup>T4 TRT10 FP16</sup> *(vs YOLO11)* | Params | FLOPs | Config                                                                                                       | Official Checkpoint                                                                              |
-|:----------- |:------------ |:--------------------------------------:|:-------------------------------------------:|:------:|:-----:|:------------------------------------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------:|
-| `model1n`*  | **D-FINE-N** | **42.8** *(40.9)*                      | **2.12 ms** *(1.70 ms)*                     | 4.0M   | 7B    | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml)                | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth)         |
-| `model1s`   | **D-FINE-S** | **50.7** *(48.6)*                      | **3.49 ms** *(2.50 ms)*                     | 10.0M  | 25B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth)     |
-| `model1m`   | **D-FINE-M** | **55.1** *(53.1)*                      | **5.62 ms** *(4.70 ms)*                     | 19.0M  | 57B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth)     |
-| `model1l`   | **D-FINE-L** | **57.3** *(55.0)*                      | **8.07 ms** *(6.20 ms)*                     | 31.0M  | 91B   | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
-| `model1x`   | **D-FINE-X** | **59.3** *(57.5)*                      | **12.89 ms** *(11.80 ms)*                   | 62.0M  | 202B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth)     |
+| Model Alias | Architecture | COCO mAP<sup>50-95</sup> _(vs YOLO11)_ | Speed<sup>T4 TRT10 FP16</sup> _(vs YOLO11)_ | Params | FLOPs |                                                    Config                                                    |                                       Official Checkpoint                                        |
+| :---------- | :----------- | :------------------------------------: | :-----------------------------------------: | :----: | :---: | :----------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------: |
+| `model1n`\* | **D-FINE-N** |           **42.8** _(40.9)_            |           **2.12 ms** _(1.70 ms)_           |  4.0M  |  7B   |        [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml)         |     [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth)     |
+| `model1s`   | **D-FINE-S** |           **50.7** _(48.6)_            |           **3.49 ms** _(2.50 ms)_           | 10.0M  |  25B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth)   |
+| `model1m`   | **D-FINE-M** |           **55.1** _(53.1)_            |           **5.62 ms** _(4.70 ms)_           | 19.0M  |  57B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth)   |
+| `model1l`   | **D-FINE-L** |           **57.3** _(55.0)_            |           **8.07 ms** _(6.20 ms)_           | 31.0M  |  91B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
+| `model1x`   | **D-FINE-X** |           **59.3** _(57.5)_            |          **12.89 ms** _(11.80 ms)_          | 62.0M  | 202B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth)   |
 
-*Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference.*  
-*\* Official checkpoints for `model1s/m/l/x` download automatically upon first use. `model1n` detection requires a checkpoint path or custom weights.*
+_Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference._  
+_\* Official checkpoints for `model1s/m/l/x` download automatically upon first use. `model1n` detection requires a checkpoint path or custom weights._
 
 ### Instance Segmentation (`task="segment"`)
 
-*Based on D-FINE-seg. Published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg). Official checkpoints download automatically upon first use.*
+_Based on D-FINE-seg. Published in the official [D-FINE-seg model repository](https://huggingface.co/ArgoSA/D-FINE-seg). Official checkpoints download automatically upon first use._
 
-| Model Alias | Architecture     | Backing Checkpoint    | Weights                                                                  |
-|:----------- |:---------------- |:---------------------:|:------------------------------------------------------------------------:|
+| Model Alias | Architecture     |  Backing Checkpoint   |                                 Weights                                  |
+| :---------- | :--------------- | :-------------------: | :----------------------------------------------------------------------: |
 | `model1n`   | **D-FINE-Seg-N** | `dfine_seg_n_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
 | `model1s`   | **D-FINE-Seg-S** | `dfine_seg_s_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
 | `model1m`   | **D-FINE-Seg-M** | `dfine_seg_m_coco.pt` | [Auto-download / Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg) |
