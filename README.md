@@ -82,10 +82,6 @@ Requires Python 3.10, 3.11 or 3.12.
 pip install nitid
 ```
 
-> nitid is not on PyPI yet — the first release, v0.9.1, is being prepared.
-> Until it lands, install straight from GitHub:
-> `pip install "nitid @ git+https://github.com/Nitidio/nitid.git"`
-
 Inference and export work out of the box. Other features are optional extras:
 
 | Extra             | Adds                                                     |

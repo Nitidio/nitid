@@ -34,11 +34,10 @@ such a model.
 
 ## Before you start
 
-**Repository access.** nitid is not on PyPI yet and the repository is private,
-so you install it from a git clone. The machine needs read access to
-`Nitidio/nitid` on GitHub, either through an SSH key added to your GitHub
-account or through the GitHub CLI (`gh auth login`). Once v0.9.1 is published,
-`pip install "nitid[train]"` will replace the clone.
+**Repository access.** This guide works from a git clone of the repository,
+which is private. The machine needs read access to `Nitidio/nitid` on GitHub,
+either through an SSH key added to your GitHub account or through the GitHub
+CLI (`gh auth login`).
 
 While the repository is private, its release files cannot be downloaded
 anonymously, so the automatic dataset download in step 2 fails with
