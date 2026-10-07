@@ -22,14 +22,7 @@ _nitid_, from Latin _nitidus_: clear, transparent, precise.
 
 **No AGPL, no surprises.**
 
-![Object detection and instance segmentation with model1s](docs/assets/nitid-demo.jpg)
-
-Object detection and instance segmentation with `model1s`, and tracking with
-persistent IDs:
-
-<p align="center">
-  <img src="docs/assets/nitid-track.gif" alt="Tracking pedestrians with persistent IDs" width="600">
-</p>
+![Object detection with model1m](docs/assets/nitid-demo.jpg)
 
 <p align="center">
   <a href="#installation">Installation</a> ·
@@ -65,6 +58,15 @@ What comes with it:
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
   video output
 
+Object detection and instance segmentation with `model1s`, and tracking with
+persistent IDs:
+
+![Object detection and instance segmentation with model1s](docs/assets/nitid-demo-street.jpg)
+
+<p align="center">
+  <img src="docs/assets/nitid-track.gif" alt="Tracking pedestrians with persistent IDs" width="600">
+</p>
+
 ## What "open" means here
 
 The nitid code is released under the [Apache License 2.0](LICENSE). You can use
@@ -80,7 +82,7 @@ Requires Python 3.10, 3.11 or 3.12.
 pip install nitid
 ```
 
-> nitid is not on PyPI yet — the first release, v0.1.0, is being prepared.
+> nitid is not on PyPI yet — the first release, v0.9.1, is being prepared.
 > Until it lands, install straight from GitHub:
 > `pip install "nitid @ git+https://github.com/Nitidio/nitid.git"`
 

@@ -12,6 +12,8 @@ product without opening your code or paying for a license.
 *nitid*, from Latin *nitidus*: clear, transparent, precise. **No AGPL, no
 surprises.**
 
+![Object detection with model1m](assets/nitid-demo.jpg)
+
 ## Why nitid?
 
 - **Edge first.** The models are designed to run at the edge, on the hardware

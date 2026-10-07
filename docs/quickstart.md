@@ -10,7 +10,7 @@ for users coming from a YOLO codebase.
 pip install "nitid[train]"
 ```
 
-Until v0.1.0 is published on PyPI, install from GitHub instead:
+Until v0.9.1 is published on PyPI, install from GitHub instead:
 `pip install "nitid[train] @ git+https://github.com/Nitidio/nitid.git"`.
 
 Add extras only when you need them:
