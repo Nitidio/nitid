@@ -51,6 +51,11 @@ result.save("segmented.jpg")
 
 Segmentation defaults to the official COCO-pretrained mask weights.
 
+The same street frame with `model1s` and `conf=0.5`, `task="detect"` on the
+left and `task="segment"` on the right:
+
+![Object detection and instance segmentation with model1s](assets/demo/street.jpg)
+
 For dense semantic segmentation, read the original-resolution class map from
 `result.semantic.mask`. There are no pretrained semantic weights yet:
 `NITID("model1s", task="semantic")` initializes the shared features from the COCO

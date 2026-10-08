@@ -31,12 +31,16 @@ use the light variant instead.
 
 | Asset | Source |
 |-------|--------|
-| [`assets/nitid-demo.jpg`](assets/nitid-demo.jpg) | AI-generated image (Google Gemini); no photographic source or third-party rights. Detection with `nitid predict source=nitid-demo.jpg model=model1m conf=0.5` on the unannotated original |
-| [`assets/nitid-demo-street.jpg`](assets/nitid-demo-street.jpg) | Frame at 00:38 of [DiagonalCrosswalkYongeDundas.webm](https://commons.wikimedia.org/wiki/File:DiagonalCrosswalkYongeDundas.webm) by Raysonho (Wikimedia Commons, CC0). Left: `task="detect"`; right: `task="segment"`, both `model1s`, `conf=0.5` |
-| [`assets/nitid-track.gif`](assets/nitid-track.gif) | 00:33–00:38 of the same CC0 video. `model1s` detection with `track()` (ByteTrack), `vid_stride=2`, 600 px wide at 8 fps |
+| [`assets/demo/source/ski.jpg`](assets/demo/source/ski.jpg) | AI-generated image (Google Gemini); no photographic source or third-party rights |
+| [`assets/demo/detect-ski.jpg`](assets/demo/detect-ski.jpg) | `source/ski.jpg` with `nitid predict model=model1m task=detect source=docs/assets/demo/source/ski.jpg conf=0.5 save=true` |
+| [`assets/demo/source/watchmaker.jpg`](assets/demo/source/watchmaker.jpg) | AI-generated image (Google Gemini); no photographic source or third-party rights |
+| [`assets/demo/segment-watchmaker.jpg`](assets/demo/segment-watchmaker.jpg) | `source/watchmaker.jpg` with `nitid predict model=model1l task=segment source=docs/assets/demo/source/watchmaker.jpg conf=0.3 save=true` |
+| [`assets/demo/street.jpg`](assets/demo/street.jpg) | Frame at 00:38 of [DiagonalCrosswalkYongeDundas.webm](https://commons.wikimedia.org/wiki/File:DiagonalCrosswalkYongeDundas.webm) by Raysonho (Wikimedia Commons, CC0). Left: `task="detect"`; right: `task="segment"`, both `model1s`, `conf=0.5` |
+| [`assets/demo/track.gif`](assets/demo/track.gif) | 00:33–00:38 of the same CC0 video. `model1s` detection with `track()` (ByteTrack), `vid_stride=2`, 600 px wide at 8 fps |
 
 Every image the documentation shows must have a recorded source here, and its
-licence must allow redistribution.
+licence must allow redistribution. Unannotated originals live in
+`assets/demo/source/`; the rendered results sit next to them in `assets/demo/`.
 
 ## Colour
 

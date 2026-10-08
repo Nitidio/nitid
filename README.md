@@ -22,7 +22,7 @@ _nitid_, from Latin _nitidus_: clear, transparent, precise.
 
 **No AGPL, no surprises.**
 
-![Object detection with model1m](docs/assets/nitid-demo.jpg)
+![Object detection with model1m](docs/assets/demo/detect-ski.jpg)
 
 <p align="center">
   <a href="#installation">Installation</a> ·
@@ -57,15 +57,6 @@ What comes with it:
 - Fine-tuning and validation for boxes, masks and dense semantic maps
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs and annotated
   video output
-
-Object detection and instance segmentation with `model1s`, and tracking with
-persistent IDs:
-
-![Object detection and instance segmentation with model1s](docs/assets/nitid-demo-street.jpg)
-
-<p align="center">
-  <img src="docs/assets/nitid-track.gif" alt="Tracking pedestrians with persistent IDs" width="600">
-</p>
 
 ## What "open" means here
 
@@ -118,6 +109,16 @@ df = results[0].pandas()
 results[0].crop(save_dir="crops/")
 ```
 
+| Input | Detection |
+| :---: | :-------: |
+| ![Skier, input image](docs/assets/demo/source/ski.jpg) | ![Skier, detections with model1m](docs/assets/demo/detect-ski.jpg) |
+
+Generated with:
+
+```bash
+nitid predict model=model1m task=detect source=docs/assets/demo/source/ski.jpg conf=0.5 save=true
+```
+
 Instance segmentation uses the same API and downloads the matching COCO mask checkpoint:
 
 ```python
@@ -125,6 +126,16 @@ model = NITID("model1s", task="segment")
 result = model.predict("image.jpg", conf=0.5)[0]
 print(result.masks.data.shape)  # [N, H, W]
 result.save("segmented.jpg")
+```
+
+| Input | Instance segmentation |
+| :---: | :-------------------: |
+| ![Watchmaker's desk, input image](docs/assets/demo/source/watchmaker.jpg) | ![Watchmaker's desk, masks with model1l](docs/assets/demo/segment-watchmaker.jpg) |
+
+Generated with:
+
+```bash
+nitid predict model=model1l task=segment source=docs/assets/demo/source/watchmaker.jpg conf=0.3 save=true
 ```
 
 Semantic segmentation returns one class ID per pixel. There are no pretrained
@@ -158,6 +169,12 @@ for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
     if result.boxes.id is not None:
         track_ids = result.boxes.id
 ```
+
+<p align="center">
+  <img src="docs/assets/demo/track.gif" alt="Tracking pedestrians with persistent IDs" width="600">
+</p>
+
+_`model1s` detection with ByteTrack and `vid_stride=2` on a CC0 street video._
 
 The annotated video is saved under `runs/track/exp/`. Tracking dependencies
 are optional; install them with `pip install "nitid[track]"`.
