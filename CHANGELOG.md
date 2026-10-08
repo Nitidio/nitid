@@ -7,34 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- `export(..., postprocess=False)` (CLI `postprocess=false`) exports the
-  decoder's raw outputs (`pred_logits`, `pred_boxes`, `pred_masks` or
-  `sem_seg_logits`) without the postprocessor, for ONNX, OpenVINO and
-  TensorRT. See docs/export.md › Raw export (#15).
-- `docs/deployment.md`: running exported models outside nitid with ONNX
-  Runtime, OpenVINO Runtime, LibTorch (C++) and TensorRT under Triton, with
-  the input and output contract (#3).
-
-### Changed
-
-- Public messaging announces the Apache 2.0 licence of the code and of the
-  official pretrained weights, which D-FINE and D-FINE-seg publish under
-  Apache 2.0 (#17). `THIRD_PARTY_NOTICES.md` lists their sources.
-
-- Examples live in one place, `examples/`: two notebooks
-  (`notebooks/01_inference.ipynb`, `notebooks/02_training.ipynb`) and the
-  runnable scripts. The training notebook uses COCO-mini instead of a Roboflow
-  dataset. `tutorials/`, `docs/examples/` and `examples/tutorial.ipynb` are
-  gone.
-
-## [0.9.1] - 2026-09-20
+## [0.9.1] - 2026-10-08
 
 ### Added
 
 - A unified Python API and key-value CLI for downloading models, prediction,
   tracking, training, validation, export, model inspection, and bug reports.
+  Models are named `model1n`, `model1s`, `model1m`, `model1l`, and `model1x`.
 - Automatic download and runtime preparation of supported official
   checkpoints.
 - D-FINE object detection and instance segmentation, including COCO and YOLO
@@ -42,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   export.
 - Dense semantic segmentation with mask training, mIoU validation,
   probability output, overlays, class-ID maps, and ONNX/OpenVINO export.
+  There are no pretrained semantic checkpoints: semantic models start from the
+  instance-segmentation checkpoint and are fine-tuned on your own masks.
 - ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs, class
   filtering, frame sampling, and annotated video output.
 - Video file, webcam, and RTSP/HTTP stream input through OpenCV, including
@@ -50,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with automatic device selection and compiled-model caching.
 - ONNX and OpenVINO export for every supported task, plus TorchScript and
   TensorRT export for detection and instance segmentation.
+- `export(..., postprocess=False)` exports the decoder's raw outputs without
+  the postprocessor, for ONNX, OpenVINO, and TensorRT.
 - Fine-tuning controls for AMP, EMA, checkpoint resume, cosine learning-rate
   warmup, freezing, augmentation, callbacks, per-epoch validation, W&B, and
   MLflow.
@@ -58,10 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Atomic, incremented run directories with saved arguments, environment
   snapshots, optional single-file bug reports, and exact output-path
   overrides.
-- MkDocs documentation, a Jupyter/Colab tutorial, contributor and security
-  guides, issue and pull-request templates, pre-commit hooks, and CI across
-  Python 3.10, 3.11, and 3.12.
-- Apache-2.0 licensing.
+- MkDocs documentation with a deployment guide for exported models, inference
+  and training notebooks that run in Colab, example scripts, contributor and
+  security guides, issue and pull-request templates, pre-commit hooks, and CI
+  across Python 3.10, 3.11, and 3.12.
+- Apache-2.0 licensing for the code. The official pretrained weights are
+  published by D-FINE and D-FINE-seg under Apache 2.0 as well.
 - Brand assets under `docs/assets/brand/` and `docs/brand.md`, the source of
   truth for the palette, typography, logo usage, voice, and what the project
   announces publicly, plus a matching light/dark theme for the documentation
@@ -76,9 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   streams, screen capture, NumPy arrays, and tensors.
 - Hardened training defaults and validation behavior for reproducible,
   convergent fine-tuning.
-- Public messaging leads with the Apache 2.0 licensing of the code, and
-  announces three tasks: detection, instance segmentation, and
-  semantic segmentation.
+- Public messaging leads with the Apache 2.0 licensing of the code and the
+  official weights, and announces three tasks: detection, instance
+  segmentation, and semantic segmentation.
 
 ### Fixed
 
