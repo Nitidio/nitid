@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoder's raw outputs (`pred_logits`, `pred_boxes`, `pred_masks` or
   `sem_seg_logits`) without the postprocessor, for ONNX, OpenVINO and
   TensorRT. See docs/export.md › Raw export (#15).
+- `docs/deployment.md`: running exported models outside nitid with ONNX
+  Runtime, OpenVINO Runtime, LibTorch (C++) and TensorRT under Triton, with
+  the input and output contract (#3).
 
 ### Changed
 

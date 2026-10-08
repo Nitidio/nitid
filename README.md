@@ -239,6 +239,7 @@ For the full guide:
 - Notebooks and scripts: [examples/](examples/README.md)
 - Fine-tuning and validation: [docs/fine_tuning.md](docs/fine_tuning.md)
 - Export: [docs/export.md](docs/export.md)
+- Deployment: [docs/deployment.md](docs/deployment.md)
 - CLI: [docs/cli.md](docs/cli.md)
 
 ## Migrating from YOLO & Compatibility
@@ -292,6 +293,7 @@ from the instance-segmentation checkpoint of the same size and is meant for
 | [examples/](examples/README.md)                              | Notebooks (Colab) and runnable scripts                                  |
 | [docs/fine_tuning.md](docs/fine_tuning.md)                   | Training, validation, AMP, EMA, dataset formats                         |
 | [docs/export.md](docs/export.md)                             | OpenVINO, ONNX, TorchScript, and TensorRT export                        |
+| [docs/deployment.md](docs/deployment.md)                     | Running exported models with ONNX Runtime, OpenVINO, LibTorch, Triton   |
 | [docs/training_cuda_openvino.md](docs/training_cuda_openvino.md) | End-to-end run on an NVIDIA GPU or an Intel machine with OpenVINO |
 | [docs/cli.md](docs/cli.md)                                   | Command-line reference                                                  |
 | [docs/api_reference.md](docs/api_reference.md)               | Full Python API reference                                               |

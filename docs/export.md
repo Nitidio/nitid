@@ -8,7 +8,8 @@ includes `args.yaml` and `environment.yaml`.
 
 Export a nitid checkpoint or supported model name to ONNX, OpenVINO IR,
 TorchScript, or TensorRT for deployment. Format availability depends on the
-task.
+task. To run the exported artifact outside nitid, see
+[Deployment](deployment.md).
 
 | Task | ONNX | OpenVINO | TorchScript | TensorRT |
 |---|---:|---:|---:|---:|

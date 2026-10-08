@@ -51,6 +51,7 @@ If you're new to nitid, follow these guides in order:
 - [Quick Start](quickstart.md)
 - [Fine-tuning](fine_tuning.md)
 - [Export](export.md)
+- [Deployment](deployment.md)
 - [Training on CUDA and OpenVINO machines](training_cuda_openvino.md)
 - [API Reference](api_reference.md)
 - [Troubleshooting](troubleshooting.md)
