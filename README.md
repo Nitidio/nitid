@@ -14,9 +14,9 @@
   <a href="https://colab.research.google.com/github/Nitidio/nitid/blob/main/examples/notebooks/01_inference.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
 </p>
 
-Train, validate, export and run vision models. The code is released under the Apache License 2.0, so you
-can ship it inside your own product without opening your code or paying for a
-license.
+Train, validate, export and run vision models. The code and the official
+pretrained weights are released under the Apache License 2.0, so you can ship
+them inside your own product without opening your code or paying for a license.
 
 _nitid_, from Latin _nitidus_: clear, transparent, precise.
 
@@ -61,9 +61,15 @@ What comes with it:
 ## What "open" means here
 
 The nitid code is released under the [Apache License 2.0](LICENSE). You can use
-it commercially, modify it, and ship it in closed products. The public datasets
-used for pretraining keep their own terms: the official checkpoints listed in
-[Verified models](#verified-models) are trained on COCO and Objects365.
+it commercially, modify it, and ship it in closed products.
+
+The official pretrained weights are published by their authors under Apache 2.0
+as well: the detection checkpoints by [D-FINE](https://github.com/Peterande/D-FINE)
+and the instance-segmentation checkpoints by
+[D-FINE-seg](https://huggingface.co/ArgoSA/D-FINE-seg). nitid downloads them from
+those sources on first use. The public datasets used for pretraining keep their
+own terms: the checkpoints listed in [Verified models](#verified-models) are
+trained on COCO and Objects365.
 
 ## Installation
 

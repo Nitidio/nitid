@@ -84,14 +84,16 @@ unavailable.
 ## Voice
 
 nitid's pitch is not "a familiar API". It is that the code is genuinely usable
-in a commercial product. For now the public messaging announces the Apache 2.0
-licence of the code only; the licence of the pretrained weights is not announced
-until it is decided ([#17](https://github.com/Nitidio/nitid/issues/17)).
+in a commercial product. The public messaging announces the Apache 2.0 licence
+of the code and of the official pretrained weights, which their authors publish
+under Apache 2.0 (D-FINE and D-FINE-seg, decided in
+[#17](https://github.com/Nitidio/nitid/issues/17)). The pretraining datasets keep
+their own terms, and the messaging says so.
 
 - **Headline:** One library. DETR made simple.
 - **Supporting line:** Train, validate, export and run vision models. The code
-  is under Apache 2.0, so you can ship it in your product without opening your
-  code or paying a license.
+  and the official pretrained weights are under Apache 2.0, so you can ship them
+  in your product without opening your code or paying a license.
 - **Short form:** No AGPL, no surprises.
 
 The four things that make nitid different, in this order:

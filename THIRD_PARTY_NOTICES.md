@@ -76,3 +76,20 @@ The audited revisions above identify the upstream sources inspected for this
 notice update; they are not claims about the exact commits originally imported.
 The repository's root `LICENSE` supplies the Apache-2.0 license text and is
 included with this notice in the wheel.
+
+## Pretrained weights
+
+nitid does not redistribute pretrained weights. The official checkpoints are
+downloaded on first use from the sources their authors publish them in, and
+keep the licence given there:
+
+- D-FINE detection checkpoints (`model1n`-`model1x`, `task="detect"`):
+  https://github.com/Peterande/storage/releases/tag/dfinev1.0, published with
+  https://github.com/Peterande/D-FINE.
+  License: Apache-2.0.
+- D-FINE-seg instance-segmentation checkpoints (`task="segment"`):
+  https://huggingface.co/ArgoSA/D-FINE-seg.
+  License: Apache-2.0 (model card).
+
+The checkpoints are trained on public datasets (COCO, and Objects365 for the
+detection checkpoints listed as `obj2coco`), which keep their own terms.
