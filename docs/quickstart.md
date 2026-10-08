@@ -203,7 +203,9 @@ uv run python examples/train_coco_mini.py --task segment
 ```
 
 The example uses `configs/datasets/coco-mini.yml`, which downloads a small
-COCO-format dataset with redistributable image licences on first use.
+COCO-format dataset with redistributable image licences on first use. The
+[training notebook](https://github.com/Nitidio/nitid/blob/main/examples/notebooks/02_training.ipynb) runs the same dataset through training, validation,
+prediction and export, and opens in Colab.
 
 Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly with
 `NITID("epoch50.pth", task="detect")` — config and names travel with the weights.

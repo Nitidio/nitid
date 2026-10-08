@@ -246,6 +246,9 @@ uv run python examples/train_coco_mini.py --task detect
 uv run python examples/train_coco_mini.py --task segment
 ```
 
+and as a notebook that also validates, predicts and exports:
+[`examples/notebooks/02_training.ipynb`](https://github.com/Nitidio/nitid/blob/main/examples/notebooks/02_training.ipynb).
+
 The equivalent CLI command is:
 
 ```bash

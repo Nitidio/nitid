@@ -232,6 +232,4 @@ __marimo__/
 
 # Notebook outputs
 /outputs/
-/tutorials/outputs/
-/tutorials/runs/
 /datasets/
