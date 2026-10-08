@@ -5,9 +5,10 @@
 
 **One library. DETR made simple.**
 
-Train, validate, export and run vision models. The code is released under the
-Apache License 2.0, patent grant included, so you can ship it inside your own
-product without opening your code or paying for a license.
+Train, validate, export and run vision models. The code and the official
+pretrained weights are released under the Apache License 2.0, patent grant
+included, so you can ship them inside your own product without opening your code
+or paying for a license.
 
 *nitid*, from Latin *nitidus*: clear, transparent, precise. **No AGPL, no
 surprises.**

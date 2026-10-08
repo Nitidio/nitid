@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Public messaging announces the Apache 2.0 licence of the code and of the
+  official pretrained weights, which D-FINE and D-FINE-seg publish under
+  Apache 2.0 (#17). `THIRD_PARTY_NOTICES.md` lists their sources.
+
 - Examples live in one place, `examples/`: two notebooks
   (`notebooks/01_inference.ipynb`, `notebooks/02_training.ipynb`) and the
   runnable scripts. The training notebook uses COCO-mini instead of a Roboflow
