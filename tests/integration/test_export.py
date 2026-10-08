@@ -295,6 +295,166 @@ def test_repeated_export_calls_increment_run_directory(tiny_checkpoint, tmp_path
     assert (second.parent / "environment.yaml").exists()
 
 
+# ── Raw export (postprocess=False) ───────────────────────────────────────────
+
+
+def _onnx_output_names(path):
+    import onnx
+
+    return [output.name for output in onnx.load(str(path)).graph.output]
+
+
+def test_export_raw_onnx_returns_decoder_outputs(tiny_checkpoint, tmp_path):
+    import torch
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert _onnx_output_names(out) == ["pred_logits", "pred_boxes"]
+
+    torch.manual_seed(0)
+    images = torch.rand(1, 3, 640, 640)
+    logits, boxes = _onnxruntime_outputs(out, images)
+    with torch.inference_mode():
+        expected = model._get_deployed_model()(images)
+
+    # Same shapes as the torch model's own dict: one entry per decoder query,
+    # all of them, with no top-k selection applied.
+    assert logits.shape == tuple(expected["pred_logits"].shape)
+    assert boxes.shape == tuple(expected["pred_boxes"].shape)
+
+    # Raw outputs are undecoded: unactivated logits and normalised cxcywh boxes,
+    # not pixel coordinates.
+    assert float(logits.min()) < 0.0
+    assert 0.0 <= float(boxes.min()) and float(boxes.max()) <= 1.0
+
+
+def test_export_raw_onnx_keeps_postprocessed_export_unchanged(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    raw = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+    decoded = model.export(
+        format="onnx", imgsz=640, simplify=False, project=str(tmp_path), verbose=False
+    )
+
+    assert _onnx_output_names(raw) == ["pred_logits", "pred_boxes"]
+    assert _onnx_output_names(decoded) == ["labels", "boxes", "scores"]
+
+
+def test_export_raw_segment_onnx_includes_pred_masks(tiny_segment_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert _onnx_output_names(out) == ["pred_logits", "pred_boxes", "pred_masks"]
+
+
+def test_export_raw_semantic_onnx_returns_dense_logits(tiny_semantic_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert _onnx_output_names(out) == ["sem_seg_logits"]
+
+
+def test_export_raw_onnx_dynamic_marks_batch_on_every_output(tiny_checkpoint, tmp_path):
+    import onnx
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        dynamic=True,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    graph = onnx.load(str(out)).graph
+    for value in (*graph.input, *graph.output):
+        assert value.type.tensor_type.shape.dim[0].dim_param == "batch"
+
+
+def test_export_records_postprocess_in_run_metadata(tiny_checkpoint, tmp_path):
+    import yaml
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    args = yaml.safe_load((out.parent / "args.yaml").read_text())
+    assert args["postprocess"] is False
+
+
+def test_export_raw_openvino(tiny_checkpoint, tmp_path):
+    ov = pytest.importorskip("openvino", reason="openvino not installed")
+    import numpy as np
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="openvino",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert out.is_file()
+    assert out.with_suffix(".bin").is_file()
+
+    compiled = ov.Core().compile_model(out, "CPU")
+    results = compiled([np.zeros((1, 3, 640, 640), dtype=np.float32)])
+    assert len(results) == 2
+    assert [output.any_name for output in compiled.outputs] == ["pred_logits", "pred_boxes"]
+
+
 def test_export_invalid_format(tiny_checkpoint):
     from dfine import DFINE
 

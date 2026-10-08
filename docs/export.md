@@ -163,6 +163,60 @@ model.export(format="tensorrt", dynamic=True, batch=4)
 # min=1, opt=4, max=16
 ```
 
+## Raw export (no postprocessor)
+
+By default the exported graph has the postprocessor baked in, so it returns the
+decoded `(labels, boxes, scores, ...)` contract described above. Pass
+`postprocess=False` to export the decoder's raw outputs instead and do the
+decoding in the consuming application:
+
+```python
+model.export(format="openvino", postprocess=False)
+model.export(format="onnx", postprocess=False)
+```
+
+```bash
+uv run nitid export model=model1l task=detect format=openvino postprocess=false
+```
+
+This is the same graph the `backend="openvino"` inference path compiles in
+memory, only written to disk as a regular export artifact. Use it when the
+consumer already has its own (often batched or fused) postprocessing, or when it
+needs every decoder query rather than the top-k the postprocessor keeps.
+
+Output names per task:
+
+| Task | Raw outputs |
+|---|---|
+| Detection | `pred_logits [B, Q, C]`, `pred_boxes [B, Q, 4]` |
+| Instance segmentation | `pred_logits`, `pred_boxes`, `pred_masks` |
+| Semantic segmentation | `sem_seg_logits [B, C, H, W]` |
+
+`Q` is the number of decoder queries (300 for the official checkpoints) — all of
+them, with no score threshold or top-k applied. `pred_logits` are unactivated,
+and `pred_boxes` are `cxcywh` normalised to `[0, 1]`.
+
+The consumer has to reproduce what the postprocessor would have done:
+
+1. `scores = sigmoid(pred_logits)` (focal-loss models; softmax otherwise)
+2. `topk` over the flattened `[Q * C]` scores, then `label = index % C` and
+   `query = index // C`
+3. convert the gathered boxes from `cxcywh` to `xyxy`
+4. scale by the input `[w, h, w, h]`
+
+No NMS is involved — D-FINE is NMS-free. The reference implementation is
+`DFINEPostProcessor.forward()` in
+[`dfine/nn/postprocessor.py`](https://github.com/Nitidio/nitid/blob/main/dfine/nn/postprocessor.py),
+which also decodes the instance masks.
+
+For semantic segmentation the raw export returns the same dense logit map, only
+named `sem_seg_logits` instead of `semantic_logits`; apply softmax/argmax as
+usual.
+
+`postprocess=False` applies to ONNX, OpenVINO, and TensorRT. TorchScript always
+traces the raw model (it has no postprocessor to drop), so the flag makes no
+difference there.
+
 ## Export spatial size
 
 Most checkpoints are calibrated for a fixed evaluation spatial size
