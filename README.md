@@ -11,7 +11,7 @@
   <a href="https://nitidio.github.io/nitid/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green.svg" alt="License"></a>
   <a href="#installation"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python"></a>
-  <a href="https://colab.research.google.com/github/Nitidio/nitid/blob/main/examples/tutorial.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
+  <a href="https://colab.research.google.com/github/Nitidio/nitid/blob/main/examples/notebooks/01_inference.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
 </p>
 
 Train, validate, export and run vision models. The code is released under the Apache License 2.0, so you
@@ -236,6 +236,7 @@ nitid bugreport
 For the full guide:
 
 - Full quickstart: [docs/quickstart.md](docs/quickstart.md)
+- Notebooks and scripts: [examples/](examples/README.md)
 - Fine-tuning and validation: [docs/fine_tuning.md](docs/fine_tuning.md)
 - Export: [docs/export.md](docs/export.md)
 - CLI: [docs/cli.md](docs/cli.md)
@@ -288,6 +289,7 @@ from the instance-segmentation checkpoint of the same size and is meant for
 | Doc                                                          | Description                                                             |
 | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
 | [docs/quickstart.md](docs/quickstart.md)                     | Full quickstart                                                         |
+| [examples/](examples/README.md)                              | Notebooks (Colab) and runnable scripts                                  |
 | [docs/fine_tuning.md](docs/fine_tuning.md)                   | Training, validation, AMP, EMA, dataset formats                         |
 | [docs/export.md](docs/export.md)                             | OpenVINO, ONNX, TorchScript, and TensorRT export                        |
 | [docs/training_cuda_openvino.md](docs/training_cuda_openvino.md) | End-to-end run on an NVIDIA GPU or an Intel machine with OpenVINO |

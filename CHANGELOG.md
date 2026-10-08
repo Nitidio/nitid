@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Examples live in one place, `examples/`: two notebooks
+  (`notebooks/01_inference.ipynb`, `notebooks/02_training.ipynb`) and the
+  runnable scripts. The training notebook uses COCO-mini instead of a Roboflow
+  dataset. `tutorials/`, `docs/examples/` and `examples/tutorial.ipynb` are
+  gone.
+
 ## [0.9.1] - 2026-09-20
 
 ### Added
