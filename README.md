@@ -73,7 +73,7 @@ trained on COCO and Objects365.
 
 ## Installation
 
-Requires Python 3.10, 3.11 or 3.12.
+Requires Python 3.10, 3.11, 3.12 or 3.13.
 
 ```bash
 pip install nitid

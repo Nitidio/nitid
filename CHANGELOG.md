@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-09
+
+### Fixed
+
+- nitid installs on Python 3.13, which Google Colab now uses: the package
+  declared `Requires-Python <3.13`, so `pip install nitid` found no matching
+  version. Every dependency ships Python 3.13 wheels; CI covers 3.10 to 3.13.
+
 ## [0.9.1] - 2026-10-09
 
 ### Added
@@ -76,5 +84,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default `runs/mlflow` is stored as SQLite instead of MLflow's file store,
   which MLflow 3 refuses by default.
 
-[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/Nitidio/nitid/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/Nitidio/nitid/releases/tag/v0.9.1
