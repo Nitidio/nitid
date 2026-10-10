@@ -108,9 +108,11 @@ uv sync --extra train --extra openvino
 ```
 
 `uv` installs the exact versions in `uv.lock`. It also downloads a suitable
-Python (3.10, 3.11 or 3.12) if the system one is not supported. On Linux x86_64
-the lock pins PyTorch `2.5.1+cu121` and torchvision `0.20.1+cu121` from the
-PyTorch CUDA 12.1 index; the OpenVINO extra resolves to OpenVINO 2026.2.
+Python (3.10 to 3.13) if the system one is not supported. On Linux x86_64
+with Python 3.10 to 3.12 the lock pins PyTorch `2.5.1+cu121` and torchvision
+`0.20.1+cu121` from the PyTorch CUDA 12.1 index; Python 3.13 takes PyTorch
+`2.13.0` and torchvision `0.28.0` from PyPI, whose Linux wheels are CUDA builds
+as well; the OpenVINO extra resolves to OpenVINO 2026.2.
 
 Check the installation:
 

@@ -41,17 +41,17 @@ Inside the Docker container, you can also call the executable directly:
 
 See the [command-line guide](cli.md) for the full CLI workflow.
 
-## `uv sync` fails with Python 3.13 or `torchvision`
+## Installation fails with a new Python version
 
 ### What it means
 
-nitid currently supports Python `>=3.10,<3.13`.
+nitid currently supports Python `>=3.10,<3.14`.
 
-PyTorch and torchvision wheels are not always available for every new Python version immediately. If your system uses Python 3.13, dependency installation can fail before nitid is even installed.
+PyTorch and torchvision wheels are not always available for every new Python version immediately. If your system uses a newer Python, such as 3.14, pip reports that no version of nitid matches, or dependency installation fails before nitid is even installed.
 
 ### Fix
 
-Use Python 3.10, 3.11, or 3.12.
+Use Python 3.10, 3.11, 3.12, or 3.13.
 
 Then recreate the environment:
 
