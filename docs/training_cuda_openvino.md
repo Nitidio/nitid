@@ -34,20 +34,10 @@ such a model.
 
 ## Before you start
 
-**Repository access.** This guide works from a git clone of the repository,
-which is private. The machine needs read access to `Nitidio/nitid` on GitHub,
-either through an SSH key added to your GitHub account or through the GitHub
-CLI (`gh auth login`).
-
-While the repository is private, its release files cannot be downloaded
-anonymously, so the automatic dataset download in step 2 fails with
-`HTTP Error 404`. Download the archive with the GitHub CLI instead, from the
-repository root:
-
-```bash
-gh release download datasets-v1 --repo Nitidio/nitid --pattern coco-mini.zip --dir datasets
-unzip -q datasets/coco-mini.zip -d datasets && rm datasets/coco-mini.zip
-```
+**Clone or PyPI.** This guide works from a clone of the public repository,
+so that `uv` installs the exact versions in `uv.lock` and the example dataset
+configuration is at hand. No GitHub account is needed. To use the package from
+PyPI instead, see [Without a clone](#without-a-clone).
 
 **Pretrained weights.** These are not stored in the nitid repository.
 `NITID("model1s", task="detect")` downloads the original D-FINE weights from a
@@ -55,7 +45,7 @@ public GitHub release (`github.com/Peterande/storage`). Instance segmentation
 weights come from a public Hugging Face repository (`huggingface.co/ArgoSA/D-FINE-seg`).
 No account or token is needed. The machine needs outbound HTTPS to `github.com`,
 `objects.githubusercontent.com`, `huggingface.co`, `pypi.org`,
-and `download.pytorch.org`. The dataset in step 2 also downloads from
+`files.pythonhosted.org` and `download.pytorch.org`. The dataset in step 2 also downloads from
 `github.com`. The wrapped checkpoint is saved in the current directory, so run
 every command from the repository root.
 
@@ -80,21 +70,15 @@ source "$HOME/.local/bin/env"   # or open a new terminal
 uv --version
 ```
 
-Clone the repository. With the GitHub CLI:
+Clone the repository:
 
 ```bash
-sudo apt-get install -y gh
-gh auth login
-gh repo clone Nitidio/nitid
+git clone https://github.com/Nitidio/nitid.git
 cd nitid
 ```
 
-or with an SSH key already registered on GitHub:
-
-```bash
-git clone git@github.com:Nitidio/nitid.git
-cd nitid
-```
+To reproduce a release exactly, check out its tag, for example
+`git checkout v0.9.2`.
 
 Create the environment. The `train` extra adds `pycocotools`, needed for
 training and validation. The `openvino` extra adds OpenVINO Runtime.
@@ -120,6 +104,25 @@ Check the installation:
 uv run nitid --help
 uv run python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
 ```
+
+### Without a clone
+
+The same steps work with the package from PyPI. Install it into a virtual
+environment, then download the dataset configuration that step 2 uses into
+`configs/datasets/`, so that the paths in this guide stay the same:
+
+```bash
+uv venv --python 3.12 .venv && source .venv/bin/activate
+uv pip install "nitid[train]"            # add ,openvino on the Intel machine
+mkdir -p configs/datasets
+curl -fsSL -o configs/datasets/coco-mini.yml \
+    https://raw.githubusercontent.com/Nitidio/nitid/main/configs/datasets/coco-mini.yml
+```
+
+Then drop the `uv run` prefix from the commands below. pip resolves the newest
+compatible versions instead of the locked ones. Today that is PyPI's CUDA 13.0
+build of PyTorch on any Python version, so the GPU and driver requirements are
+those of the Python 3.13 column in [A1](#a1-prerequisites).
 
 ## Step 2: Get a small dataset (both machines)
 
@@ -156,17 +159,24 @@ nothing about real accuracy.
 
 ### A1. Prerequisites
 
+The PyTorch build, and so the GPUs it supports, depends on the Python version
+of the environment:
+
+| Requirement | Python 3.10 to 3.12 (default) | Python 3.13 |
+|-------------|-------------------------------|-------------|
+| PyTorch in `uv.lock` | `2.5.1+cu121` | `2.13.0+cu130` |
+| GPU | Compute capability 5.0 to 9.0: Maxwell to Hopper (GTX 900/10, RTX 20/30/40, V100, A100, H100) | Compute capability 7.5 to 12.0: Turing to Blackwell (RTX 20/30/40/50, A100, H100, B200) |
+| Driver | 525.60.13 or newer (CUDA 12.x) | 580 or newer (CUDA 13.0) |
+
 | Requirement | Value |
 |-------------|-------|
-| GPU | NVIDIA, compute capability 5.0 to 9.0 (Maxwell to Hopper, for example RTX 20/30/40 series, A100, H100) |
-| Driver | 525.60.13 or newer, the minimum for CUDA 12.x |
-| CUDA toolkit | Not needed. The PyTorch wheel includes the CUDA 12.1 runtime and cuDNN |
+| CUDA toolkit | Not needed. The PyTorch wheel includes the CUDA runtime and cuDNN |
 | GPU memory | Start with `batch=8` for `model1s`; lower it if you hit out-of-memory errors |
 
 > **RTX 50 series and other Blackwell GPUs** (compute capability 10.0 or 12.0)
-> are not supported by the locked `cu121` PyTorch build. Training fails with
-> `no kernel image is available for execution on the device`. See
-> [Troubleshooting](#cuda-error-no-kernel-image-is-available-for-execution-on-the-device).
+> need the Python 3.13 environment: create it with
+> `uv sync --python 3.13 --extra train`. The default `cu121` build fails on them
+> with `no kernel image is available for execution on the device`.
 
 Install the driver on Ubuntu if `nvidia-smi` is not found:
 
@@ -183,7 +193,8 @@ uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_
 ```
 
 The second command must print `True` and the GPU name. `nvidia-smi` shows the
-highest CUDA version that the driver supports; it must be 12.1 or higher.
+highest CUDA version that the driver supports; it must be at least the
+version in `torch.version.cuda` (12.1 by default, 13.0 with Python 3.13).
 
 ### A3. Train
 
@@ -531,27 +542,34 @@ PNG masks instead and is not covered here; see
 - `nvidia-smi` fails: the NVIDIA driver is missing or not loaded. Install it
   (`sudo ubuntu-drivers install`) and reboot.
 - `nvidia-smi` works but PyTorch still reports `False`: check that
-  `torch.version.cuda` prints `12.1`. If it prints `None`, a CPU-only PyTorch
-  has been installed over the locked one; run `uv sync --extra train` again.
+  `torch.version.cuda` prints `12.1` (or `13.0` with Python 3.13). If it prints
+  `None`, a CPU-only PyTorch has been installed over the locked one; run
+  `uv sync --extra train` again.
 - Inside a container, start it with GPU access (`docker run --gpus all ...`
   with the NVIDIA Container Toolkit installed).
 
 ### `CUDA driver version is insufficient for CUDA runtime version`
 
-The driver is older than CUDA 12.1 requires. Update it to 525.60.13 or newer.
+The driver is older than the PyTorch build requires. Update it to 525.60.13
+or newer for the default CUDA 12.1 build, or to the 580 series or newer for the
+CUDA 13.0 build that Python 3.13 environments use.
 
 ### `CUDA error: no kernel image is available for execution on the device`
 
-The GPU is newer than the locked PyTorch build supports, typically an RTX 50
-series or other Blackwell GPU. Supporting them needs a PyTorch build for CUDA
-12.8 or newer, which nitid's lock file does not pin yet. As an untested
-stopgap, you can replace PyTorch inside the environment and then run commands
-with `--no-sync`, so that `uv` does not restore the locked version:
+The PyTorch build in the environment was not compiled for this GPU.
 
-```bash
-uv pip install --reinstall torch torchvision --index-url https://download.pytorch.org/whl/cu128
-uv run --no-sync python train_cuda.py
-```
+- **RTX 50 series or another Blackwell GPU** with the default environment:
+  recreate it on Python 3.13, whose locked PyTorch is built for CUDA 13.0 and
+  supports compute capability up to 12.0:
+
+  ```bash
+  rm -rf .venv
+  uv sync --python 3.13 --extra train
+  ```
+
+- **GTX 900/10 series or V100** (Maxwell, Pascal, Volta) in a Python 3.13
+  environment: CUDA 13.0 no longer supports them. Recreate the environment on
+  Python 3.12 (`uv sync --python 3.12 --extra train`).
 
 ### `CUDA out of memory`
 
@@ -613,6 +631,8 @@ prints `OpenVINO IR export saved to ...`.
 | Step | Status |
 |------|--------|
 | Install with `uv sync`, PyTorch 2.5.1+cu121, OpenVINO 2026.2 | Run on Ubuntu 24.04 |
+| Anonymous `git clone`, automatic COCO-mini download, and the PyPI route in [Without a clone](#without-a-clone) | Run on Ubuntu (CPU), 2026-10-10, with nitid 0.9.2 |
+| Python 3.13 environment: PyTorch 2.13.0+cu130, built for sm_75 to sm_120 | Install and test suite run on the CPU; not run on a GPU |
 | COCO-mini dataset and checkpoint paths in `NITID(...)` | Steps B3 to B7 re-run as written on the Core Ultra 5 225H (2026-10-05): two epochs, mAP50-95 0.60 on the 32 validation images |
 | CPU training, Python API and CLI | Run on an Intel Core Ultra 5 225H |
 | Validation, prediction, ONNX and OpenVINO export | Run on the CPU |
