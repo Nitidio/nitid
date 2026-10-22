@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import platform
+import statistics
 import subprocess
 import sys
 import threading
@@ -45,6 +46,8 @@ import numpy as np
 
 DEFAULT_MODELS = ["model1s", "model1m", "model1l", "model1x"]
 DEFAULT_MATRIX = ["CPU:FP32", "GPU:FP16", "NPU:FP16"]
+# Mean CPU, in cores, that other processes may use during a run before it is flagged unreliable.
+DEFAULT_MAX_BACKGROUND_CPU = 1.0
 PRECISION_HINTS = {"FP32": "f32", "FP16": "f16"}
 
 # Published D-FINE reference figures, as listed in the README.
@@ -92,6 +95,7 @@ class RunResult:
     coco_map50: float | None = None
     val_images: int | None = None
     telemetry: dict[str, Any] = field(default_factory=dict)
+    reliable: bool | None = None
 
 
 # ── Statistics ────────────────────────────────────────────────────────────────
@@ -317,15 +321,45 @@ def _rapl_energy_uj() -> int | None:
     return int(raw) if raw else None
 
 
-class Telemetry:
-    """Sample package temperature and RAPL package energy while a block runs.
+def _cpu_busy_jiffies() -> int | None:
+    """System-wide busy CPU time from the aggregate ``cpu`` line of /proc/stat."""
+    line = (_read("/proc/stat") or "").splitlines()[:1]
+    if not line or not line[0].startswith("cpu "):
+        return None
+    values = [int(v) for v in line[0].split()[1:9]]  # user .. steal
+    idle, iowait = values[3], values[4]
+    return sum(values) - idle - iowait
 
-    Readings the platform does not expose (RAPL often needs root) stay ``None``.
+
+def _own_jiffies() -> int | None:
+    """CPU time (user + system, all threads) of this process from /proc/self/stat."""
+    raw = _read("/proc/self/stat")
+    if not raw:
+        return None
+    fields = raw.rsplit(")", 1)[1].split()  # skip "pid (comm)", which may contain spaces
+    return int(fields[11]) + int(fields[12])  # utime, stime
+
+
+def background_cpu_cores(busy_delta: int, own_delta: int, elapsed_s: float, hz: int) -> float:
+    """CPU used by other processes over an interval, in cores (1.0 = one busy core)."""
+    if elapsed_s <= 0 or hz <= 0:
+        return 0.0
+    return max(0, busy_delta - own_delta) / hz / elapsed_s
+
+
+class Telemetry:
+    """Sample temperature, RAPL package energy and other processes' CPU while a block runs.
+
+    The CPU used by other processes is the system's busy time minus this process's own, so a
+    run can be flagged when something else was competing for the machine. Readings the platform
+    does not expose (RAPL often needs root) stay ``None``.
     """
 
     def __init__(self, interval_s: float = 0.5) -> None:
         self.interval_s = interval_s
         self.temps: list[float] = []
+        self.background: list[float] = []
+        self._hz = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._sample, daemon=True)
         self._energy_start: int | None = None
@@ -333,11 +367,22 @@ class Telemetry:
         self.result: dict[str, Any] = {}
 
     def _sample(self) -> None:
-        while not self._stop.is_set():
+        last = (_cpu_busy_jiffies(), _own_jiffies(), time.perf_counter())
+        while not self._stop.wait(self.interval_s):
             temp = _package_temp_c()
             if temp is not None:
                 self.temps.append(temp)
-            self._stop.wait(self.interval_s)
+            now = (_cpu_busy_jiffies(), _own_jiffies(), time.perf_counter())
+            if None not in (last[0], last[1], now[0], now[1]):
+                self.background.append(
+                    background_cpu_cores(
+                        now[0] - last[0],  # type: ignore[operator]
+                        now[1] - last[1],  # type: ignore[operator]
+                        now[2] - last[2],
+                        self._hz,
+                    )
+                )
+            last = now
 
     def __enter__(self) -> Telemetry:
         self._energy_start = _rapl_energy_uj()
@@ -360,6 +405,11 @@ class Telemetry:
             "package_temp_start_c": self.temps[0] if self.temps else None,
             "package_temp_max_c": max(self.temps) if self.temps else None,
             "package_temp_end_c": self.temps[-1] if self.temps else None,
+            "background_cpu_mean_cores": (
+                round(statistics.fmean(self.background), 2) if self.background else None
+            ),
+            "background_cpu_max_cores": round(max(self.background), 2) if self.background else None,
+            "load_avg_1m_end": float((_read("/proc/loadavg") or "nan").split()[0]),
             "duration_s": round(elapsed, 2),
         }
 
@@ -370,6 +420,14 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def is_reliable(telemetry: dict[str, Any], max_background_cpu: float) -> bool | None:
+    """Whether other processes stayed under ``max_background_cpu`` cores; ``None`` if unknown."""
+    mean = telemetry.get("background_cpu_mean_cores")
+    if mean is None:
+        return None
+    return bool(mean <= max_background_cpu)
 
 
 # ── Benchmark steps ───────────────────────────────────────────────────────────
@@ -500,7 +558,8 @@ def render_markdown(environment: dict[str, Any], results: list[RunResult], imgsz
             if result is None or result.status != "ok" or result.latency is None:
                 row += ["—", "failed" if result is not None else "—"]
                 continue
-            row += [_fmt(result.coco_map50_95, 1), f"{result.latency.mean_ms:.2f} ms"]
+            flag = " ⚠" if result.reliable is False else ""
+            row += [_fmt(result.coco_map50_95, 1), f"{result.latency.mean_ms:.2f} ms{flag}"]
         reference = REFERENCE_T4_TRT10_FP16_MS.get(model)
         row.append(f"{reference:.2f} ms" if reference is not None else "—")
         lines.append("| " + " | ".join(row) + " |")
@@ -529,8 +588,8 @@ def render_markdown(environment: dict[str, Any], results: list[RunResult], imgsz
     failure_lines = [f"- `{r.model}` {r.device} {r.precision}: {r.error}" for r in failures]
     detail = [
         "| Model | Device | Precision | Effective | mean | p50 | p90 | p99 | FPS | "
-        "compile | first run | power | temp max |",
-        "| :-- | :-- | :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: | --: |",
+        "compile | first run | power | temp max | other CPU |",
+        "| :-- | :-- | :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |",
     ]
     for r in results:
         if r.latency is None:
@@ -541,7 +600,8 @@ def render_markdown(environment: dict[str, Any], results: list[RunResult], imgsz
             f"{lat.mean_ms:.2f} | {lat.p50_ms:.2f} | {lat.p90_ms:.2f} | {lat.p99_ms:.2f} | "
             f"{lat.fps:.1f} | {_fmt(r.compile_s)} s | {_fmt(r.first_inference_ms, 1)} ms | "
             f"{_fmt(r.telemetry.get('package_power_w'), 1)} W | "
-            f"{_fmt(r.telemetry.get('package_temp_max_c'), 0)} °C |"
+            f"{_fmt(r.telemetry.get('package_temp_max_c'), 0)} °C | "
+            f"{_fmt(r.telemetry.get('background_cpu_mean_cores'))} cores |"
         )
     val_note = next((r.val_images for r in results if r.val_images), None)
     sections = [
@@ -560,6 +620,22 @@ def render_markdown(environment: dict[str, Any], results: list[RunResult], imgsz
         "",
         *detail,
     ]
+    unreliable = [r for r in results if r.reliable is False]
+    if unreliable:
+        sections += [
+            "",
+            "## Unreliable runs",
+            "",
+            "Other processes competed for the machine during these runs (marked ⚠ above). "
+            "Rerun them on an idle machine before using the numbers.",
+            "",
+            *(
+                f"- `{r.model}` {r.device} {r.precision}: other processes used "
+                f"{r.telemetry.get('background_cpu_mean_cores')} cores on average, "
+                f"{r.telemetry.get('background_cpu_max_cores')} at peak"
+                for r in unreliable
+            ),
+        ]
     if failure_lines:
         sections += ["", "## Failures", "", *failure_lines]
     return "\n".join(sections) + "\n"
@@ -599,6 +675,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--val-images", type=int, help="limit mAP evaluation to N images")
     parser.add_argument("--skip-val", action="store_true", help="latency only")
     parser.add_argument("--cooldown", type=float, default=10.0, help="seconds between runs")
+    parser.add_argument(
+        "--max-background-cpu",
+        type=float,
+        default=DEFAULT_MAX_BACKGROUND_CPU,
+        help="flag a run when other processes use more CPU than this, in cores, on average",
+    )
     parser.add_argument("--output", type=Path, default=Path("runs/benchmark/openvino"))
     return parser
 
@@ -657,11 +739,17 @@ def main(argv: list[str] | None = None) -> int:
                         compiled, latency_images, args.imgsz, args.runs, args.warmup
                     )
                 result.telemetry = telemetry.result
+                result.reliable = is_reliable(result.telemetry, args.max_background_cpu)
                 result.latency = summarize_latency(times, args.warmup)
                 print(
                     f"{label} mean {result.latency.mean_ms:.2f} ms, "
                     f"p99 {result.latency.p99_ms:.2f} ms"
                 )
+                if result.reliable is False:
+                    print(
+                        f"{label} UNRELIABLE: other processes used "
+                        f"{result.telemetry['background_cpu_mean_cores']} CPU cores on average"
+                    )
                 if not args.skip_val:
                     result.coco_map50_95, result.coco_map50 = evaluate_coco(
                         compiled, coco, image_dir, val_ids, args.imgsz
