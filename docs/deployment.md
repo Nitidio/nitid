@@ -95,7 +95,18 @@ training on a GPU to inference on an Intel machine.
 
 `tools/benchmark_openvino.py` measures the exported detection models on every
 OpenVINO device of the machine. It lives in the repository, not in the wheel,
-so run it from a clone:
+so run it from a clone. On Linux, one script does the whole run:
+
+```bash
+scripts/benchmark_openvino.sh                 # latency, then COCO mAP
+scripts/benchmark_openvino.sh --latency-only
+```
+
+It checks the hardware, the GPU and NPU drivers, the power profile, the load
+and the free disk space, and prints the `sudo` command for anything it cannot
+fix itself. It then installs `uv` if needed, sets up the environment,
+downloads COCO val2017 into `datasets/coco`, benchmarks every device that
+OpenVINO sees and packs the reports into a `.tar.gz`. To run the steps by hand:
 
 ```bash
 uv sync --extra openvino --extra train
