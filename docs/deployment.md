@@ -124,7 +124,11 @@ reports:
   README's T4 TensorRT figures, so the numbers can be read side by side;
 - COCO mAP50-95 of the same IR on the same device and precision;
 - compile time, first-run time, package temperature and, where readable,
-  package power (RAPL usually needs root).
+  package power (RAPL usually needs root);
+- how much CPU other processes used during the run. A run where they averaged
+  more than one core (`--max-background-cpu`) is marked ⚠ and listed under
+  "Unreliable runs": something else was competing for the machine, so rerun it
+  when the machine is idle.
 
 Results go to `results.json`, stamped with the CPU, devices, driver packages,
 library versions and weight hashes, and to a `results.md` summary.

@@ -1,9 +1,17 @@
+import os
+import subprocess
+import sys
+import time
+
 import numpy as np
 import pytest
 
 from tools.benchmark_openvino import (
     RunResult,
+    Telemetry,
+    background_cpu_cores,
     benchmark_app_commands,
+    is_reliable,
     parse_matrix,
     parse_weights,
     render_markdown,
@@ -103,3 +111,42 @@ def test_benchmark_app_commands_cover_every_combination(tmp_path):
         f"benchmark_app -m {xml} -d CPU -hint latency -infer_precision f32 -niter 1000",
         f"benchmark_app -m {xml} -d GPU -hint latency -infer_precision f16 -niter 1000",
     ]
+
+
+def test_background_cpu_cores_subtracts_own_usage():
+    # 400 busy jiffies system-wide, 100 of them ours, over 2 s at 100 Hz: 1.5 cores elsewhere.
+    assert background_cpu_cores(400, 100, 2.0, 100) == pytest.approx(1.5)
+    assert background_cpu_cores(100, 150, 1.0, 100) == 0.0  # sampling skew never goes negative
+    assert background_cpu_cores(100, 0, 0.0, 100) == 0.0
+
+
+@pytest.mark.parametrize(
+    ("mean", "expected"), [(0.2, True), (0.5, True), (3.0, False), (None, None)]
+)
+def test_is_reliable(mean, expected):
+    assert is_reliable({"background_cpu_mean_cores": mean}, 0.5) is expected
+
+
+def test_render_markdown_flags_unreliable_runs():
+    noisy = RunResult("model1s", "CPU", "FP32", effective_precision="f32", reliable=False)
+    noisy.latency = summarize_latency([150.0, 170.0], warmup=1)
+    noisy.telemetry = {"background_cpu_mean_cores": 9.4, "background_cpu_max_cores": 14.0}
+
+    report = render_markdown(_environment(), [noisy], imgsz=640)
+
+    assert "160.00 ms ⚠" in report
+    assert "## Unreliable runs" in report
+    assert "9.4 cores on average, 14.0 at peak" in report
+
+
+@pytest.mark.skipif(not os.path.exists("/proc/stat"), reason="needs Linux /proc")
+def test_telemetry_detects_a_competing_process():
+    busy = subprocess.Popen([sys.executable, "-c", "while True: pass"])
+    try:
+        with Telemetry(interval_s=0.2) as telemetry:
+            time.sleep(1.5)
+    finally:
+        busy.kill()
+        busy.wait()
+
+    assert telemetry.result["background_cpu_mean_cores"] > 0.5

@@ -235,8 +235,16 @@ run_py -m tools.benchmark_openvino --coco "$DATA_DIR" --models $MODELS --matrix 
     --skip-val --output "$OUTPUT_DIR/latency" || true
 [[ -s "$OUTPUT_DIR/latency/results.json" ]] ||
     fail "phase 1 produced no results; see the traceback above and $OUTPUT_DIR/run.log"
-grep -q '"status": "failed"' "$OUTPUT_DIR/latency/results.json" &&
-    warn "phase 1: some combinations failed; see the Failures section of latency/results.md"
+check_results() {  # $1 = phase directory
+    if grep -q '"status": "failed"' "$OUTPUT_DIR/$1/results.json"; then
+        warn "$1: some combinations failed; see the Failures section of $1/results.md"
+    fi
+    if grep -q '"reliable": false' "$OUTPUT_DIR/$1/results.json"; then
+        warn "$1: other processes competed for the machine during some runs; see the" \
+            "Unreliable runs section of $1/results.md and rerun on an idle machine"
+    fi
+}
+check_results latency
 
 if [[ $LATENCY_ONLY -eq 0 ]]; then
     info "Phase 2: COCO mAP on $MATRIX (reuses the exported models)"
@@ -247,9 +255,11 @@ if [[ $LATENCY_ONLY -eq 0 ]]; then
         --runs 200 --warmup 200 --output "$OUTPUT_DIR/accuracy" || true
     [[ -s "$OUTPUT_DIR/accuracy/results.json" ]] ||
         fail "phase 2 produced no results; see the traceback above and $OUTPUT_DIR/run.log"
+    check_results accuracy
 fi
 
 # ── 8. Package the results ────────────────────────────────────────────────────
+printf '%s\n' "${WARNINGS[@]+"${WARNINGS[@]}"}" > "$OUTPUT_DIR/warnings.txt"
 ARCHIVE="$OUTPUT_DIR.tar.gz"
 tar -czf "$ARCHIVE" -C "$(dirname "$OUTPUT_DIR")" --exclude='*/ir' --exclude='*.bin' \
     --exclude='*.xml' "$(basename "$OUTPUT_DIR")"
