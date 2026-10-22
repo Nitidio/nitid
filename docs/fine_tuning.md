@@ -43,7 +43,7 @@ For `task="segment"`, every object must also contain a COCO polygon or RLE
 
 ### YOLO `.txt`
 
-Standard Ultralytics-style layout is also supported:
+The standard YOLO layout, as used by Ultralytics, is also supported:
 
 ```text
 my_dataset/
@@ -125,7 +125,7 @@ not accept instance-only `mosaic`, `mixup`, `classes`, or `single_cls` options.
 
 ### Data YAML
 
-Point to your dataset with an ultralytics-style YAML:
+Point to your dataset with a YOLO-format data YAML:
 
 ```yaml
 # configs/datasets/my_dataset.yml
@@ -390,8 +390,7 @@ behavior without patching the core loop. Pass either:
 - an object with one or more lifecycle-hook methods, each taking `trainer`
 - a mapping from hook name to callable or list of callables, each taking `trainer`
 
-You can also register persistent callbacks on the model in an Ultralytics-like
-way:
+You can also register persistent callbacks on the model:
 
 ```python
 def stop_after_first_epoch(trainer):
@@ -401,8 +400,7 @@ def stop_after_first_epoch(trainer):
 model.add_callback("on_train_epoch_end", stop_after_first_epoch)
 ```
 
-Callbacks receive only the active `DFINETrainer` instance, for consistency
-with the Ultralytics style. The most useful callback attributes are:
+Callbacks receive only the active `DFINETrainer` instance. The most useful callback attributes are:
 
 | Attribute | Type | Meaning | Available |
 |-----------|------|---------|-----------|
@@ -448,7 +446,7 @@ pip install "nitid[wandb]"
 uv sync --extra wandb
 ```
 
-Enable logging directly from `train()`, in the same style as Ultralytics:
+Enable logging directly from `train()`:
 
 ```python
 from nitid import NITID
@@ -548,12 +546,12 @@ model.train(
 )
 ```
 
-This follows the Ultralytics MLflow conventions:
+Defaults and behaviour:
 
 - the tracking URI defaults to `runs/mlflow`; a plain local path like this one
   is stored as a SQLite database (`mlflow.db`) with an `artifacts/` directory
   inside it, which works with both MLflow 2 and MLflow 3
-- the experiment defaults to the training `project`
+- the experiment defaults to the training `project`, or `nitid` when there is none
 - the MLflow run name defaults to the training `name`
 - an already-active MLflow run is reused and is not closed by nitid
 - resolved training parameters are logged when training starts
@@ -647,7 +645,7 @@ Use this table as the authoritative reference for train-time arguments.
 
 | Parameter | Type | Default | Valid range / values | Description |
 |-----------|------|---------|----------------------|-------------|
-| `data` | `str` | required | path to a dataset YAML | Ultralytics-style dataset config describing `path`, split locations, class count, and names. |
+| `data` | `str` | required | path to a dataset YAML | YOLO-format dataset config describing `path`, split locations, class count, and names. |
 | `recipe` | `str` | `"default"` | `"default"`, `"deim"` | Training recipe. `"default"` uses each task's native path. `"deim"` is detection-only and enables DEIM's MAL loss, flat-cosine schedule, Mosaic policy, and batch MixUp while keeping nitid's dataset auto-detection/conversion. |
 | `epochs` | `int` | recipe/task dependent | `>= 1` | Number of full passes over the training set. Detection defaults follow official D-FINE/DEIM model-size recipes when omitted. |
 | `imgsz` | `int` | `640` | `>= 1` | Square training resolution applied during preprocessing. |
@@ -702,7 +700,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
 | `callbacks` | `object \| dict \| None` | `None` | callback object or hook mapping | Optional lifecycle hooks for custom logging, experiment tracking, or other training-time integrations. |
 | `wandb` | `bool \| dict` | `False` | `True`, `False`, or WandB options | Enables the optional Weights & Biases integration. |
-| `mlflow` | `bool \| dict` | `False` | `True`, `False`, or MLflow options | Enables the optional Ultralytics-style MLflow integration. |
+| `mlflow` | `bool \| dict` | `False` | `True`, `False`, or MLflow options | Enables the optional MLflow integration. |
 
 Detection recipes use a D-FINE/DEIM-style transform profile: photometric
 distortion, zoom-out, IoU crop, horizontal flip, and final square resizing.
@@ -758,8 +756,8 @@ history is returned.
 
 ## Cosine LR with warmup
 
-By default, nitid uses linear LR decay. To match the more common Ultralytics
-fine-tuning setup, enable cosine decay and a warmup phase:
+By default, nitid uses linear LR decay. To use cosine decay with a warmup
+phase instead:
 
 ```python
 metrics = model.train(

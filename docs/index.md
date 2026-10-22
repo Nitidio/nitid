@@ -59,8 +59,8 @@ If you're new to nitid, follow these guides in order:
 
 ## Project Direction
 
-- [Roadmap](roadmap.md) — what is in scope, what is not, and how the phases are sequenced
-- [Brand](brand.md) — logo, palette, typography, and what the project announces
+- [Roadmap](roadmap.md) — what is in scope, what is not, and what comes next
+- [Brand](brand.md) — logo, palette, typography, and demo image sources
 - [Decision records](adr/index.md) — why the project is built the way it is
 
 ## For Contributors

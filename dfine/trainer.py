@@ -335,7 +335,7 @@ class DFINETrainer:
         Run the fine-tuning loop.
 
         Args:
-            data:       Path to the data YAML (ultralytics-style).
+            data:       Path to the data YAML (YOLO format).
             recipe:     Training recipe. ``"default"`` preserves the task's normal path.
             epochs:     Number of training epochs.
             imgsz:      Input image size (square).

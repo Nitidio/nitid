@@ -289,7 +289,7 @@ Add `wandb=true` to log the run to the default `nitid` WandB project:
 uv run nitid train model=model1s task=detect data=my_dataset.yml epochs=50 wandb=true
 ```
 
-Add `mlflow=true` for Ultralytics-style local MLflow tracking. Logs default to
+Add `mlflow=true` for local MLflow tracking. Logs default to
 a SQLite store in `runs/mlflow`:
 
 ```bash

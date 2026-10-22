@@ -71,7 +71,7 @@ semantic = NITID("model1s", task="semantic", device="cuda:0")
 | `device`  | `str \| int \| None` | `None` | For `backend="torch"`: a PyTorch device selector (`"cuda"`, `"cpu"`, `"cuda:N"`); omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. For `backend="openvino"`: an OpenVINO device string (`"CPU"`, `"GPU"` for Intel integrated GPU, `"NPU"`), or `"auto"`/omit to prefer NPU, then GPU, then CPU. |
 | `verbose` | `bool`| `True`  | Print load summary |
 
-If you pass an explicit device string, it is used as-is after normalization. Omitting `device` gives the Ultralytics-style smart default.
+If you pass an explicit device string, it is used as-is after normalization. Omitting `device` selects the best available device, as described above.
 
 `DFINE(...)` remains available for existing code and D-FINE-family model names,
 but new code should prefer `NITID(...)`.

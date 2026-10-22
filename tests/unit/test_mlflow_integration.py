@@ -125,6 +125,17 @@ def test_mlflow_logs_params_metrics_artifacts_and_closes_owned_run(monkeypatch, 
     assert trainer.tracking_state == {"mlflow": {"run_id": "new-run-id"}}
 
 
+def test_mlflow_experiment_defaults_to_nitid_without_project(monkeypatch, trainer):
+    fake = FakeMLflow()
+    monkeypatch.setitem(sys.modules, "mlflow", fake)
+    monkeypatch.delenv("MLFLOW_EXPERIMENT_NAME", raising=False)
+    trainer.train_args = {"name": "experiment", "epochs": 2}
+
+    MLflowCallback().on_train_start(trainer)
+
+    assert fake.experiment == "nitid"
+
+
 def test_mlflow_environment_variables_take_precedence(monkeypatch, trainer):
     fake = FakeMLflow()
     monkeypatch.setitem(sys.modules, "mlflow", fake)
