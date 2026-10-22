@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `tools/benchmark_openvino.py` measures latency and COCO mAP of the exported
+  detection models on OpenVINO CPU, GPU and NPU devices, using the same method
+  as the D-FINE paper's T4 TensorRT figures, and writes a JSON report stamped
+  with the hardware, drivers and library versions. `scripts/benchmark_openvino.sh`
+  checks the machine, downloads COCO val2017 and runs it end to end. Runs where
+  other processes competed for the CPU are flagged as unreliable.
+
 ### Changed
 
 - The MLflow integration names the experiment `nitid` when training has no
