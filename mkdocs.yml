@@ -44,10 +44,7 @@ nav:
   - Project:
       - Roadmap: roadmap.md
       - Brand: brand.md
-      - Decisions:
-          - Overview: adr/index.md
-          - "ADR-0002: Native DETRPose integration": adr/0002-native-detrpose-integration.md
-          - "ADR-0003: Native RiO-DETR OBB integration": adr/0003-native-rio-detr-obb-integration.md
+      - Decision records: adr/index.md
   - Contributing:
       - Onboarding: onboarding.md
       - macOS Docker Setup: macos_docker_setup.md

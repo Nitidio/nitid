@@ -1,5 +1,5 @@
 """
-DFINEValidator — COCO mAP evaluation plus Ultralytics-style detection plots.
+DFINEValidator — COCO mAP evaluation plus detection plots.
 Called internally by DFINE.val() and DFINETrainer.
 """
 
@@ -164,7 +164,7 @@ class DFINEValidator:
     The postprocessor is rebuilt from the checkpoint config so that validation
     can run without mutating the model state. In addition to COCO metrics, the
     validator computes precision/recall/F1 curves, a confusion matrix, and
-    per-class AP summaries for Ultralytics-style artifacts.
+    per-class AP summaries.
     """
 
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:

@@ -99,7 +99,7 @@ class SemanticSplitSpec:
 
 
 def load_data_yaml(path: str | Path) -> dict:
-    """Load an ultralytics-style data YAML and return it as a plain dict."""
+    """Load a YOLO-format data YAML and return it as a plain dict."""
     with open(path) as f:
         return yaml.safe_load(f)
 
@@ -115,7 +115,7 @@ def _resolve_dataset_root(data: str | Path, cfg: dict) -> Path:
 
 
 def _maybe_download_dataset(data: str | Path, cfg: dict, split: str) -> None:
-    """Download a missing dataset archive declared by an Ultralytics-style YAML."""
+    """Download a missing dataset archive declared by a YOLO-format data YAML."""
     if split not in cfg:
         raise KeyError(f"Data YAML does not define split {split!r}")
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The MLflow integration names the experiment `nitid` when training has no
+  `project`; it used to fall back to `/Shared/Ultralytics`. Set `project`,
+  `experiment_name`, or `MLFLOW_EXPERIMENT_NAME` to keep the old name.
+- The roadmap describes the released 0.9.x line and its current priorities.
+- The brand page covers the visual identity only: name, logo, colours,
+  typography, and the sources of the documentation images.
+- The decision records for pose estimation and oriented bounding boxes, which
+  are no longer part of the library, are removed from the documentation.
+
 ## [0.9.2] - 2026-10-09
 
 ### Fixed

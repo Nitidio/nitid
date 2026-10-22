@@ -305,7 +305,7 @@ from the instance-segmentation checkpoint of the same size and is meant for
 | [docs/api_reference.md](docs/api_reference.md)               | Full Python API reference                                               |
 | [docs/troubleshooting.md](docs/troubleshooting.md)           | FAQ and fixes for common install, model, Docker, CUDA, and CLI problems |
 | [docs/macos_docker_setup.md](docs/macos_docker_setup.md)     | macOS / Apple Silicon development environment with Docker               |
-| [docs/brand.md](docs/brand.md)                               | Brand: logo, palette, typography, and what the project announces        |
+| [docs/brand.md](docs/brand.md)                               | Brand: logo, palette, typography, and demo image sources                |
 
 ## Development
 

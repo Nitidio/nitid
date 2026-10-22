@@ -1,5 +1,5 @@
 """
-DFINE — public entry point. Mirrors the ultralytics.YOLO interface.
+DFINE — internal model class behind the public ``NITID`` entry point.
 """
 
 from __future__ import annotations
@@ -450,7 +450,7 @@ class DFINE:
             raise
 
     def add_callback(self, event: str, callback: ModelCallback) -> None:
-        """Register a persistent callback on the model, similar to Ultralytics."""
+        """Register a persistent callback on the model."""
         from dfine.trainer import DFINETrainer
 
         if event not in DFINETrainer.CALLBACK_EVENTS:

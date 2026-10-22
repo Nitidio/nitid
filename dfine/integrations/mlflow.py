@@ -1,4 +1,4 @@
-"""MLflow integration matching Ultralytics' training-logger behavior."""
+"""MLflow integration for nitid training runs."""
 
 from __future__ import annotations
 
@@ -43,14 +43,14 @@ def _sanitize_metrics(metrics: dict[str, object]) -> dict[str, float]:
 
 
 class MLflowCallback:
-    """Log nitid training to MLflow using Ultralytics-compatible conventions.
+    """Log nitid training to MLflow with sensible local defaults.
 
     Environment variables take precedence over constructor values:
     ``MLFLOW_TRACKING_URI``, ``MLFLOW_EXPERIMENT_NAME``, ``MLFLOW_RUN``, and
     ``MLFLOW_KEEP_RUN_ACTIVE``.
 
     Initialization and logging errors only disable MLflow for the current run;
-    they never interrupt model training, matching Ultralytics' behavior.
+    they never interrupt model training.
     """
 
     def __init__(
@@ -90,7 +90,7 @@ class MLflowCallback:
         experiment = (
             os.environ.get("MLFLOW_EXPERIMENT_NAME")
             or self.experiment_name
-            or str(trainer.train_args.get("project") or "/Shared/Ultralytics")
+            or str(trainer.train_args.get("project") or "nitid")
         )
         run_name = (
             os.environ.get("MLFLOW_RUN")

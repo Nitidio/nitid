@@ -3,19 +3,13 @@
 An ADR records a decision that shaped the project, the context that forced it, and the consequences
 accepted along with it. It is written once and then left alone: superseded, never rewritten.
 
-nitid keeps ADRs for a specific reason beyond tidiness. The
-[certified LTS runtime](https://github.com/Nitidio/nitid/issues/12) and
-[hardware support matrix](https://github.com/Nitidio/nitid/issues/13) both commit the project to
-answering audit questions — *why is this dependency here, who decided, when, and what did you consider
-instead?* — with something better than a commit message and a memory. A dated, immutable record is the
-cheapest way to be able to answer.
+ADRs answer the questions a commit message cannot: *why is this dependency here, who decided, when,
+and what was considered instead?* A dated, immutable record is the cheapest way to keep those answers.
 
 ## Index
 
-| ADR | Title | Status | Date |
-|---|---|---|---|
-| [0002](0002-native-detrpose-integration.md) | Native DETRPose integration | Superseded (removed) | 2026-08-19 |
-| [0003](0003-native-rio-detr-obb-integration.md) | Native RiO-DETR OBB integration | Superseded (removed) | 2026-09-07 |
+No ADRs are published yet. Numbers up to 0003 were used before the first public release and are
+retired, so the next record is ADR-0004.
 
 ## Convention
 
@@ -30,10 +24,10 @@ cheapest way to be able to answer.
 ## When an ADR is required
 
 - Adding or removing a dependency that carries a licence obligation.
-- Changing the public API surface (`DFINE`, the `dfine` CLI, the checkpoint schema).
+- Changing the public API surface (`NITID`, the `nitid` CLI, the checkpoint schema).
 - Choosing or dropping a runtime, export format, or hardware target.
 - Taking on third-party source, in any form — vendored, ported, or adapted.
-- Anything a certification auditor or a customer's legal team would plausibly ask about.
+- Anything an auditor or a downstream user's legal team would plausibly ask about.
 
 Routine work does not need one. If you are unsure, the test is whether someone joining in a year would
 be confused by the result and unable to reconstruct why.

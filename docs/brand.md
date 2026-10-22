@@ -1,9 +1,9 @@
 # Brand
 
-This page is the source of truth for how nitid presents itself: the logo, the
-colours, the typography, and what the project says about itself in public. It
-exists so the README and the documentation site stay in step instead of
-drifting apart.
+This page is the source of truth for nitid's visual identity: the name, the
+logo, the colours, the typography, and the sources of the images used in the
+documentation. It exists so the README and the documentation site stay in step
+instead of drifting apart.
 
 ![nitid](assets/brand/nitid-logo-on-light.png)
 
@@ -66,10 +66,6 @@ The logo carries its own fixed values, which are deliberately more saturated
 than the interface palette: navy `#05254b`, violet `#6227fb`, blue `#045efd`,
 lime `#cfe85b`.
 
-Vaelsys, the company behind nitid, has a separate warm design system —
-background `#f3f2f2`, ink `#201f1d`, copper accent `#b87a3d`. Those tokens
-belong to corporate surfaces. Do not mix them into nitid's own interfaces.
-
 ## Typography
 
 | Role | Family | Weight |
@@ -81,64 +77,3 @@ belong to corporate surfaces. Do not mix them into nitid's own interfaces.
 Each has a system fallback stack, so nothing breaks when the webfonts are
 unavailable.
 
-## Voice
-
-nitid's pitch is not "a familiar API". It is that the code is genuinely usable
-in a commercial product. The public messaging announces the Apache 2.0 licence
-of the code and of the official pretrained weights, which their authors publish
-under Apache 2.0 (D-FINE and D-FINE-seg, decided in
-[#17](https://github.com/Nitidio/nitid/issues/17)). The pretraining datasets keep
-their own terms, and the messaging says so.
-
-- **Headline:** One library. DETR made simple.
-- **Supporting line:** Train, validate, export and run vision models. The code
-  and the official pretrained weights are under Apache 2.0, so you can ship them
-  in your product without opening your code or paying a license.
-- **Short form:** No AGPL, no surprises.
-
-The four things that make nitid different, in this order:
-
-1. **Edge first.** The models are designed to run on the hardware next to your
-   cameras, not only on a datacenter GPU.
-2. **Self-contained checkpoints.** Every checkpoint carries what it needs to be
-   reproduced and checked.
-3. **Handles messy datasets.** COCO and YOLO formats are read directly, with no
-   conversion step.
-4. **Export anywhere.** OpenVINO, ONNX, TorchScript and TensorRT, from the same
-   checkpoint.
-
-Write plainly: short sentences, no superlatives, no comparisons to competitors
-as a selling point. A technical comparison is fine where it informs a decision;
-it is not the pitch.
-
-## What we announce
-
-These are deliberate scope decisions, not oversights.
-
-**Three tasks, five operations.** nitid supports exactly three tasks — object
-detection, instance segmentation and semantic segmentation — and the public
-messaging announces exactly those. The library, its documentation and the pitch
-describe the same scope, which keeps the promise narrow and the "three tasks,
-five operations" framing honest. The five operations are `predict`, `track`,
-`train`, `val` and `export`.
-
-**Semantic segmentation is fine-tune only.** Detection and instance
-segmentation ship pretrained COCO checkpoints; semantic segmentation does not.
-`task="semantic"` starts from the instance-segmentation checkpoint and is
-trained on the user's own masks. Say so wherever the three tasks are announced,
-and never show semantic predictions from the untrained starting point (decided
-2026-10-02).
-
-**The README is the pitch, not the manual.** It covers the three announced
-tasks and the five operations; details belong on the documentation site. Pose
-estimation, oriented bounding boxes and GStreamer video I/O were removed from
-the library on 2026-09-25 and are preserved in the `archive/pose-obb-gstreamer`
-tag.
-
-**The repository is the source of truth for the API.** Where marketing material
-and the code disagree about names or signatures, the code wins and the
-marketing material gets corrected.
-
-**Products built on top of nitid are announced elsewhere.** Operating systems,
-certified hardware and licensing live on the Vaelsys website. This repository
-documents the library and nothing else.
