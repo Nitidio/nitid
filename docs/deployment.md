@@ -91,6 +91,37 @@ OpenVINO Runtime through the usual API. The
 [CUDA and OpenVINO guide](training_cuda_openvino.md) runs the whole path, from
 training on a GPU to inference on an Intel machine.
 
+### Measuring latency and accuracy on Intel hardware
+
+`tools/benchmark_openvino.py` measures the exported detection models on every
+OpenVINO device of the machine. It lives in the repository, not in the wheel,
+so run it from a clone:
+
+```bash
+uv sync --extra openvino --extra train
+uv run python -m tools.benchmark_openvino --coco datasets/coco --output runs/benchmark/openvino
+```
+
+`--coco` points at a COCO root with `val2017/` and
+`annotations/instances_val2017.json`. By default the script exports `model1s`
+to `model1x`, then runs CPU in FP32 and the integrated GPU and NPU in FP16
+(`--models` and `--matrix GPU:FP32 ...` change that). For each combination it
+reports:
+
+- latency: 1000 warm-up runs, then one timed run per COCO image, batch 1 at
+  640x640 with the postprocessor included. This is the method behind the
+  README's T4 TensorRT figures, so the numbers can be read side by side;
+- COCO mAP50-95 of the same IR on the same device and precision;
+- compile time, first-run time, package temperature and, where readable,
+  package power (RAPL usually needs root).
+
+Results go to `results.json`, stamped with the CPU, devices, driver packages,
+library versions and weight hashes, and to a `results.md` summary.
+`benchmark_app.sh` holds the equivalent `benchmark_app` commands for a
+cross-check. Expect `benchmark_app` to report lower latency on GPUs: it
+repeats one input, and D-FINE's data-dependent sampling is faster when every
+run reads the same memory.
+
 ## TorchScript in C++
 
 Export the PyTorch graph:
