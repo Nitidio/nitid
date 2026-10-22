@@ -44,16 +44,9 @@ class DFINECriterion(nn.Module):
         boxes_weight_format=None,
         share_matched_indices=False,
         label_smoothing: float = 0.0,
+        mal_alpha: float | None = None,
     ):
-        """Create the criterion.
-        Parameters:
-            matcher: module able to compute a matching between targets and proposals.
-            weight_dict: dict containing as key the names of the losses and as values their relative weight.
-            losses: list of all the losses to be applied. See get_loss for list of available losses.
-            num_classes: number of object categories, omitting the special no-object category.
-            reg_max (int): Max number of the discrete bins in D-FINE.
-            boxes_weight_format: format for boxes weight (iou, ).
-        """
+        """Create the criterion."""
         super().__init__()
         self.num_classes = num_classes
         self.matcher = matcher
@@ -68,6 +61,7 @@ class DFINECriterion(nn.Module):
         self.reg_max = reg_max
         self.num_pos, self.num_neg = None, None
         self.label_smoothing = label_smoothing
+        self.mal_alpha = mal_alpha
 
     def loss_labels_focal(self, outputs, targets, indices, num_boxes):
         assert "pred_logits" in outputs
@@ -94,9 +88,9 @@ class DFINECriterion(nn.Module):
         return {"loss_focal": loss}
 
     def loss_labels_vfl(self, outputs, targets, indices, num_boxes, values=None):
-        assert "pred_boxes" in outputs
         idx = self._get_src_permutation_idx(indices)
         if values is None:
+            assert "pred_boxes" in outputs
             src_boxes = outputs["pred_boxes"][idx]
             target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
             ious, _ = box_iou(box_cxcywh_to_xyxy(src_boxes), box_cxcywh_to_xyxy(target_boxes))
@@ -124,6 +118,42 @@ class DFINECriterion(nn.Module):
         )
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
         return {"loss_vfl": loss}
+
+    def loss_labels_mal(self, outputs, targets, indices, num_boxes, values=None):
+        assert "pred_boxes" in outputs
+        idx = self._get_src_permutation_idx(indices)
+        if values is None:
+            src_boxes = outputs["pred_boxes"][idx]
+            target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+            ious, _ = box_iou(box_cxcywh_to_xyxy(src_boxes), box_cxcywh_to_xyxy(target_boxes))
+            ious = torch.diag(ious).detach()
+        else:
+            ious = values
+
+        src_logits = outputs["pred_logits"]
+        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
+        target_classes[idx] = target_classes_o
+        target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
+
+        target_score_o = torch.zeros_like(target_classes, dtype=src_logits.dtype)
+        target_score_o[idx] = ious.to(target_score_o.dtype)
+        target_score = target_score_o.unsqueeze(-1) * target
+
+        pred_score = F.sigmoid(src_logits).detach()
+        target_score = target_score.pow(self.gamma)
+        if self.mal_alpha is not None:
+            weight = self.mal_alpha * pred_score.pow(self.gamma) * (1 - target) + target
+        else:
+            weight = pred_score.pow(self.gamma) * (1 - target) + target
+
+        loss = F.binary_cross_entropy_with_logits(
+            src_logits, target_score, weight=weight, reduction="none"
+        )
+        loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
+        return {"loss_mal": loss}
 
     def loss_boxes(self, outputs, targets, indices, num_boxes, boxes_weight=None):
         """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
@@ -604,6 +634,7 @@ class DFINECriterion(nn.Module):
             "boxes": self.loss_boxes,
             "focal": self.loss_labels_focal,
             "vfl": self.loss_labels_vfl,
+            "mal": self.loss_labels_mal,
             "local": self.loss_local,
             "masks": self.loss_masks,
         }
@@ -644,7 +675,8 @@ class DFINECriterion(nn.Module):
                 torch.distributed.all_reduce(num_boxes_go)
             num_boxes_go = torch.clamp(num_boxes_go / get_world_size(), min=1).item()
         else:
-            assert "aux_outputs" in outputs, ""
+            indices_go = indices
+            num_boxes_go = None
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
@@ -659,7 +691,11 @@ class DFINECriterion(nn.Module):
         losses = {}
         for loss in self.losses:
             indices_in = indices_go if loss in ["boxes", "local"] else indices
-            num_boxes_in = num_boxes_go if loss in ["boxes", "local"] else num_boxes
+            num_boxes_in = (
+                (num_boxes_go if num_boxes_go is not None else num_boxes)
+                if loss in ["boxes", "local"]
+                else num_boxes
+            )
             meta = self.get_loss_meta_info(loss, outputs, targets, indices_in)
             l_dict = self.get_loss(loss, outputs, targets, indices_in, num_boxes_in, **meta)
             l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
@@ -803,7 +839,7 @@ class DFINECriterion(nn.Module):
 
         if loss in ("boxes",):
             meta = {"boxes_weight": iou}
-        elif loss in ("vfl",):
+        elif loss in ("vfl", "mal"):
             meta = {"values": iou}
         else:
             meta = {}

@@ -19,10 +19,10 @@ Use the public `bugreport()` context manager to capture Python API operations in
 the same single-file format as the CLI's `--report` flag:
 
 ```python
-from dfine import DFINE, bugreport
+from nitid import NITID, bugreport
 
 with bugreport("training") as report:
-    model = DFINE("dfine_s")
+    model = NITID("model1s", task="detect")
     model.train(data="data.yaml")
 
 print(report.path)
@@ -38,7 +38,7 @@ One report can cover multiple operations:
 
 ```python
 with bugreport("full-experiment") as report:
-    model = DFINE("dfine_s")
+    model = NITID("model1s", task="detect")
     model.train(data="data.yaml")
     model.val(data="data.yaml")
     model.export(format="onnx")
@@ -47,30 +47,60 @@ with bugreport("full-experiment") as report:
 By default reports are written to `runs/bugreports`. Choose another directory
 with `bugreport("training", report_dir="reports")`.
 
-## `DFINE`
+## `NITID`
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 ```
 
-The single public class. Instantiate with a path to a nitid-wrapped `.pth` checkpoint, or use a registry architecture name and select its official pretrained weights.
+The recommended public class. Instantiate with a path to a nitid-wrapped `.pth`
+checkpoint, or use a registry model name and task.
 
 ```python
-model = DFINE("dfine_s", device="cuda:0")
-model_coco = DFINE("dfine_s", weights="coco", device="cuda:0")
-segmenter = DFINE("dfine_s", task="segment", device="cuda:0")
-semantic = DFINE("semantic_best.pth", task="semantic", device="cuda:0")
+detector = NITID("model1s", task="detect", device="cuda:0")
+segmenter = NITID("model1s", task="segment", device="cuda:0")
+semantic = NITID("model1s", task="semantic", device="cuda:0")
 ```
 
 | Argument  | Type  | Default | Description |
 |-----------|-------|---------|-------------|
-| `model`   | `str \| Path` | `"dfine_l"` | Wrapped checkpoint path or architecture name (`dfine_n` through `dfine_x`; detection pretrained defaults are available for S/M/L/X and segmentation for N/S/M/L/X) |
-| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, or `"semantic"` (`"sem_seg"` alias). Must match an explicit checkpoint's embedded task. |
-| `weights` | `str` | `"default"` | Detection: `"default"`/`"obj2coco"` or `"coco"`. Segmentation: `"default"`/`"coco"`. Do not combine a non-default value with a checkpoint path. |
-| `device`  | `str \| int \| None` | `None` | PyTorch device selector. Omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. |
+| `model`   | `str \| Path` | `"model1s"` | Checkpoint path or registry model name such as `model1n`, `model1s`, `model1m`, `model1l`, or `model1x` |
+| `task` | `str` | `"detect"` | `"detect"`, `"segment"`, or `"semantic"` (`"sem_seg"` alias). Must match an explicit checkpoint's embedded task. Registry names for `"semantic"` build an untrained dense head on top of the instance-segmentation checkpoint: fine-tune before predicting. |
+| `weights` | `str` | `"default"` | Official weight variant for the selected model/task. Do not combine a non-default value with a checkpoint path. |
+| `backend` | `str` | `"torch"` | `"torch"` (PyTorch, CPU/CUDA) or `"openvino"` (OpenVINO Runtime, CPU/Intel iGPU/Intel NPU). Changes what `device` means — see below. |
+| `device`  | `str \| int \| None` | `None` | For `backend="torch"`: a PyTorch device selector (`"cuda"`, `"cpu"`, `"cuda:N"`); omit it to auto-select `"cuda:0"` when available, otherwise `"cpu"`. For `backend="openvino"`: an OpenVINO device string (`"CPU"`, `"GPU"` for Intel integrated GPU, `"NPU"`), or `"auto"`/omit to prefer NPU, then GPU, then CPU. |
 | `verbose` | `bool`| `True`  | Print load summary |
 
-If you pass an explicit device string, it is used as-is after normalization. Omitting `device` gives the Ultralytics-style smart default.
+If you pass an explicit device string, it is used as-is after normalization. Omitting `device` selects the best available device, as described above.
+
+`DFINE(...)` remains available for existing code and D-FINE-family model names,
+but new code should prefer `NITID(...)`.
+
+### Intel NPU / integrated GPU inference (OpenVINO backend)
+
+```python
+from nitid import NITID
+
+model = NITID("model1s", backend="openvino", device="NPU")   # Intel NPU
+model = NITID("model1s", backend="openvino", device="GPU")   # Intel integrated GPU
+model = NITID("model1s", backend="openvino", device="AUTO")  # prefer NPU, then GPU, then CPU
+results = model.predict("image.jpg", conf=0.5)
+```
+
+Requires the OpenVINO extra: `uv sync --extra openvino`. Under the hood, the
+deployed model is traced to a raw (non-postprocessed) OpenVINO IR and compiled
+for the requested device the first time `predict()`/`track()` is called at a
+given `imgsz`; the compiled model is cached per `imgsz` on the instance, so
+only the first call at a new `imgsz` pays the compile cost. As with the torch
+backend, `imgsz` must match the checkpoint's `eval_spatial_size` (usually
+`640`) — the decoder's anchors are static for a given spatial size.
+
+`backend="openvino"` is inference-only: `train()` and `val()` raise a clear
+error, and every other method (`export()`, `info()`) is unaffected by it —
+they keep running on PyTorch/CPU regardless of which backend `predict()`
+uses. Requesting a `device` OpenVINO doesn't report as available (check
+`dfine.nn.openvino_runtime.list_openvino_devices()`) raises a `ValueError`
+naming what's actually available, instead of an unexplained backend error.
 
 ---
 
@@ -91,16 +121,7 @@ results = model.predict(
     save=False,       # save annotated outputs to project/name
     project=None,     # defaults to runs/detect or runs/segment
     name="exp",
-    backend="opencv", # or "gstreamer" for video/live sources
-    gst_pipeline=None, # optional explicit GStreamer pipeline
-    reconnect=False,  # retry a live GStreamer source after failure
-    reconnect_initial_delay=1.0,
-    reconnect_max_delay=30.0,
-    reconnect_attempts=None,
-    rtsp_latency=200,
-    rtsp_transport="tcp",
-    hardware_profile=None, # software, vaapi, v4l2, nvidia, or jetson
-    rtsp_username=None,
+    rtsp_username=None, # credentials for an rtsp:// or rtsps:// source
     rtsp_password=None, # Python only; CLI reads passwords from an environment variable
     iou=0.85,          # IoU threshold for TTA NMS
     sink=None,         # optional FrameSink receiving annotated frames
@@ -109,6 +130,10 @@ results = model.predict(
 ```
 
 Returns `list[Results]` (or a generator when `stream=True`).
+
+`predict()` preserves the trainable model. Internally, nitid creates and caches
+a separate deployed inference copy, so workflows such as `predict()` → `train()`
+continue training the original full architecture.
 
 Semantic prediction uses per-pixel argmax, so `conf` and `mask_threshold` do
 not alter its output. `classes` filtering is rejected because removing dense
@@ -154,7 +179,7 @@ playback stays close to the original duration.
 r = results[0]
 r.plot()            # → HWC BGR ndarray with boxes drawn
 r.save("out.jpg")   # write plotted image to disk
-r.show()            # display in a window (blocks until key press)
+r.show()            # display in a window or notebook; RuntimeError if no display
 r.to_json()         # → list[dict] with box/score/class per detection
 r.pandas()          # → pandas.DataFrame with xyxy/conf/class/name columns
 r.to_df()           # → same DataFrame as r.pandas()
@@ -289,15 +314,6 @@ results = model.track(
     save_dir=None,
     exist_ok=False,
     verbose=True,
-    backend="opencv",
-    gst_pipeline=None,
-    reconnect=False,
-    reconnect_initial_delay=1.0,
-    reconnect_max_delay=30.0,
-    reconnect_attempts=None,
-    rtsp_latency=200,
-    rtsp_transport="tcp",
-    hardware_profile=None,
     rtsp_username=None,
     rtsp_password=None, # Python only; CLI uses rtsp_password_env
     iou=0.85,
@@ -418,8 +434,8 @@ Tracker state belongs to one `model.track()` invocation. It resets when:
 
 - a new `model.track()` call starts;
 - the source ID changes, such as when a source list advances to another video;
-- `FrameMetadata.discontinuity` is true, allowing reconnecting stream sources
-  to prevent identities from leaking across a connection gap.
+- `FrameMetadata.discontinuity` is true, which a custom `FrameSource` can set
+  to prevent identities from leaking across a gap in its frames.
 
 Passing a custom `FrameSink` through `sink=` writes annotated tracked frames
 and closes the sink when iteration finishes or the generator is closed.
@@ -429,13 +445,7 @@ and closes the sink when iteration finishes or the generator is closed.
 The public media types can be imported directly:
 
 ```python
-from dfine import (
-    Frame,
-    FrameMetadata,
-    FrameSink,
-    FrameSource,
-    GStreamerVideoSink,
-)
+from nitid import Frame, FrameMetadata, FrameSink, FrameSource
 ```
 
 A `FrameSource` yields ordered BGR frames with stable metadata. Both
@@ -443,37 +453,21 @@ A `FrameSource` yields ordered BGR frames with stable metadata. Both
 camera source. A `FrameSink` receives annotated frames through `sink=`. Sources
 and sinks have explicit `close()` methods and support context-manager use.
 
-`GStreamerFrameSource` is the built-in accelerated/live-stream implementation:
+Video files, webcams, and RTSP/HTTP streams are read through OpenCV's default
+FFmpeg backend. For an authenticated RTSP camera, pass `rtsp_username=` and
+`rtsp_password=` instead of embedding them in the URL: nitid percent-encodes
+them into the URL it opens, while `Results`, frame metadata, and `args.yaml`
+keep the credential-free source you passed.
+
+`save=True` writes annotated video with OpenCV's `VideoWriter`. To send
+annotated frames anywhere else, implement a `FrameSink`:
 
 ```python
-from dfine import GStreamerFrameSource
+class Forwarder(FrameSink):
+    def write(self, frame: Frame) -> None:
+        publish(frame.image, frame.metadata.timestamp)
 
-source = GStreamerFrameSource(
-    "rtsp://camera/live",
-    reconnect=True,
-    reconnect_initial_delay=1,
-    reconnect_max_delay=30,
-)
-for result in model.track(source, stream=True):
-    ...
-```
-
-Alternatively, pass the same settings directly to `predict()` or `track()`
-using `backend="gstreamer"`. See [GStreamer and RTSP](gstreamer.md).
-
-Use `GStreamerVideoSink` to send annotated results to a file, segmented files,
-an RTSP publishing endpoint, or a custom appsrc pipeline. The sink opens on its
-first frame, so width, height, and source FPS do not need to be known upfront:
-
-```python
-sink = GStreamerVideoSink("runs/segments/camera", segment_duration=60)
-for result in model.track("video.mp4", stream=True, sink=sink):
-    ...
-```
-
-```python
-sink = GStreamerVideoSink("rtsp://media-server/nitid")
-for result in model.track("rtsp://camera/input", stream=True, sink=sink):
+for result in model.track("video.mp4", stream=True, sink=Forwarder()):
     ...
 ```
 
@@ -481,53 +475,16 @@ The predictor sends `result.plot()` to the sink after tracking, so output
 frames contain persistent IDs. The sink is closed when inference finishes or
 when the streaming generator is explicitly closed.
 
-Set `hardware_profile=` on `GStreamerVideoSink` to select a named encoder. The
-input `hardware_profile=` argument and the sink profile are independent because
-decode and encode support may differ on the same host. Use
-`inspect_gstreamer_capabilities()` or `dfine gstreamer-info` before deployment.
-
-#### ONVIF camera discovery
-
-```python
-from dfine import ONVIFCamera, discover_onvif_devices
-
-devices = discover_onvif_devices(timeout=3, interface=None)
-camera = ONVIFCamera(
-    devices[0].service_url,
-    username="operator",
-    password="secret",
-    timeout=5,
-    verify_ssl=True,
-    time_offset=0,
-)
-```
-
-`discover_onvif_devices()` returns `list[ONVIFDevice]`. Each device exposes
-`endpoint_reference`, `xaddrs`, `scopes`, `types`, and a preferred
-`service_url`.
-
-```python
-profiles = camera.get_profiles()
-profile = camera.select_profile("Main Stream")  # token or name
-uri = camera.get_stream_uri(profile)            # credentials are not inserted
-source = camera.gstreamer_source(profile, hardware_profile="vaapi")
-```
-
-`ONVIFMediaProfile` contains `token`, `name`, `encoding`, `width`, `height`,
-`frame_rate`, and the optional `(width, height)` `resolution` property.
-`gstreamer_source()` returns a `GStreamerFrameSource`, defaults to reconnection,
-and passes credentials as source properties rather than putting secrets in the
-URI. See [ONVIF cameras](onvif.md) for networking and authentication details.
-
 ---
 
 ### `train()`
 
-Fine-tune on a custom COCO-format dataset. See [fine_tuning.md](fine_tuning.md).
+Fine-tune on a custom dataset. See [fine_tuning.md](fine_tuning.md).
 
 ```python
 metrics = model.train(
     data="configs/datasets/my_dataset.yml",
+    recipe="default",    # default task-native training, or "deim" for detection
     epochs=50,
     imgsz=640,
     batch=16,
@@ -563,7 +520,9 @@ Training controls added to the public API:
 
 | Argument | Type / default | Meaning |
 |---|---|---|
-| `batch` | `int = 16` | Explicit positive batch size. |
+| `recipe` | `str = "default"` | Training recipe. Use `"default"` for the task-native path or `"deim"` for detection-only DEIM training. |
+| `batch` | recipe/task dependent | Explicit positive batch size. |
+| `epochs`, `lr0`, `lrf` | recipe/task dependent | Omitted detection values follow the selected recipe and model size. Explicit values override the recipe. |
 | `optimizer` | `str = "AdamW"` | Auto, Adam, AdamW, SGD, RAdam, NAdam, or RMSprop; Auto predictably selects AdamW. |
 | `momentum` | `float = 0.9` | SGD momentum or Adam-family beta1. |
 | `weight_decay` | `float = 1e-4` | Non-bias weight decay. |
@@ -584,13 +543,13 @@ Training controls added to the public API:
 | `fraction` | `float = 1.0` | Deterministically use a fraction in `(0, 1]`. |
 | `accumulate` | `int = 1` | Batches accumulated per optimizer step. |
 | `multi_scale` | `bool = False` | Random per-batch resizing around `imgsz`. |
-| `augment` | `bool = True` | Enable deterministic box-aware training transforms. |
+| `augment` | `bool = True` | Enable recipe-aware box transforms for detection and task-native transforms for other tasks. |
 | `fliplr` | `float = 0.5` | Horizontal-flip probability. |
 | `scale` | `float = 0.5` | Random isotropic scale gain. |
 | `translate` | `float = 0.1` | Random translation gain. |
 | `crop` | `float = 0.0` | Crop probability and maximum edge fraction. |
 | `hsv_h`, `hsv_s`, `hsv_v` | `0.015`, `0.7`, `0.4` | Hue, saturation, and brightness jitter gains. |
-| `mosaic`, `mixup` | `float = 0.0` | Experimental probabilities; disabled pending positive D-FINE benchmarks. |
+| `mosaic`, `mixup` | `float = 0.0` (`mosaic=0.5` in DEIM when omitted) | Detection probabilities. `recipe="deim"` also enables recipe-controlled batch MixUp. Not supported for semantic segmentation. |
 | `close_mosaic` | `int = 10` | Turn mosaic off for the final N epochs. |
 | `time` | `float \| None = None` | Training duration in hours; when set, it overrides `epochs`. |
 | `save_dir` | `str \| Path \| None = None` | Exact requested run directory. |
@@ -645,10 +604,16 @@ model.export(format="torchscript") # → dfine_640.torchscript
 model.export(format="tensorrt")    # → dfine_640.engine  (requires tensorrt installation)
 ```
 
-Semantic ONNX exports have one output named `semantic_logits` with shape
-`[B, C, H, W]`. Apply softmax and argmax in the consuming runtime. Semantic
-export currently supports `format="onnx"`; the other formats remain available
-for detection and instance segmentation.
+```python
+model.export(format="openvino", postprocess=False)  # raw pred_logits/pred_boxes
+```
+
+`export()` uses the same deployed-copy path as inference and does not mutate the
+trainable model. Repeated exports reuse the valid deployed copy when possible;
+training or loading different weights invalidates that cache automatically.
+
+Semantic ONNX/OpenVINO exports have one output named `semantic_logits` with
+shape `[B, C, H, W]`. Apply softmax and argmax in the consuming runtime.
 
 | Argument    | Default  | Description |
 |-------------|----------|-------------|
@@ -659,6 +624,7 @@ for detection and instance segmentation.
 | `simplify`  | `True`   | Simplify the intermediate ONNX graph (ONNX and OpenVINO) |
 | `opset`     | 17       | ONNX opset version (ONNX and OpenVINO) |
 | `half`      | `False`  | FP16 precision/weight compression (OpenVINO and TensorRT) |
+| `postprocess` | `True` | Bake the postprocessor into the graph; `False` exports raw decoder outputs (ONNX, OpenVINO, and TensorRT) |
 | `device`    | `None`   | Override export device |
 | `verbose`   | `True`   | Print export progress |
 
@@ -670,9 +636,13 @@ for detection and instance segmentation.
 model.names   # {0: "person", 1: "bicycle", ...}  — class index → name
 model.device  # "cpu" or "cuda:0"                 — device the model lives on
 model.task    # "detect", "segment", or "semantic"
+model.nitid_model  # "model1s"                    — public model name (NITID only)
+model.size         # "s"                          — model size suffix (NITID only)
 ```
 
-`names` is the class mapping embedded in the checkpoint.
+`names` is the class mapping embedded in the checkpoint. For a model loaded from
+a checkpoint path, `nitid_model` and `size` are inferred from the checkpoint's
+architecture, and are `None` if it matches no supported size.
 
 ---
 
@@ -702,13 +672,13 @@ the rare case profiling raises an exception.
 | Situation | Exception |
 |-----------|-----------|
 | Checkpoint file not found | `FileNotFoundError` |
-| File exists but has no embedded config (raw D-FINE .pth) | `KeyError` — run `tools/convert_checkpoint.py` first |
+| File exists but has no embedded config | `KeyError`; use a supported model name, a nitid training checkpoint, or the maintainer conversion tool |
 | `export(format=…)` with unsupported format | `ValueError` |
 | `train(optimizer=…)` with unknown name | `ValueError` |
 
 ```python
 try:
-    model = DFINE("my_model.pth")
+    model = NITID("my_model.pth", task="detect")
 except FileNotFoundError:
     print("Checkpoint not found — check the path")
 ```

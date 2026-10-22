@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import tempfile
 from dataclasses import dataclass
+from importlib.resources import as_file
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
 import torch
 
+from dfine.data import COCO_NAMES
 from dfine.nn.configs import make_model_config
 from dfine.tasks import normalize_task
-from tools.convert_checkpoint import convert as convert_checkpoint
+from nitid.convert_checkpoint import convert as convert_checkpoint
 
-_ROOT = Path(__file__).parents[2]
 _RELEASE_ROOT = "https://github.com/Peterande/storage/releases/download/dfinev1.0"
 _SEGMENT_RELEASE_ROOT = "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/main"
 
@@ -28,6 +30,7 @@ class ModelAsset:
     weights: str
     url: str
     filename: str
+    sha256: str | None = None
 
     @property
     def name(self) -> str:
@@ -203,6 +206,21 @@ def get_model_asset(
     return variants[weights_key]
 
 
+def _verify_sha256(path: Path, expected: str | None) -> None:
+    if expected is None:
+        return
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    digest = hasher.hexdigest()
+    if digest != expected:
+        raise RuntimeError(
+            f"Checksum mismatch for downloaded checkpoint {path.name}: "
+            f"expected {expected}, got {digest}"
+        )
+
+
 def resolve_output_path(asset: ModelAsset, output: str | Path | None = None) -> Path:
     """Resolve output file path from a file path, directory path, or None."""
     if output is None:
@@ -230,17 +248,17 @@ def download_model(
         print(f"{out_path} already exists. Use force=true to overwrite.")
         return out_path
 
-    names = _ROOT / "configs" / "datasets" / "coco.yml"
-    if not names.exists():
-        raise FileNotFoundError(f"Class names file not found: {names}")
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     raw_filename = Path(urlparse(asset.url).path).name
-    with tempfile.TemporaryDirectory(prefix="nitid-download-") as tmp_dir:
+    with (
+        as_file(COCO_NAMES) as names,
+        tempfile.TemporaryDirectory(prefix="nitid-download-") as tmp_dir,
+    ):
         raw_path = Path(tmp_dir) / raw_filename
         print(f"Downloading {asset.model} weights={asset.weights} from {asset.url}")
         urlretrieve(asset.url, raw_path)
+        _verify_sha256(raw_path, asset.sha256)
         print(f"Converting to nitid checkpoint: {out_path}")
         if asset.task == "semantic":
             _wrap_semantic_initialization(raw_path, asset, names, out_path)

@@ -2,34 +2,34 @@
 
 This page is the canonical quickstart for nitid. It covers the shortest path to
 first inference, the common train/val/export workflow, and the main differences
-for users coming from raw D-FINE or Ultralytics YOLO.
+for users coming from a YOLO codebase.
 
 ## Installation
 
 ```bash
-git clone https://github.com/Vaelsys/nitid.git && cd nitid
-uv sync --extra train
+pip install "nitid[train]"
 ```
 
 Add extras only when you need them:
 
 ```bash
-uv sync --extra dev   # for developement
-uv sync --extra web     # web application
-uv sync --extra openvino # OpenVINO IR export and runtime
-uv sync --extra track    # ByteTrack, BoT-SORT, and OC-SORT tracking
+pip install "nitid[track]"     # ByteTrack, BoT-SORT, and OC-SORT tracking
+pip install "nitid[openvino]"  # OpenVINO IR export and runtime
 ```
+
+Working on nitid itself? That uses a source
+checkout with `uv` — see [Development](https://github.com/Nitidio/nitid#development)
+in the README.
 
 ## First Run
 
-Create a model using any official D-FINE model name. nitid will automatically
+Create a model using a supported nitid model name. nitid will automatically
 download, wrap, and load the corresponding checkpoint on first use.
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-model = DFINE("dfine_s")
-# Default: Objects365 → COCO. Use weights="coco" for COCO-only weights.
+model = NITID("model1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -40,7 +40,7 @@ rescaling is needed.
 For instance segmentation, select the task when constructing the model:
 
 ```python
-model = DFINE("dfine_s", task="segment")
+model = NITID("model1s", task="segment")
 result = model.predict("image.jpg", conf=0.5)[0]
 
 boxes = result.boxes.xyxy
@@ -49,14 +49,21 @@ polygons = result.masks.xyn     # normalized polygons
 result.save("segmented.jpg")
 ```
 
-Segmentation defaults to the official COCO-pretrained mask weights. Detection
-defaults to Objects365→COCO for S/M/L/X and supports `weights="coco"` as well.
+Segmentation defaults to the official COCO-pretrained mask weights.
 
-For dense semantic segmentation, load a trained semantic checkpoint and read
-the original-resolution class map from `result.semantic.mask`:
+The same street frame with `model1s` and `conf=0.5`, `task="detect"` on the
+left and `task="segment"` on the right:
+
+![Object detection and instance segmentation with model1s](assets/demo/street.jpg)
+
+For dense semantic segmentation, read the original-resolution class map from
+`result.semantic.mask`. There are no pretrained semantic weights yet:
+`NITID("model1s", task="semantic")` initializes the shared features from the COCO
+instance-segmentation checkpoint and is meant for [fine-tuning](fine_tuning.md).
+Predict with your fine-tuned checkpoint:
 
 ```python
-semantic = DFINE("semantic_best.pth", task="semantic")
+semantic = NITID("semantic_best.pth", task="semantic")
 result = semantic.predict("image.jpg", save=True, return_probs=True)[0]
 
 class_map = result.semantic.mask       # int64 [H, W]
@@ -72,15 +79,15 @@ run's `masks/` directory.
 Use the same model object for inference, training, validation, and export:
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-model = DFINE("dfine_s")
+model = NITID("model1s", task="detect")
 
 # Inference
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 
-# Tracking (requires: uv sync --extra track)
+# Tracking (requires: pip install "nitid[track]")
 for result in model.track("video.mp4", conf=0.5, stream=True, save=True):
     track_ids = result.boxes.id
 
@@ -91,6 +98,13 @@ model.train(
     batch=8,
     lr0=1e-4,
     optimizer="AdamW",
+)
+
+# Detection-only DEIM recipe.
+model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    recipe="deim",
 )
 
 # Validation
@@ -123,82 +137,39 @@ objects with persistent IDs in `result.boxes.id`. With `save=True`, the
 annotated video defaults to `runs/track/exp/video.mp4`. Prefer `stream=True`
 for video and live sources so results are not retained in memory.
 
-For a live RTSP camera, select GStreamer explicitly and enable reconnection:
+Live RTSP and HTTP cameras are read through OpenCV's default FFmpeg backend.
+Pass credentials separately rather than in the URL; the password stays out of
+results and saved run metadata:
 
 ```python
+import os
+
 for result in model.track(
     "rtsp://camera/live",
-    backend="gstreamer",
-    reconnect=True,
+    rtsp_username="viewer",
+    rtsp_password=os.environ["CAMERA_PASSWORD"],
     conf=0.5,
     stream=True,
 ):
     track_ids = result.boxes.id
 ```
 
-This requires an OpenCV build compiled with GStreamer. See
-[GStreamer and RTSP](gstreamer.md) for verification and pipeline examples.
+See [authenticated RTSP cameras](cli.md#authenticated-rtsp-cameras) for the
+CLI equivalent.
 
-Write annotated one-minute segments from the CLI:
+## Working with checkpoints
 
-```bash
-uv run dfine track model=dfine_s source=video.mp4 \
-    output=runs/segments segment_duration=60 conf=0.5
-```
-
-Discover an ONVIF camera, select a media profile, and hand it directly to the
-tracking pipeline:
+Official model names such as `model1s` with `task="detect"`, `task="segment"`,
+or `task="semantic"` download the matching supported checkpoint automatically. Training
+runs save self-contained `.pth` files with the architecture config and class
+names embedded, so a saved checkpoint can be moved and loaded directly:
 
 ```python
-from dfine import DFINE, ONVIFCamera, discover_onvif_devices
-
-device = discover_onvif_devices(timeout=3)[0]
-camera = ONVIFCamera(device.service_url, username="operator", password="secret")
-source = camera.gstreamer_source("Main Stream", hardware_profile="vaapi")
-
-model = DFINE("dfine_s")
-for result in model.track(source, stream=True, conf=0.5):
-    ...
+model = NITID("runs/train/exp/best.pth", task="detect")
 ```
 
-See [ONVIF cameras](onvif.md) for CLI credential handling, network discovery,
-profile selection, and clock troubleshooting.
-
-## Converting a raw checkpoint
-
-If you already have a raw D-FINE checkpoint, nitid wraps it in a self-contained
-`.pth` that embeds the model config and class names, so you only ever deal with
-one file.
-
-### Convert a checkpoint
-
-```bash
-uv run python tools/convert_checkpoint.py \
-    --weights dfine_l.pth \
-    --model   dfine_l \
-    --task    detect \
-    --names   configs/datasets/coco.yml \
-    --output  dfine_l_wrapped.pth
-```
-
-- `--model` selects the integrated N/S/M/L/X architecture.
-- `--task` selects detection or instance segmentation.
-- `--names` must point to a YAML file with a `names:` mapping.
-- EMA weights are used automatically when present, matching D-FINE's own inference scripts.
-
-Load the wrapped checkpoint directly afterward:
-
-```python
-from dfine import DFINE
-
-model = DFINE("dfine_l_wrapped.pth", task="detect")
-results = model.predict("image.jpg", conf=0.5)
-results[0].save("out.jpg")
-```
-
-The interface is intentionally close to D-FINE's own inference scripts, but with
-pre/post-processing handled for you. `results[0].boxes.xyxy` is in absolute pixel
-coordinates; no manual rescaling needed.
+Low-level raw checkpoint conversion still exists for maintainers and unusual
+research workflows, but it is not part of the normal quickstart path.
 
 You can also export detections directly into tabular data for analysis:
 
@@ -224,17 +195,28 @@ metrics = model.train(
 # final summary lives at the top level; per-epoch rows are in metrics["history"]
 ```
 
+For a complete runnable example, train on COCO-mini:
+
+```bash
+uv run python examples/train_coco_mini.py --task detect
+uv run python examples/train_coco_mini.py --task segment
+```
+
+The example uses `configs/datasets/coco-mini.yml`, which downloads a small
+COCO-format dataset with redistributable image licences on first use. The
+[training notebook](https://github.com/Nitidio/nitid/blob/main/examples/notebooks/02_training.ipynb) runs the same dataset through training, validation,
+prediction and export, and opens in Colab.
+
 Epoch checkpoints are saved as wrapped `.pth` files and can be loaded directly with
-`DFINE("epoch50.pth")` — config and names travel with the weights.
+`NITID("epoch50.pth", task="detect")` — config and names travel with the weights.
 
 ---
 
-## Coming from Ultralytics
+## Coming from YOLO
 
-nitid mirrors the `ultralytics.YOLO` interface closely, so most migrations are
-a one-line import swap.
+nitid has a simple and familiar interface, so most migrations are a one-line import swap.
 
-### Drop-in replacement
+### Loading a model
 
 ```python
 # Before
@@ -242,8 +224,8 @@ from ultralytics import YOLO
 model = YOLO("yolo11n.pt")
 
 # After
-from dfine import DFINE
-model = DFINE("dfine_l")
+from nitid import NITID
+model = NITID("model1s", task="detect")
 ```
 
 ### Results access
@@ -275,6 +257,7 @@ for r in model.track("video.mp4", stream=True, conf=0.5):
     track_ids = r.boxes.id
 
 model.train(data="my_dataset.yml", epochs=50, batch=16)
+model.train(data="my_dataset.yml", epochs=50, recipe="deim")  # detection only
 model.train(data="my_dataset.yml", epochs=50, amp=True, ema=True)
 
 metrics = model.val(data="my_dataset.yml")
@@ -294,10 +277,10 @@ model.export(format="tensorrt", half=True)
 ### Capture a Python API bug report
 
 ```python
-from dfine import DFINE, bugreport
+from nitid import NITID, bugreport
 
 with bugreport("prediction") as report:
-    model = DFINE("dfine_s")
+    model = NITID("model1s", task="detect")
     results = model.predict("image.jpg")
 
 print(report.path)
@@ -309,14 +292,14 @@ re-raised.
 
 ### Key differences from Ultralytics YOLO
 
-| Feature | Ultralytics YOLO | nitid DFINE |
+| Feature | Ultralytics YOLO | nitid |
 |---------|-----------------|-------------|
 | Checkpoint format | `.pt` (architecture inferred from filename) | `.pth` (config embedded inside) |
-| Raw weights | Download directly | Downloaded and wrapped automatically |
+| Official weights | Download directly | Downloaded and prepared automatically |
 | `model.info()` | Returns param/FLOP stats | Supported — params, GFLOPs, size on disk |
 | TensorRT export | Supported | Supported (see [export.md](export.md)) |
 | AMP / EMA training | Supported | Supported (`amp=True`, `ema=True`) |
-| `model.task` | `"detect"`, `"segment"`, ... | `"detect"` or `"segment"` |
+| `model.task` | `"detect"`, `"segment"`, ... | `"detect"`, `"segment"`, or `"semantic"` |
 
 ## CLI
 
@@ -325,10 +308,10 @@ Use the CLI when you want to run nitid from the terminal instead of Python.
 Run prediction and save the annotated image:
 
 ```bash
-uv run dfine predict model=dfine_s source=image.jpg save=true conf=0.5
+nitid predict model=model1s task=detect source=image.jpg save=true conf=0.5
 ```
 
-This automatically downloads and wraps `dfine_s` on first use, runs detection
+This automatically downloads the matching checkpoint on first use, runs detection
 on `image.jpg`, and saves the annotated image to:
 
 ```text
@@ -338,8 +321,8 @@ runs/detect/exp/image.jpg
 Choose your own output folder name:
 
 ```bash
-uv run dfine predict \
-    model=dfine_s \
+nitid predict \
+    model=model1s task=detect \
     source=image.jpg \
     save=true \
     project=runs/detect \
@@ -355,8 +338,8 @@ runs/detect/street-test/image.jpg
 Track a video and save annotations with persistent IDs:
 
 ```bash
-uv sync --extra track
-uv run dfine track model=dfine_s source=video.mp4 conf=0.5 save=true
+pip install "nitid[track]"
+nitid track model=model1s task=detect source=video.mp4 conf=0.5 save=true
 ```
 
 The tracked video defaults to `runs/track/exp/video.mp4`.
@@ -364,20 +347,21 @@ The tracked video defaults to `runs/track/exp/video.mp4`.
 Other common CLI commands:
 
 ```bash
-uv run dfine train model=dfine_l data=my_dataset.yml epochs=50
-uv run dfine val model=dfine_l data=my_dataset.yml
-uv run dfine export model=dfine_l format=onnx
+nitid train model=model1l task=detect data=my_dataset.yml epochs=50
+nitid train model=model1l task=detect data=my_dataset.yml epochs=50 recipe=deim
+nitid val model=model1l task=detect data=my_dataset.yml
+nitid export model=model1l task=detect format=onnx
 ```
 
-- `train`: fine-tune a model on a COCO-format dataset YAML.
-- `val`: run COCO-style evaluation on the validation or test split.
-- `export`: convert a wrapped checkpoint to ONNX, OpenVINO IR, TorchScript, or TensorRT.
+- `train`: fine-tune a model on a supported dataset YAML.
+- `val`: run task-appropriate evaluation on the validation or test split.
+- `export`: create an ONNX, OpenVINO IR, TorchScript, or TensorRT deployment artifact where supported by the selected task.
 
 By default, `train` writes wrapped epoch checkpoints to `runs/train/exp/`, while `val` prints metrics to the terminal without creating a run directory.
 
 Show all prediction or tracking options:
 
 ```bash
-uv run dfine predict --help
-uv run dfine track --help
+nitid predict --help
+nitid track --help
 ```

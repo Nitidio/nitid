@@ -15,6 +15,7 @@ from dfine.nn.native_build import (
     build_native_model,
     build_native_model_from_config,
 )
+from dfine.training_recipes import apply_training_recipe_to_config, resolve_training_recipe
 
 
 @pytest.mark.parametrize("model_size", ["n", "s", "m", "l", "x"])
@@ -81,6 +82,34 @@ def test_task_selects_mask_losses_without_mutating_shared_config():
     assert "masks" not in detection.losses
     assert "masks" in segmentation.losses
     assert "masks" not in detection_again.losses
+
+
+def test_deim_detection_config_builds_mal_criterion():
+    from dfine.nn.criterion import build_criterion
+
+    config = make_model_config("dfine_n", task="detect", num_classes=2)
+    recipe = resolve_training_recipe("deim", task="detect")
+    config = apply_training_recipe_to_config(config, recipe=recipe)
+    criterion = build_criterion(config)
+    outputs = {
+        "pred_logits": torch.tensor([[[0.2, -0.1], [-0.4, 0.7]]], requires_grad=True),
+        "pred_boxes": torch.tensor(
+            [[[0.5, 0.5, 0.25, 0.25], [0.25, 0.25, 0.2, 0.2]]],
+            requires_grad=True,
+        ),
+    }
+    targets = [
+        {
+            "labels": torch.tensor([1]),
+            "boxes": torch.tensor([[0.25, 0.25, 0.2, 0.2]]),
+        }
+    ]
+
+    losses = criterion(outputs, targets)
+
+    assert "loss_mal" in losses
+    assert "loss_vfl" not in losses
+    assert torch.isfinite(losses["loss_mal"])
 
 
 def test_semantic_criterion_is_finite_weighted_and_differentiable():

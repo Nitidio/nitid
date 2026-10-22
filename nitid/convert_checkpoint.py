@@ -1,0 +1,162 @@
+"""
+convert_checkpoint.py
+
+Migrates a raw D-FINE .pth (weights only) into the dfine-wrap format
+(weights + embedded config + class names) so users only need one file.
+
+Usage:
+    python -m nitid.convert_checkpoint \
+        --weights dfine_l.pth \
+        --model   model1l \
+        --task    detect \
+        --output  model1l_detect.pth
+
+``--model`` takes the public ``model1{n,s,m,l,x}`` names or their ``dfine_*``
+equivalents. ``--names`` defaults to the COCO class names bundled with the package.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+import torch
+import yaml
+
+
+def _load_config(file_path: str | Path) -> dict:
+    """
+    Load a D-FINE YAML config, recursively resolving ``__include__`` directives.
+    Includes inherited YAML files recursively and merges nested mappings.
+    """
+    file_path = Path(file_path).resolve()
+    with open(file_path) as f:
+        file_cfg = yaml.safe_load(f) or {}
+
+    merged: dict = {}
+    for base_yaml in file_cfg.pop("__include__", []):
+        base_path = Path(base_yaml)
+        if not base_path.is_absolute():
+            base_path = file_path.parent / base_yaml
+        _merge(merged, _load_config(base_path))
+
+    _merge(merged, file_cfg)
+    return merged
+
+
+def _merge(dst: dict, src: dict) -> dict:
+    for k, v in src.items():
+        if k in dst and isinstance(dst[k], dict) and isinstance(v, dict):
+            _merge(dst[k], v)
+        else:
+            dst[k] = copy.deepcopy(v)
+    return dst
+
+
+def convert(
+    weights: str,
+    config: str | Path | Mapping[str, Any],
+    names_file: str,
+    output: str,
+) -> None:
+    print(f"Loading weights from {weights}")
+    ckpt = torch.load(weights, map_location="cpu", weights_only=False)
+
+    # Raw D-FINE checkpoints store EMA weights at ckpt["ema"]["module"] when present
+    # (same priority as D-FINE's own inference scripts).  Fall back to ckpt["model"].
+    if "ema" in ckpt:
+        state_dict = ckpt["ema"]["module"]
+        print("Using EMA weights (ckpt['ema']['module'])")
+    else:
+        state_dict = ckpt.get("model", ckpt)
+        print("Using model weights (ckpt['model'])")
+
+    cfg = copy.deepcopy(dict(config)) if isinstance(config, Mapping) else _load_config(config)
+    from dfine.tasks import normalize_task
+    from dfine.utils.checkpoint import CHECKPOINT_FORMAT_VERSION
+
+    task = normalize_task(str(cfg.get("task", "detect")))
+    cfg["task"] = task
+
+    with open(names_file) as f:
+        names_cfg = yaml.safe_load(f)
+    # Support both {names: [a, b, c]} and {names: {0: a, 1: b}} formats
+    raw_names = names_cfg.get("names", [])
+    if isinstance(raw_names, list):
+        names = {i: n for i, n in enumerate(raw_names)}
+    else:
+        names = {int(k): v for k, v in raw_names.items()}
+
+    out_ckpt = {
+        "format_version": CHECKPOINT_FORMAT_VERSION,
+        "task": task,
+        "model": state_dict,
+        "config": cfg,
+        "names": names,
+        "epoch": ckpt.get("epoch", 0),
+        "metrics": ckpt.get("metrics", {}),
+        "training_state": {},
+    }
+    torch.save(out_ckpt, output)
+    print(f"Saved wrapped checkpoint to {output}  ({len(names)} classes)")
+
+
+def _model_name(value: str) -> str:
+    """Map a public ``model1*`` name to its ``dfine_*`` config; pass other names through."""
+    if not value.lower().startswith("model"):
+        return value
+    from dfine.nitid import parse_nitid_model_name
+
+    try:
+        spec = parse_nitid_model_name(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return f"dfine_{spec.size}"
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    p = argparse.ArgumentParser(description="Convert raw D-FINE checkpoint to dfine-wrap format")
+    p.add_argument("--weights", required=True)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--model",
+        type=_model_name,
+        help="Model config: model1n/s/m/l/x, or the equivalent dfine_n/s/m/l/x",
+        choices=[
+            "dfine_n",
+            "dfine_s",
+            "dfine_m",
+            "dfine_l",
+            "dfine_x",
+        ],
+    )
+    source.add_argument("--config", help="Path to a self-contained YAML config")
+    p.add_argument("--task", choices=["detect", "segment", "semantic"], default="detect")
+    p.add_argument(
+        "--names",
+        help="YAML file with a names mapping (default: the bundled COCO class names)",
+    )
+    p.add_argument("--output", required=True)
+    args = p.parse_args(argv)
+    if args.model:
+        from dfine.nn.configs import make_model_config
+
+        config = make_model_config(args.model, task=args.task)
+    else:
+        config = args.config
+    if args.names:
+        convert(args.weights, config, args.names, args.output)
+        return
+    from importlib.resources import as_file
+
+    from dfine.data import COCO_NAMES
+
+    with as_file(COCO_NAMES) as names:
+        convert(args.weights, config, str(names), args.output)
+
+
+if __name__ == "__main__":
+    main()

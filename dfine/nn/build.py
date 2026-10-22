@@ -22,8 +22,16 @@ def _positive_int(config: Mapping[str, Any], key: str) -> int:
 
 def build_postprocessor(cfg: Mapping[str, Any]) -> nn.Module:
     """Build the native detection postprocessor from checkpoint configuration."""
-    if normalize_task(str(cfg.get("task", "detect"))) == "semantic":
+    task = normalize_task(str(cfg.get("task", "detect")))
+    if task == "semantic":
         return SemanticPostProcessor().eval()
+
+    decoder_value = cfg.get("DFINETransformer")
+    if not isinstance(decoder_value, Mapping):
+        raise ValueError("D-FINE config must contain a DFINETransformer mapping")
+    num_queries = _positive_int(decoder_value, "num_queries")
+
+    num_classes = _positive_int(cfg, "num_classes")
     postprocessor_value = cfg.get("DFINEPostProcessor", {})
     if not isinstance(postprocessor_value, Mapping):
         raise ValueError("D-FINE config DFINEPostProcessor must be a mapping")
@@ -33,11 +41,6 @@ def build_postprocessor(cfg: Mapping[str, Any]) -> nn.Module:
     postprocessor_config.setdefault("num_top_queries", 300)
     num_top_queries = _positive_int(postprocessor_config, "num_top_queries")
 
-    decoder_value = cfg.get("DFINETransformer")
-    if not isinstance(decoder_value, Mapping):
-        raise ValueError("D-FINE config DFINETransformer must be a mapping")
-    num_queries = _positive_int(decoder_value, "num_queries")
-    num_classes = _positive_int(cfg, "num_classes")
     if bool(cfg.get("use_focal_loss", True)):
         postprocessor_config["num_top_queries"] = min(num_top_queries, num_queries * num_classes)
 

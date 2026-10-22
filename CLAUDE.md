@@ -4,13 +4,16 @@ This file provides repository guidance to coding agents.
 
 ## Project overview
 
-nitid provides an Ultralytics-style API for D-FINE object detection and instance segmentation. The public entry point is `DFINE`; model construction, losses, and postprocessing are implemented in the `dfine` package.
+nitid provides a unified API for object detection, instance segmentation, and
+semantic segmentation. The public entry point is `NITID` from the `nitid` package;
+model construction, losses, and postprocessing are implemented internally in
+the `dfine` package.
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-detector = DFINE("dfine_s", task="detect")
-segmenter = DFINE("dfine_s", task="segment")
+detector = NITID("model1s", task="detect")
+segmenter = NITID("model1s", task="segment")
 ```
 
 ## Commands
@@ -19,40 +22,46 @@ segmenter = DFINE("dfine_s", task="segment")
 uv sync --extra dev --extra train
 uv run pytest tests/unit
 uv run pytest tests/integration
-uv run ruff check dfine tools tests
-uv run ruff format --check dfine tools tests
-uv run mypy dfine tools
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy dfine nitid tools
 ```
 
 ## Architecture
 
-- `dfine/model.py`: the public `DFINE` class and task/checkpoint validation.
+- `dfine/model.py`: the internal D-FINE model class and task/checkpoint validation.
+- `dfine/nitid.py`: the public `NITID` class and model-name mapping.
 - `dfine/predictor.py`: detection and instance-mask inference.
 - `dfine/trainer.py`: detection and segmentation fine-tuning.
 - `dfine/validator.py`: COCO bounding-box and mask evaluation.
 - `dfine/exporter.py`: ONNX, OpenVINO, TorchScript, and TensorRT export.
 - `dfine/results.py`: public `Results`, `Boxes`, and `Masks` types.
 - `dfine/nn/architecture/`: backbone, encoder, transformer decoder, and mask head.
+- `dfine/nn/openvino_runtime.py`: OpenVINO Runtime inference backend (Intel CPU/iGPU/NPU), used when `DFINE`/`NITID` is constructed with `backend="openvino"`.
 - `dfine/nn/losses/`: matching and detection/mask criteria.
 - `dfine/nn/configs.py`: supported model-size configurations.
 - `dfine/utils/data.py`: COCO and YOLO detection/segmentation datasets.
 
-`DFINE("dfine_s", task="detect")` and `DFINE("dfine_s", task="segment")` resolve separate pretrained registries. Explicit checkpoint paths must contain a self-contained `config`, `model`, and `names`, and their embedded task must match the requested task.
+`NITID("model1s", task="detect")` and `NITID("model1s", task="segment")`
+resolve separate pretrained registries. Explicit checkpoint paths must contain
+a self-contained `config`, `model`, and `names`, and their embedded task must
+match the requested task.
 
 ## Checkpoint conversion
 
 Raw checkpoints can be wrapped without a separate model config:
 
 ```bash
-uv run python tools/convert_checkpoint.py \
+uv run python -m nitid.convert_checkpoint \
     --weights dfine_l.pth \
-    --model dfine_l \
+    --model model1l \
     --task detect \
-    --names configs/datasets/coco.yml \
-    --output dfine_l_wrapped.pth
+    --output model1l_detect.pth
 ```
 
-The converter prefers EMA weights when present. Model weights always come from the checkpoint, and class names come from its `names` mapping.
+`--model` takes the public `model1{n,s,m,l,x}` names or their `dfine_*` equivalents.
+
+The converter prefers EMA weights when present. Model weights always come from the checkpoint, and class names come from `--names` (a YAML file with a `names` mapping), defaulting to the COCO names bundled in `dfine/data/coco_names.yml`.
 
 ## Testing
 

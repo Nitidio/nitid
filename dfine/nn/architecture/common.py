@@ -1,3 +1,5 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+# FrozenBatchNorm2d derived from DETR (Apache-2.0); see THIRD_PARTY_NOTICES.md.
 """
 Copied from RT-DETR (https://github.com/lyuwenyu/RT-DETR)
 Copyright(c) 2023 lyuwenyu. All Rights Reserved.

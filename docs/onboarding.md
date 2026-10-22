@@ -1,15 +1,15 @@
 # Developer Onboarding
 
-Welcome to **nitid** — an Ultralytics-style wrapper for the [D-FINE](https://github.com/Peterande/D-FINE) real-time object detector. This guide is for developers joining the project. The user-facing docs live in the rest of `docs/`; this page covers the architecture decisions you need to understand before touching the code.
+Welcome to **nitid** — a compact, Apache-2.0 library around the [D-FINE](https://github.com/Peterande/D-FINE) family of real-time detectors. This guide is for developers joining the project. The user-facing docs live in the rest of `docs/`; this page covers the architecture decisions you need to understand before touching the code.
 
 ---
 
 ## 1. Get the repo running
 
-Prerequisites: Python 3.10+, [`uv`](https://github.com/astral-sh/uv), Node.js 18+ (only for web frontend).
+Prerequisites: Python 3.10+, [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
-git clone https://github.com/Vaelsys/nitid.git && cd nitid
+git clone https://github.com/Nitidio/nitid.git && cd nitid
 uv sync --extra dev                # installs runtime + pytest, ruff, mypy
 ```
 
@@ -26,27 +26,27 @@ uv run mypy dfine/
 ## 2. Project layout
 
 ```
-dfine/              Public Python package — the only thing users import
-  model.py          DFINE class (single public entry point)
+nitid/              Public Python package — import NITID from here
+  cli.py                  `nitid` CLI entry point (`dfine` is a back-compat alias)
+  convert_checkpoint.py   Maintainer utility for raw upstream checkpoints
+dfine/              Internal implementation and compatibility namespace
+  nitid.py          NITID public class and model-name mapping
+  model.py          D-FINE backend class and checkpoint validation
   predictor.py      Inference worker
   trainer.py        Fine-tuning worker
   validator.py      COCO evaluation worker
   exporter.py       ONNX / OpenVINO / TorchScript / TensorRT export worker
-  results.py        Results + Boxes + Masks return types
-  nn/               Integrated detection/segmentation architecture and losses
+  results.py        Results + Boxes + Masks + SemanticMask return types
+  nn/               Integrated detection, segmentation, and semantic architectures/losses
   utils/            sources.py (LoadSource), plotting, misc helpers
 tools/
-  dfine_cli.py      `dfine` CLI entry point
-  convert_checkpoint.py   Wraps raw D-FINE .pth into nitid format
+  visualize_augmentations.py  Source-checkout maintainer utility
 configs/
   datasets/         coco.yml and example_custom.yml
 tests/
   unit/             Pure Python — no GPU or downloaded checkpoint
   integration/      Use tiny_checkpoint fixture (see §5)
   conftest.py       Session-scoped fixture that builds a tiny model at test time
-web/
-  api/              FastAPI backend (routers, services, schemas, models)
-  frontend/         React 18 + Vite SPA (TypeScript)
 docs/               All documentation lives here
 ```
 
@@ -54,21 +54,34 @@ docs/               All documentation lives here
 
 ## 3. The architecture in one paragraph
 
-`DFINE` in `dfine/model.py` is the only class users touch. It loads a self-contained `.pth` checkpoint and delegates `predict`, `train`, `val`, and `export` to internal workers. Model construction, detection losses, mask losses, and postprocessing live under `dfine/nn/`. The checkpoint's embedded `task` selects either detection or instance segmentation, and an explicitly requested task must match it.
+`NITID` is the recommended class users touch. It accepts supported model names
+or self-contained `.pth` checkpoints and delegates `predict`,
+`track`, `train`, `val`, and `export` to internal workers. Model construction,
+losses, and postprocessing live under `dfine/nn/`. The checkpoint's embedded
+`task` selects detection, instance segmentation, or semantic segmentation; an
+explicitly requested task must match it.
 
 ---
 
 ## 4. Model core
 
-`dfine/nn/native_build.py` is the construction boundary for both tasks. Keep architecture settings in `dfine/nn/configs.py`, route checkpoint construction through `build_model`, and route losses through `build_criterion`. Do not add import-path mutation or runtime source discovery: the installed package must contain everything required to construct a model.
+`dfine/nn/native_build.py` is the construction boundary for supported tasks.
+Keep architecture settings in `dfine/nn/configs.py`, route checkpoint
+construction through `build_model`, and route losses through `build_criterion`.
+Do not add import-path mutation or runtime source discovery: the installed
+package must contain everything required to construct a model.
 
-Detection and segmentation share the backbone, encoder, transformer decoder, boxes, and class logits. `task="segment"` enables the mask head and mask losses. New code must preserve strict state-dict compatibility with published checkpoints.
+Detection and instance segmentation share the backbone, encoder, transformer
+decoder, boxes, and class logits. `task="segment"` enables the mask head and
+mask losses. Semantic segmentation adds a dense decoder on shared features.
+New code must preserve strict state-dict compatibility with published
+checkpoints.
 
 ---
 
 ## 5. Wrapped checkpoint format
 
-nitid does not support raw D-FINE `.pth` files. Every checkpoint must be "wrapped" — a dict with these keys:
+Runtime checkpoints are self-contained dicts with these keys:
 
 | Key | Content |
 |---|---|
@@ -78,7 +91,9 @@ nitid does not support raw D-FINE `.pth` files. Every checkpoint must be "wrappe
 | `epoch` | Last saved epoch |
 | `metrics` | Metrics dict from the epoch |
 
-If you ever load a raw checkpoint and get a `KeyError`, run `tools/convert_checkpoint.py` first. The converter resolves configs and picks EMA weights automatically.
+Official model names perform the download/preparation step automatically. The
+raw-checkpoint conversion tool exists for maintainers and unusual research
+workflows; it should not be part of the normal user path.
 
 **Why self-contained files?** So users never have to track a separate config file. One file = one model. This also means `build_model` forces `HGNetv2.pretrained=False` (weights come from the checkpoint, not ImageNet) and `build_postprocessor` forces `remap_mscoco_category=False` (names come from `checkpoint["names"]`, not a hardcoded COCO mapping).
 
@@ -141,60 +156,39 @@ The 300 queries are D-FINE's fixed-size output head. After postprocessing only t
 
 ---
 
-## 9. Web application (only if you work on `web/`)
+## 9. Getting a real checkpoint (for manual testing)
 
-The web app is fully optional and lives in `web/`. Users who only use the Python/CLI API never touch it.
+The integration tests use synthetic tiny models — they never need to download a
+real checkpoint. For manual testing, prefer official model names:
 
 ```bash
-uv sync --extra web                          # Python deps
-cd web/frontend && npm install               # JS deps
-
-# Two terminals from the project root:
-uv run uvicorn web.api.main:app --workers 1  # API at :8000
-cd web/frontend && npm run dev               # SPA at :5173
+uv run nitid predict model=model1s task=detect source=image.jpg conf=0.5
+uv run nitid predict model=model1s task=segment source=image.jpg conf=0.5
 ```
 
-**Architecture:**
-- `web/api/` — FastAPI routers + SQLAlchemy models + Pydantic schemas. Inference runs as a `BackgroundTask` with its own `SessionLocal()` (not the request session, which closes on response).
-- `web/frontend/` — React 18 + Vite SPA, TypeScript. Talks to the API over HTTP via axios.
-- SQLite at `web/storage/nitid.db` (git-ignored). Created automatically on first start.
-- Model cache: `_model_cache` in `services/inference.py` — a process-level dict keyed by absolute checkpoint path. Avoids reloading 100–200 MB weights on every request.
-
-**Non-obvious constraint:** Always `--workers 1`. DFINE model inference is not thread-safe. Multiple workers would also create separate caches and double memory.
-
-Full REST API reference is at `http://localhost:8000/docs` once the server is running, and in [`web_app.md`](web_app.md).
-
----
-
-## 10. Getting a real checkpoint (for manual testing)
-
-The integration tests use a synthetic tiny model — they never touch a real checkpoint. For manual testing you need a wrapped `.pth`. If you have a raw D-FINE checkpoint:
+If you are maintaining support for a new upstream checkpoint, use the conversion
+tool explicitly:
 
 ```bash
-uv run python tools/convert_checkpoint.py \
-    --weights dfine_l.pth \
-    --model   dfine_l \
+uv run python -m nitid.convert_checkpoint \
+    --weights upstream_checkpoint.pth \
+    --model   model1l \
     --task    detect \
-    --names   configs/datasets/coco.yml \
-    --output  dfine_l_wrapped.pth
+    --output  model1l_detect.pth
 ```
 
-You can then run a quick smoke test:
-
-```bash
-uv run dfine predict model=dfine_l source=image.jpg conf=0.5
-```
+Class names default to the COCO names bundled with the package; pass
+`--names my_dataset.yml` (a YAML file with a `names` mapping) for other datasets.
 
 ---
 
-## 11. Where things can go wrong
+## 10. Where things can go wrong
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `KeyError: 'config'` loading a `.pth` | Raw D-FINE checkpoint | Run `convert_checkpoint.py` |
-| `RuntimeError: shape mismatch` during export | `imgsz` ≠ `eval_spatial_size` | Match `imgsz` to `cfg["eval_spatial_size"]` (default 640) |
+| `KeyError: 'config'` loading a `.pth` | File is not a nitid runtime checkpoint | Use a supported model name, a training checkpoint, or the maintainer conversion tool |
 | `AMP has no effect` warning | Running on CPU with `amp=True` | Expected — silently degrades to FP32 |
-| Explicit task does not match checkpoint | Detection checkpoint opened as segmentation, or conversely | Select a matching model/task pair |
+| Explicit task does not match checkpoint | Checkpoint opened with the wrong task | Select a matching model/task pair |
 
 ---
 
@@ -206,5 +200,4 @@ uv run dfine predict model=dfine_l source=image.jpg conf=0.5
 | [`api_reference.md`](api_reference.md) | Full `DFINE` class API with all parameters |
 | [`fine_tuning.md`](fine_tuning.md) | Dataset format, AMP, EMA, all training parameters |
 | [`export.md`](export.md) | ONNX, TorchScript, TensorRT — options and constraints |
-| [`web_app.md`](web_app.md) | Web app setup, REST API, data model, implementation notes. | 
 | [`macos_docker_setup.md`](macos_docker_setup.md) | Setup docker for linux enviroment in MacOS Apple silicon |

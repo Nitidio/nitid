@@ -410,3 +410,102 @@ def test_boxes_xywhn(dummy_boxes):
 
 def test_boxes_data(dummy_boxes):
     assert dummy_boxes.data.shape == (2, 6)
+
+
+def _fake_imshow_calls(monkeypatch, *, raises: bool) -> list[str]:
+    calls: list[str] = []
+
+    def imshow(title, image):
+        if raises:
+            raise cv2.error("The function is not implemented")
+        calls.append(title)
+
+    monkeypatch.setattr(cv2, "imshow", imshow)
+    monkeypatch.setattr(cv2, "waitKey", lambda delay: -1)
+    monkeypatch.setattr(cv2, "destroyAllWindows", lambda: None)
+    return calls
+
+
+def test_show_uses_opencv_window_when_available(monkeypatch, dummy_result):
+    monkeypatch.setattr("dfine.results._has_display", lambda: True)
+    calls = _fake_imshow_calls(monkeypatch, raises=False)
+    shown = []
+    monkeypatch.setattr(
+        "dfine.results._show_with_matplotlib", lambda image, title: shown.append(title)
+    )
+
+    dummy_result.show()
+
+    assert calls == ["test.jpg"]
+    assert shown == []
+
+
+def test_show_falls_back_to_matplotlib_on_headless_opencv(monkeypatch, dummy_result):
+    monkeypatch.setattr("dfine.results._has_display", lambda: True)
+    _fake_imshow_calls(monkeypatch, raises=True)
+    shown = []
+    monkeypatch.setattr(
+        "dfine.results._show_with_matplotlib", lambda image, title: shown.append(image.shape)
+    )
+
+    dummy_result.show()
+
+    assert shown == [(480, 640, 3)]
+
+
+def test_show_skips_opencv_without_display(monkeypatch, dummy_result):
+    monkeypatch.setattr("dfine.results._has_display", lambda: False)
+    calls = _fake_imshow_calls(monkeypatch, raises=False)
+    shown = []
+    monkeypatch.setattr(
+        "dfine.results._show_with_matplotlib", lambda image, title: shown.append(title)
+    )
+
+    dummy_result.show()
+
+    assert calls == []
+    assert shown == ["test.jpg"]
+
+
+def test_show_raises_clear_error_with_non_interactive_matplotlib(monkeypatch, dummy_result):
+    import matplotlib
+
+    monkeypatch.setattr("dfine.results._has_display", lambda: False)
+    monkeypatch.setattr(matplotlib, "get_backend", lambda: "agg")
+
+    with pytest.raises(RuntimeError, match=r"result\.save\("):
+        dummy_result.show()
+
+
+def test_show_with_matplotlib_converts_bgr_to_rgb(monkeypatch):
+    import matplotlib
+    import matplotlib.pyplot as plt
+
+    from dfine.results import _show_with_matplotlib
+
+    monkeypatch.setattr(matplotlib, "get_backend", lambda: "tkagg")
+    monkeypatch.setattr(plt, "show", lambda: None)
+    image = np.zeros((4, 4, 3), dtype=np.uint8)
+    image[..., 0] = 255  # pure blue in BGR
+
+    _show_with_matplotlib(image, "blue.jpg")
+
+    shown = plt.gca().get_images()[0].get_array()
+    assert shown[0, 0].tolist() == [0, 0, 255]
+    plt.close("all")
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [({}, False), ({"DISPLAY": ":0"}, True), ({"WAYLAND_DISPLAY": "wayland-0"}, True)],
+)
+def test_has_display_on_linux(monkeypatch, env, expected):
+    from dfine import results
+
+    monkeypatch.setattr(results.sys, "platform", "linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    assert results._has_display() is expected

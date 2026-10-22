@@ -3,16 +3,19 @@ requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["dfine*", "tools*", "web*"]
+include = ["dfine*", "nitid*"]
+
+[tool.setuptools.package-data]
+"dfine.data" = ["*.yml"]
 
 [project]
 name = "nitid"
-version = "0.1.0"
-description = "Ultralytics-style D-FINE detection and instance/semantic segmentation"
+version = "0.9.2"
+description = "Object detection, instance segmentation and semantic segmentation, Apache 2.0 code and weights"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.14"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -21,12 +24,13 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     "torch>=2.1",
     "torchvision>=0.16",
-    "opencv-python>=4.8",
+    "opencv-python-headless>=4.8",
     "numpy>=1.24",
     "pandas>=2.0",
     "pillow>=10.0",
@@ -36,7 +40,7 @@ dependencies = [
     "onnx>=1.15",
     "onnxscript>=0.1",
     # 0.6.2 has broken source metadata and no CPython 3.11 wheel.
-    "onnxsim>=0.6.5,<0.7",
+    "onnxsim>=0.6.5,<0.8",
     "tqdm>=4.66",
     "tensorboard>=2.14",
     "scipy>=1.10",        # Hungarian matching during training
@@ -71,30 +75,22 @@ wandb = [
 ]
 
 mlflow = [
-    "mlflow>=2.14,<3",
-]
-
-web = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "python-multipart>=0.0.12",
-    "sqlalchemy>=2.0",
-    "bcrypt>=4.0",
-    "python-jose[cryptography]>=3.3",
-    "pydantic-settings>=2.0",
+    "mlflow>=2.14,<4",
 ]
 
 [project.scripts]
-dfine = "tools.dfine_cli:main"
+nitid = "nitid.cli:main"
+dfine = "nitid.cli:main"
 
 [project.urls]
-Documentation = "https://Vaelsys.github.io/nitid/"
-Issues = "https://github.com/Vaelsys/nitid/issues"
-Repository = "https://github.com/Vaelsys/nitid"
+Homepage = "https://nitidio.github.io/nitid/"
+Documentation = "https://nitidio.github.io/nitid/"
+Issues = "https://github.com/Nitidio/nitid/issues"
+Repository = "https://github.com/Nitidio/nitid"
+Changelog = "https://github.com/Nitidio/nitid/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "onnxruntime>=1.18,<1.24; python_version < '3.11'",
     "onnxruntime>=1.18; python_version >= '3.11'",
 ]
@@ -113,15 +109,17 @@ url = "https://download.pytorch.org/whl/cu121"
 explicit = true
 
 [tool.uv.sources]
+# The CUDA 12.1 index stops at torch 2.5 / torchvision 0.20, which have no
+# Python 3.13 wheels; 3.13 takes PyTorch from PyPI (CUDA builds on Linux).
 torch = [
-    { index = "pytorch-cu121", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
-    { index = "pytorch-cu121", marker = "sys_platform == 'win32' and platform_machine == 'x86_64'" },
-    { index = "pypi", marker = "sys_platform == 'darwin' or platform_machine != 'x86_64'" },
+    { index = "pytorch-cu121", marker = "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version < '3.13'" },
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32' and platform_machine == 'x86_64' and python_version < '3.13'" },
+    { index = "pypi", marker = "sys_platform == 'darwin' or platform_machine != 'x86_64' or python_version >= '3.13'" },
 ]
 torchvision = [
-    { index = "pytorch-cu121", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
-    { index = "pytorch-cu121", marker = "sys_platform == 'win32' and platform_machine == 'x86_64'" },
-    { index = "pypi", marker = "sys_platform == 'darwin' or platform_machine != 'x86_64'" },
+    { index = "pytorch-cu121", marker = "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version < '3.13'" },
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32' and platform_machine == 'x86_64' and python_version < '3.13'" },
+    { index = "pypi", marker = "sys_platform == 'darwin' or platform_machine != 'x86_64' or python_version >= '3.13'" },
 ]
 # ── ruff (linter) ──────────────────────────────────────────────────────────────────────
 

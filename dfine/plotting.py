@@ -62,4 +62,5 @@ def plot_results(result, conf: bool, labels: bool, line_width, font_size) -> np.
             cv2.putText(
                 img, text, (x1, y1 - 2), cv2.FONT_HERSHEY_SIMPLEX, fs * 0.5, (255, 255, 255), 1
             )
+
     return img

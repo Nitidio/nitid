@@ -3,6 +3,60 @@
 import pytest
 
 
+def _onnxruntime_outputs(path, images):
+    import onnxruntime as ort
+
+    session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    return session.run(None, {"images": images.numpy()})
+
+
+def _torch_deploy_outputs(model, images):
+    import torch
+
+    from dfine.exporter import DeployModel
+    from dfine.nn.build import build_postprocessor
+
+    postprocessor = build_postprocessor(model._cfg)
+    postprocessor.deploy()
+    deployed_model = model._get_deployed_model()
+    wrapped = DeployModel(
+        deployed_model,
+        postprocessor,
+        semantic=str(model._cfg.get("task", "detect")).lower() == "semantic",
+    ).eval()
+    with torch.inference_mode():
+        outputs = wrapped(images)
+    return outputs if isinstance(outputs, tuple) else (outputs,)
+
+
+def _sort_instances(*arrays):
+    """
+    Put instances in a canonical order so two runtimes can be compared row by row.
+
+    Top-k returns the same instances in whatever order each runtime produced
+    them, so the rows have to be realigned before they mean anything. Ordering
+    on the box alone is not enough: the rows that share a query — same box,
+    different class — stay in emission order, which leaves the label, score and
+    mask rows compared against each other misaligned. Sorting on the label
+    first makes the key a total order, and the box coordinates are rounded so
+    that the ~1e-5 differences between runtimes cannot reorder the rows they
+    are meant to be matching.
+    """
+    import numpy as np
+
+    labels, boxes = arrays[0], arrays[1]
+    order = np.lexsort(
+        (
+            boxes[0, :, 3].round(3),
+            boxes[0, :, 2].round(3),
+            boxes[0, :, 1].round(3),
+            boxes[0, :, 0].round(3),
+            labels[0],
+        )
+    )
+    return tuple(array[:, order] for array in arrays)
+
+
 def test_export_onnx(tiny_checkpoint, tmp_path):
     import onnx
 
@@ -61,6 +115,54 @@ def test_export_segment_onnx_includes_masks(tiny_segment_checkpoint, tmp_path):
     assert [value.name for value in graph.output] == ["labels", "boxes", "scores", "masks"]
 
 
+def test_export_segment_onnxruntime_matches_torch_deploy(tiny_segment_checkpoint, tmp_path):
+    import numpy as np
+    import torch
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    output = tmp_path / "segment_parity.onnx"
+    inputs = torch.rand(1, 3, 640, 640, generator=torch.Generator().manual_seed(7))
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        output=output,
+        verbose=False,
+    )
+
+    expected = _torch_deploy_outputs(model, inputs)
+    actual = _onnxruntime_outputs(out, inputs)
+
+    assert len(actual) == 4
+    actual = _sort_instances(*actual)
+    expected_np = tuple(value.detach().cpu().numpy() for value in expected)
+    expected_np = _sort_instances(*expected_np)
+
+    # Guard the precondition that makes this comparison meaningful. If the
+    # fixture's random weights ever collapse the decoder's queries onto one
+    # another, every top-k score ties, the two runtimes are free to keep
+    # different queries, and this test either fails at random or passes while
+    # comparing 300 copies of a single box. tests/conftest.py seeds the draw to
+    # keep that from happening; fail here, clearly, if that ever stops holding.
+    distinct_boxes = len(np.unique(expected_np[1][0].round(3), axis=0))
+    assert distinct_boxes > 1, (
+        f"the segmentation fixture produced {distinct_boxes} distinct box(es) across "
+        "300 instances: its decoder queries have collapsed, so top-k selection is "
+        "tied and export parity cannot be compared. Check _FIXTURE_SEED in "
+        "tests/conftest.py."
+    )
+    assert sorted(actual[0].reshape(-1).tolist()) == sorted(expected_np[0].reshape(-1).tolist())
+    for actual_value, expected_value in zip(actual[1:], expected_np[1:]):
+        np.testing.assert_allclose(
+            actual_value,
+            expected_value,
+            rtol=1e-3,
+            atol=1e-4,
+        )
+
+
 def test_export_semantic_onnx_returns_dense_logits(tiny_semantic_checkpoint, tmp_path):
     import numpy as np
     import onnx
@@ -94,7 +196,7 @@ def test_semantic_export_rejects_unvalidated_formats(tiny_semantic_checkpoint):
     from dfine import DFINE
 
     model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
-    with pytest.raises(ValueError, match="format='onnx' only"):
+    with pytest.raises(ValueError, match="format='onnx' or 'openvino' only"):
         model.export(format="torchscript", imgsz=64, verbose=False)
 
 
@@ -142,6 +244,29 @@ def test_export_segment_openvino_includes_masks(tiny_segment_checkpoint, tmp_pat
     assert len(results) == 4
 
 
+def test_export_semantic_openvino_returns_dense_logits(tiny_semantic_checkpoint, tmp_path):
+    ov = pytest.importorskip("openvino", reason="openvino not installed")
+    import numpy as np
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    out = model.export(
+        format="openvino",
+        imgsz=64,
+        simplify=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    compiled = ov.Core().compile_model(out, "CPU")
+    results = compiled([np.zeros((1, 3, 64, 64), dtype=np.float32)])
+    values = list(results.values())
+    assert len(values) == 1
+    assert values[0].shape == (1, 3, 64, 64)
+    assert np.isfinite(values[0]).all()
+
+
 def test_export_openvino_missing_package(tiny_checkpoint, monkeypatch):
     import sys
 
@@ -168,6 +293,166 @@ def test_repeated_export_calls_increment_run_directory(tiny_checkpoint, tmp_path
     assert second.parent == tmp_path / "exp2"
     assert (first.parent / "args.yaml").exists()
     assert (second.parent / "environment.yaml").exists()
+
+
+# ── Raw export (postprocess=False) ───────────────────────────────────────────
+
+
+def _onnx_output_names(path):
+    import onnx
+
+    return [output.name for output in onnx.load(str(path)).graph.output]
+
+
+def test_export_raw_onnx_returns_decoder_outputs(tiny_checkpoint, tmp_path):
+    import torch
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert _onnx_output_names(out) == ["pred_logits", "pred_boxes"]
+
+    torch.manual_seed(0)
+    images = torch.rand(1, 3, 640, 640)
+    logits, boxes = _onnxruntime_outputs(out, images)
+    with torch.inference_mode():
+        expected = model._get_deployed_model()(images)
+
+    # Same shapes as the torch model's own dict: one entry per decoder query,
+    # all of them, with no top-k selection applied.
+    assert logits.shape == tuple(expected["pred_logits"].shape)
+    assert boxes.shape == tuple(expected["pred_boxes"].shape)
+
+    # Raw outputs are undecoded: unactivated logits and normalised cxcywh boxes,
+    # not pixel coordinates.
+    assert float(logits.min()) < 0.0
+    assert 0.0 <= float(boxes.min()) and float(boxes.max()) <= 1.0
+
+
+def test_export_raw_onnx_keeps_postprocessed_export_unchanged(tiny_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    raw = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+    decoded = model.export(
+        format="onnx", imgsz=640, simplify=False, project=str(tmp_path), verbose=False
+    )
+
+    assert _onnx_output_names(raw) == ["pred_logits", "pred_boxes"]
+    assert _onnx_output_names(decoded) == ["labels", "boxes", "scores"]
+
+
+def test_export_raw_segment_onnx_includes_pred_masks(tiny_segment_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_segment_checkpoint, task="segment", device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert _onnx_output_names(out) == ["pred_logits", "pred_boxes", "pred_masks"]
+
+
+def test_export_raw_semantic_onnx_returns_dense_logits(tiny_semantic_checkpoint, tmp_path):
+    from dfine import DFINE
+
+    model = DFINE(tiny_semantic_checkpoint, task="semantic", device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert _onnx_output_names(out) == ["sem_seg_logits"]
+
+
+def test_export_raw_onnx_dynamic_marks_batch_on_every_output(tiny_checkpoint, tmp_path):
+    import onnx
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        dynamic=True,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    graph = onnx.load(str(out)).graph
+    for value in (*graph.input, *graph.output):
+        assert value.type.tensor_type.shape.dim[0].dim_param == "batch"
+
+
+def test_export_records_postprocess_in_run_metadata(tiny_checkpoint, tmp_path):
+    import yaml
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="onnx",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    args = yaml.safe_load((out.parent / "args.yaml").read_text())
+    assert args["postprocess"] is False
+
+
+def test_export_raw_openvino(tiny_checkpoint, tmp_path):
+    ov = pytest.importorskip("openvino", reason="openvino not installed")
+    import numpy as np
+
+    from dfine import DFINE
+
+    model = DFINE(tiny_checkpoint, device="cpu", verbose=False)
+    out = model.export(
+        format="openvino",
+        imgsz=640,
+        simplify=False,
+        postprocess=False,
+        project=str(tmp_path),
+        verbose=False,
+    )
+
+    assert out.is_file()
+    assert out.with_suffix(".bin").is_file()
+
+    compiled = ov.Core().compile_model(out, "CPU")
+    results = compiled([np.zeros((1, 3, 640, 640), dtype=np.float32)])
+    assert len(results) == 2
+    assert [output.any_name for output in compiled.outputs] == ["pred_logits", "pred_boxes"]
 
 
 def test_export_invalid_format(tiny_checkpoint):

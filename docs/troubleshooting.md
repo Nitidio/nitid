@@ -9,11 +9,11 @@ Most nitid problems come from one missing setup step. The usual flow is:
 3. If one of those pieces is missing, Python prints an error.
 4. The fix is usually to install dependencies, download a model, or use the right command form.
 
-## `dfine: command not found`
+## `nitid: command not found`
 
 ### What it means
 
-The `dfine` command exists inside nitid's virtual environment, but your terminal cannot see it directly.
+The `nitid` command exists inside Nitid's virtual environment, but your terminal cannot see it directly.
 
 This usually happens when `.venv` is not activated.
 
@@ -22,36 +22,36 @@ This usually happens when `.venv` is not activated.
 From the repository root, use `uv run`:
 
 ```bash
-uv run dfine --help
-uv run dfine predict --help
+uv run nitid --help
+uv run nitid predict --help
 ```
 
 Or activate the environment first:
 
 ```bash
 source .venv/bin/activate
-dfine --help
+nitid --help
 ```
 
 Inside the Docker container, you can also call the executable directly:
 
 ```bash
-.venv/bin/dfine --help
+.venv/bin/nitid --help
 ```
 
 See the [command-line guide](cli.md) for the full CLI workflow.
 
-## `uv sync` fails with Python 3.13 or `torchvision`
+## Installation fails with a new Python version
 
 ### What it means
 
-nitid currently supports Python `>=3.10,<3.13`.
+nitid currently supports Python `>=3.10,<3.14`.
 
-PyTorch and torchvision wheels are not always available for every new Python version immediately. If your system uses Python 3.13, dependency installation can fail before nitid is even installed.
+PyTorch and torchvision wheels are not always available for every new Python version immediately. If your system uses a newer Python, such as 3.14, pip reports that no version of nitid matches, or dependency installation fails before nitid is even installed.
 
 ### Fix
 
-Use Python 3.10, 3.11, or 3.12.
+Use Python 3.10, 3.11, 3.12, or 3.13.
 
 Then recreate the environment:
 
@@ -79,18 +79,19 @@ See the [macOS Docker setup](macos_docker_setup.md) for details.
 
 ### What it means
 
-When you use an official model name like `dfine_s`, nitid downloads the official raw D-FINE checkpoint and converts it into a nitid-wrapped `.pth` file.
+When you use a supported model name like `model1s`, nitid
+resolves the selected task, downloads the matching checkpoint when needed, and
+prepares it for the integrated runtime.
 
 The workflow is:
 
 ```text
-DFINE("dfine_s")
+NITID("model1s", task="detect")
 -> nitid checks the model registry
 -> resolves weights for the selected task
--> downloads the official D-FINE checkpoint
+-> downloads the official checkpoint when needed
 -> builds the matching integrated model configuration
--> reads COCO names from configs/datasets/coco.yml
--> writes dfine_s_obj2coco_wrapped.pth
+-> writes a local prepared checkpoint
 ```
 
 If the internet connection or class names file is missing, the download or wrapping step can fail.
@@ -100,59 +101,55 @@ If the internet connection or class names file is missing, the download or wrapp
 Try a direct download command:
 
 ```bash
-uv run dfine download model=dfine_s
+uv run nitid download model=model1s task=detect
 ```
 
 To save the model in a folder:
 
 ```bash
-uv run dfine download model=dfine_s output=models
+uv run nitid download model=model1s task=detect output=models
 ```
 
 To replace an existing wrapped checkpoint:
 
 ```bash
-uv run dfine download model=dfine_s output=models force=true
+uv run nitid download model=model1s task=detect output=models force=true
 ```
 
-Detection supports pretrained S/M/L/X models and the `obj2coco` (default) and `coco` variants. Instance segmentation supports pretrained N/S/M/L/X models with `task=segment` and COCO weights.
+Detection, instance segmentation, and semantic segmentation all use the same
+public model names (`model1n`, `model1s`, `model1m`, `model1l`,
+`model1x`) with an explicit `task=...`. `model1n` is available only for
+`task=segment` and `task=semantic`.
 
-## Raw D-FINE checkpoint gives `KeyError: 'config'`
+## Checkpoint gives `KeyError: 'config'`
 
 ### What it means
 
-nitid expects a wrapped checkpoint. A wrapped checkpoint stores the weights, D-FINE config, class names, epoch, and metrics in one file.
+nitid expects a runtime checkpoint with embedded config and class names. Training
+runs save this format automatically.
 
-A raw D-FINE checkpoint usually only contains weights. That is why nitid cannot find `config`.
+Some external research checkpoints contain only weights. That is why nitid
+cannot find `config`.
 
 ### Fix
 
-If you are using an official model, use the model name and let nitid download and wrap it:
+If you are using an official model, use the model name and let nitid prepare it:
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-model = DFINE("dfine_s")
+model = NITID("model1s", task="detect")
 ```
 
 Or use the CLI:
 
 ```bash
-uv run dfine download model=dfine_s
+uv run nitid download model=model1s task=detect
 ```
 
-If you have your own raw checkpoint, convert it:
-
-```bash
-uv run python tools/convert_checkpoint.py \
-    --weights dfine_l.pth \
-    --model dfine_l \
-    --task detect \
-    --names configs/datasets/coco.yml \
-    --output dfine_l_wrapped.pth
-```
-
-See the [Quick Start](quickstart.md) for a longer explanation.
+If you are maintaining support for a new upstream checkpoint, see the maintainer
+tools in this repository. Most users should use supported model names or
+checkpoints created by `model.train(...)`.
 
 ## CUDA is not available
 
@@ -167,15 +164,15 @@ If you are on a Mac or a CPU-only machine, `torch.cuda.is_available()` returns `
 For CPU testing, let nitid choose the device automatically or use CPU:
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-model = DFINE("dfine_s", device="cpu")
+model = NITID("model1s", task="detect", device="cpu")
 ```
 
 For CLI usage:
 
 ```bash
-uv run dfine predict model=dfine_s source=image.jpg
+uv run nitid predict model=model1s task=detect source=image.jpg
 ```
 
 For GPU usage, run on a Linux or Windows machine with an NVIDIA GPU and working drivers.
@@ -197,13 +194,13 @@ pip install --extra-index-url https://pypi.nvidia.com tensorrt>=8.6
 Then export:
 
 ```bash
-uv run dfine export model=dfine_s format=tensorrt
+uv run nitid export model=model1s task=detect format=tensorrt
 ```
 
 If you do not need TensorRT, export to ONNX instead:
 
 ```bash
-uv run dfine export model=dfine_s format=onnx
+uv run nitid export model=model1s task=detect format=onnx
 ```
 
 See the [export guide](export.md) for export options and constraints.
@@ -228,7 +225,7 @@ cd /app
 Or use `uv run`:
 
 ```bash
-uv run dfine --help
+uv run nitid --help
 ```
 
 From your host terminal:
@@ -239,30 +236,46 @@ docker exec nitid_container /app/.venv/bin/dfine --help
 
 See the [macOS Docker setup](macos_docker_setup.md) for the full container workflow.
 
-## Web app shows no models
+## `Results.show()` raises `RuntimeError: Results.show() needs a display`
 
 ### What it means
 
-The web app lists checkpoints from the `models/` directory. If that folder is empty, the UI has no model to run.
+`show()` opens a window, and there is nowhere to open one: a server, a container or an SSH session
+without X11 or Wayland. nitid installs the headless OpenCV build so that `import nitid` works on
+those machines, and `show()` then falls back to matplotlib. It raises this error only when matplotlib
+cannot display anything either.
 
 ### Fix
 
-Create the folder and download a model into it:
+Write the image to disk, or take it as an array:
 
-```bash
-mkdir -p models
-uv run dfine download model=dfine_s output=models
+```python
+result.save("out.jpg")
+image = result.plot()  # HWC BGR numpy array
 ```
 
-Then start the backend:
+In Jupyter, `show()` renders inline through matplotlib.
+
+## `ImportError: libGL.so.1` when importing nitid
+
+### What it means
+
+The GUI build of OpenCV (`opencv-python`) is installed, and it needs system graphics libraries that
+slim or server images do not have. nitid itself depends on `opencv-python-headless`, which does not
+need them. `opencv-python` usually arrives with another package; the `track` extra's `trackers`
+dependency requires it, for example. When both builds are installed, they share the `cv2` module,
+and whichever was installed last wins.
+
+### Fix
+
+Make the headless build the one that provides `cv2`:
 
 ```bash
-uv run uvicorn web.api.main:app --workers 1
+pip uninstall -y opencv-python
+pip install --force-reinstall --no-deps opencv-python-headless
 ```
 
-Use one worker only. The model cache is process-local, and inference is designed for a single API worker.
-
-See the [web app guide](web_app.md) for the full setup.
+Or install the system library instead: `apt-get install -y libgl1 libglib2.0-0`.
 
 ## Still stuck?
 
@@ -271,7 +284,7 @@ Run these checks from the repository root and include the output when asking for
 ```bash
 git status
 python --version
-uv run dfine --help
+uv run nitid --help
 uv run pytest tests/unit
 ```
 

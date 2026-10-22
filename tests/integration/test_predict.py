@@ -21,7 +21,7 @@ def _random_frame(seed=42, shape=(480, 640, 3)):
 
 
 def _write_test_video(path: Path, frame_values: list[int], shape=(64, 64)) -> None:
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
     writer = cv2.VideoWriter(str(path), fourcc, 5.0, shape)
     for value in frame_values:
         frame = np.full((shape[1], shape[0], 3), value, dtype=np.uint8)

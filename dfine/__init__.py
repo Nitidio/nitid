@@ -1,59 +1,23 @@
-"""
-nitid: Ultralytics-style D-FINE detection and instance/semantic segmentation.
+"""Compatibility namespace for existing ``dfine`` imports.
 
-Usage:
-    from dfine import DFINE
-
-    model = DFINE("dfine_l")
-    results = model("image.jpg")
-    model.train(data="coco.yaml", epochs=50)
-    model.export(format="onnx")
+New applications should import :class:`nitid.NITID` from :mod:`nitid`.
 """
 
-from dfine.gstreamer import (
-    GStreamerHardwareProfile,
-    get_hardware_profile,
-    inspect_gstreamer_capabilities,
-)
-from dfine.media import (
-    Frame,
-    FrameMetadata,
-    FrameSink,
-    FrameSource,
-    GStreamerVideoSink,
-    build_gstreamer_output_pipeline,
-)
+from dfine.media import Frame, FrameMetadata, FrameSink, FrameSource
 from dfine.model import DFINE
-from dfine.onvif import (
-    ONVIFCamera,
-    ONVIFDevice,
-    ONVIFError,
-    ONVIFMediaProfile,
-    discover_onvif_devices,
-)
+from dfine.nitid import NITID
 from dfine.results import SemanticMask
 from dfine.utils.reporting import BugReport, bugreport
-from dfine.utils.sources import GStreamerFrameSource
 
-__version__ = "0.1.0"
+__version__ = "0.9.2"
 __all__ = [
     "BugReport",
     "DFINE",
+    "NITID",
     "Frame",
     "FrameMetadata",
     "FrameSink",
     "FrameSource",
-    "GStreamerVideoSink",
-    "ONVIFCamera",
-    "ONVIFDevice",
-    "ONVIFError",
-    "ONVIFMediaProfile",
     "SemanticMask",
-    "GStreamerFrameSource",
-    "GStreamerHardwareProfile",
-    "build_gstreamer_output_pipeline",
-    "get_hardware_profile",
-    "inspect_gstreamer_capabilities",
-    "discover_onvif_devices",
     "bugreport",
 ]

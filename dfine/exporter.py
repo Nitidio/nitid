@@ -11,8 +11,27 @@ from pathlib import Path
 
 import torch
 
+from dfine.tasks import normalize_task
 from dfine.utils.logging import LOGGER
 from dfine.utils.runs import atomic_output_path, resolve_run_dir, write_run_metadata
+
+# Raw (undecoded) model output names per task — the dict keys the deployed
+# model itself returns, as opposed to the postprocessed (labels, boxes,
+# scores) contract used by the public export() formats.
+_RAW_OUTPUT_NAMES: dict[str, list[str]] = {
+    "detect": ["pred_logits", "pred_boxes"],
+    "segment": ["pred_logits", "pred_boxes", "pred_masks"],
+    "semantic": ["sem_seg_logits"],
+}
+
+
+# Postprocessed output names per task — the decoded contract produced by
+# DeployModel (model + postprocessor in deploy mode).
+_POSTPROCESSED_OUTPUT_NAMES: dict[str, list[str]] = {
+    "detect": ["labels", "boxes", "scores"],
+    "segment": ["labels", "boxes", "scores", "masks"],
+    "semantic": ["semantic_logits"],
+}
 
 
 class DeployModel(torch.nn.Module):
@@ -51,6 +70,7 @@ class DFINEExporter:
         simplify: bool,
         opset: int,
         half: bool,
+        postprocess: bool,
         verbose: bool,
         project: str,
         name: str,
@@ -99,6 +119,7 @@ class DFINEExporter:
                 "simplify": simplify,
                 "opset": opset,
                 "half": half,
+                "postprocess": postprocess,
                 "project": project,
                 "name": name,
                 "save_dir": str(run_dir),
@@ -108,22 +129,40 @@ class DFINEExporter:
             },
         )
         if format == "onnx":
-            return self._to_onnx(out, imgsz, batch, dynamic, simplify, opset, verbose)
+            return self._to_onnx(
+                out, imgsz, batch, dynamic, simplify, opset, verbose, postprocess=postprocess
+            )
         if format == "openvino":
-            return self._to_openvino(out, imgsz, batch, dynamic, simplify, opset, half, verbose)
+            return self._to_openvino(
+                out,
+                imgsz,
+                batch,
+                dynamic,
+                simplify,
+                opset,
+                half,
+                verbose,
+                postprocess=postprocess,
+            )
         if format == "tensorrt":
-            return self._to_tensorrt(out, imgsz, batch, dynamic, half, verbose)
+            return self._to_tensorrt(
+                out, imgsz, batch, dynamic, half, verbose, postprocess=postprocess
+            )
         if format == "torchscript":
             return self._to_torchscript(out, imgsz, batch, verbose)
         raise AssertionError("unreachable")
 
     # ── ONNX ────────────────────────────────────────────────────────────────
 
-    def _to_onnx(self, out, imgsz, batch, dynamic, simplify, opset, verbose) -> Path:
+    def _to_onnx(
+        self, out, imgsz, batch, dynamic, simplify, opset, verbose, *, postprocess: bool = True
+    ) -> Path:
         import onnx
 
         with atomic_output_path(out) as temporary:
-            self._export_onnx_to_path(temporary, imgsz, batch, dynamic, opset)
+            self._export_onnx_to_path(
+                temporary, imgsz, batch, dynamic, opset, postprocess=postprocess
+            )
             if simplify:
                 import onnxsim
 
@@ -147,6 +186,8 @@ class DFINEExporter:
         opset: int,
         half: bool,
         verbose: bool,
+        *,
+        postprocess: bool = True,
     ) -> Path:
         """Export the corrected ONNX graph, then convert it to OpenVINO IR."""
         try:
@@ -161,7 +202,16 @@ class DFINEExporter:
             staging_dir = Path(directory)
             onnx_path = staging_dir / "model.onnx"
             ir_path = staging_dir / "model.xml"
-            self._to_onnx(onnx_path, imgsz, batch, dynamic, simplify, opset, verbose=False)
+            self._to_onnx(
+                onnx_path,
+                imgsz,
+                batch,
+                dynamic,
+                simplify,
+                opset,
+                verbose=False,
+                postprocess=postprocess,
+            )
 
             ov_model = ov.convert_model(onnx_path)
             ov.save_model(ov_model, ir_path, compress_to_fp16=half)
@@ -185,71 +235,82 @@ class DFINEExporter:
         return out
 
     def _export_onnx_to_path(
-        self, path: Path, imgsz: int, batch: int, dynamic: bool, opset: int
+        self,
+        path: Path,
+        imgsz: int,
+        batch: int,
+        dynamic: bool,
+        opset: int,
+        *,
+        postprocess: bool = True,
     ) -> None:
-        """Trace the model to ONNX at an explicit output path."""
+        """
+        Trace the model to ONNX at an explicit output path.
+
+        With ``postprocess=False`` the deployed model is traced on its own, so the
+        graph exposes the decoder's raw outputs (``pred_logits``/``pred_boxes``/…)
+        instead of the decoded ``(labels, boxes, scores, …)`` contract.
+        """
         from typing import Any
 
         from dfine.nn.build import build_postprocessor
 
-        # Deploy raw model if available
-        if hasattr(self.model, "deploy") and not getattr(self.model, "_deployed", False):
-            self.model.deploy()
-            self.model._deployed = True
+        task = normalize_task(str(self.cfg.get("task", "detect")))
 
-        postprocessor: Any = build_postprocessor(self.cfg)
-        if hasattr(postprocessor, "deploy"):
-            postprocessor.deploy()
-        postprocessor.to(self.device)
-
-        task = str(self.cfg.get("task", "detect")).lower()
-        is_semantic = task == "semantic"
-        wrapped_model = DeployModel(self.model, postprocessor, semantic=is_semantic)
-        wrapped_model.eval()
+        if postprocess:
+            postprocessor: Any = build_postprocessor(self.cfg)
+            if hasattr(postprocessor, "deploy"):
+                postprocessor.deploy()
+            postprocessor.to(self.device)
+            traced_model: torch.nn.Module = DeployModel(
+                self.model, postprocessor, semantic=task == "semantic"
+            )
+            traced_model.eval()
+            output_names = _POSTPROCESSED_OUTPUT_NAMES[task]
+        else:
+            traced_model, output_names = self.prepare_raw_trace(imgsz)
 
         dummy = torch.zeros(batch, 3, imgsz, imgsz, device=self.device)
-        is_segment = task == "segment"
         dynamic_axes = (
-            {
-                "images": {0: "batch"},
-                **(
-                    {"semantic_logits": {0: "batch"}}
-                    if is_semantic
-                    else {
-                        "labels": {0: "batch"},
-                        "boxes": {0: "batch"},
-                        "scores": {0: "batch"},
-                        **({"masks": {0: "batch"}} if is_segment else {}),
-                    }
-                ),
-            }
-            if dynamic
-            else None
+            {name: {0: "batch"} for name in ("images", *output_names)} if dynamic else None
         )
 
         torch.onnx.export(
-            wrapped_model,
+            traced_model,
             (dummy,),
             str(path),
             dynamo=False,
             opset_version=opset,
             input_names=["images"],
-            output_names=(
-                ["semantic_logits"]
-                if is_semantic
-                else (
-                    ["labels", "boxes", "scores", "masks"]
-                    if is_segment
-                    else ["labels", "boxes", "scores"]
-                )
-            ),
+            output_names=output_names,
             dynamic_axes=dynamic_axes,
         )
+
+    # ── Raw (non-postprocessed) trace — used by the OpenVINO runtime ────────
+
+    def prepare_raw_trace(self, imgsz: int) -> tuple[torch.nn.Module, list[str]]:
+        """
+        Return ``(model, output_names)`` for a raw trace of the deployed model
+        at ``imgsz`` — its own ``pred_logits``/``pred_boxes``/etc. dict, not
+        the postprocessed ``(labels, boxes, scores)`` graph ``export()``
+        produces by default. Used by ``export(..., postprocess=False)`` and by
+        ``dfine.nn.openvino_runtime.compile_raw_openvino``.
+        """
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        return self.model, _RAW_OUTPUT_NAMES[task]
 
     # ── TensorRT ─────────────────────────────────────────────────────────────
 
     def _to_tensorrt(
-        self, out: Path, imgsz: int, batch: int, dynamic: bool, half: bool, verbose: bool
+        self,
+        out: Path,
+        imgsz: int,
+        batch: int,
+        dynamic: bool,
+        half: bool,
+        verbose: bool,
+        *,
+        postprocess: bool = True,
     ) -> Path:
         """
         Export to a TensorRT serialised engine via the TRT Python API.
@@ -271,7 +332,9 @@ class DFINEExporter:
             tmp_onnx = Path(f.name)
 
         try:
-            self._export_onnx_to_path(tmp_onnx, imgsz, batch, dynamic, opset=17)
+            self._export_onnx_to_path(
+                tmp_onnx, imgsz, batch, dynamic, opset=17, postprocess=postprocess
+            )
 
             # ── Step 2: build TRT engine from ONNX ───────────────────────────
             trt_logger = trt.Logger(trt.Logger.INFO if verbose else trt.Logger.WARNING)

@@ -7,19 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The MLflow integration names the experiment `nitid` when training has no
+  `project`; it used to fall back to `/Shared/Ultralytics`. Set `project`,
+  `experiment_name`, or `MLFLOW_EXPERIMENT_NAME` to keep the old name.
+- The roadmap describes the released 0.9.x line and its current priorities.
+- The brand page covers the visual identity only: name, logo, colours,
+  typography, and the sources of the documentation images.
+
+## [0.9.2] - 2026-10-09
+
+### Fixed
+
+- nitid installs on Python 3.13, which Google Colab now uses: the package
+  declared `Requires-Python <3.13`, so `pip install nitid` found no matching
+  version. Every dependency ships Python 3.13 wheels; CI covers 3.10 to 3.13.
+
+## [0.9.1] - 2026-10-09
+
 ### Added
-- Apache 2.0 LICENSE
-- Auto-download and runtime wrapping of D-FINE checkpoints
-- D-FINE instance segmentation through `DFINE(..., task="segment")`, including pretrained weights,
-  prediction masks, fine-tuning, COCO mask validation, and export
-- COCO polygon/RLE and YOLO polygon dataset support for instance-segmentation training
-- GitHub Actions CI (lint + unit tests)
-- Pre-commit hooks (ruff, mypy)
-- CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md
-- Issue and PR templates
-- README model comparison table and YOLO benchmark
-- Jupyter/Colab tutorial notebook
+
+- A unified Python API and key-value CLI for downloading models, prediction,
+  tracking, training, validation, export, model inspection, and bug reports.
+  Models are named `model1n`, `model1s`, `model1m`, `model1l`, and `model1x`.
+- Automatic download and runtime preparation of supported official
+  checkpoints.
+- D-FINE object detection and instance segmentation, including COCO and YOLO
+  dataset support, mask visualization, fine-tuning, COCO validation, and
+  export.
+- Dense semantic segmentation with mask training, mIoU validation,
+  probability output, overlays, class-ID maps, and ONNX/OpenVINO export.
+  There are no pretrained semantic checkpoints: semantic models start from the
+  instance-segmentation checkpoint and are fine-tuned on your own masks.
+- ByteTrack, BoT-SORT, and OC-SORT tracking with persistent IDs, class
+  filtering, frame sampling, and annotated video output.
+- Video file, webcam, and RTSP/HTTP stream input through OpenCV, including
+  authenticated RTSP cameras.
+- OpenVINO Runtime inference on Intel CPU, integrated GPU, and NPU devices,
+  with automatic device selection and compiled-model caching.
+- ONNX and OpenVINO export for every supported task, plus TorchScript and
+  TensorRT export for detection and instance segmentation.
+- `export(..., postprocess=False)` exports the decoder's raw outputs without
+  the postprocessor, for ONNX, OpenVINO, and TensorRT.
+- Fine-tuning controls for AMP, EMA, checkpoint resume, cosine learning-rate
+  warmup, freezing, augmentation, callbacks, per-epoch validation, W&B, and
+  MLflow.
+- Result helpers for annotated media, masks, semantic maps, JSON, YOLO text,
+  pandas DataFrames, timings, and crops.
+- Atomic, incremented run directories with saved arguments, environment
+  snapshots, optional single-file bug reports, and exact output-path
+  overrides.
+- MkDocs documentation with a deployment guide for exported models, inference
+  and training notebooks that run in Colab, example scripts, contributor and
+  security guides, issue and pull-request templates, pre-commit hooks, and CI
+  across Python 3.10, 3.11, and 3.12.
+- Apache-2.0 licensing for the code. The official pretrained weights are
+  published by D-FINE and D-FINE-seg under Apache 2.0 as well.
+- Brand assets under `docs/assets/brand/` and `docs/brand.md`, the source of
+  truth for the palette, typography, logo usage, voice, and what the project
+  announces publicly, plus a matching light/dark theme for the documentation
+  site.
 
 ### Changed
-- Integrated the D-FINE architecture, losses, and postprocessing into the installable package so
-  detection and instance segmentation use the same self-contained model core
+
+- Integrated model architectures, losses, postprocessing, and configuration
+  into the installable package so supported tasks share a self-contained
+  runtime core.
+- Expanded prediction sources to images, directories, videos, URLs, webcams,
+  streams, screen capture, NumPy arrays, and tensors.
+- Hardened training defaults and validation behavior for reproducible,
+  convergent fine-tuning.
+- Public messaging leads with the Apache 2.0 licensing of the code and the
+  official weights, and announces three tasks: detection, instance
+  segmentation, and semantic segmentation.
+
+### Fixed
+
+- Prediction and export preserve the trainable model's structure and state.
+- OpenVINO parity checks tolerate valid encoder tie-breaking differences.
+- `import nitid` works on servers and slim containers without `libGL`: the
+  package depends on `opencv-python-headless`, and `Results.show()` falls back
+  to matplotlib, or raises a clear error when no display is available.
+- MLflow tracking works with MLflow 3: a local tracking directory such as the
+  default `runs/mlflow` is stored as SQLite instead of MLflow's file store,
+  which MLflow 3 refuses by default.
+
+[Unreleased]: https://github.com/Nitidio/nitid/commits/main

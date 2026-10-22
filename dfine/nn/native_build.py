@@ -15,7 +15,13 @@ import torch.nn as nn
 
 from dfine.tasks import Task, normalize_task
 
-from .architecture import DFINEModel, DFINETransformer, HGNetv2, HybridEncoder, SemSegDecoder
+from .architecture import (
+    DFINEModel,
+    DFINETransformer,
+    HGNetv2,
+    HybridEncoder,
+    SemSegDecoder,
+)
 from .configs import get_model_config
 from .losses import DFINECriterion, HungarianMatcher, SemSegCriterion
 
@@ -57,11 +63,14 @@ def _compose_native_model(
     device: str | torch.device | None,
 ) -> DFINEModel:
     enable_mask_head = task == "segment"
-    backbone_config["pretrained"] = False
-    encoder_config["eval_spatial_size"] = image_size
-    if task != "semantic":
-        decoder_config["eval_spatial_size"] = image_size
-        decoder_config["enable_mask_head"] = enable_mask_head
+    if image_size is not None:
+        encoder_config["eval_spatial_size"] = image_size
+        if task != "semantic":
+            decoder_config["eval_spatial_size"] = image_size
+            if task == "segment":
+                decoder_config["enable_mask_head"] = True
+    elif task == "segment":
+        decoder_config["enable_mask_head"] = True
 
     encoder_strides = encoder_config["feat_strides"]
     if (enable_mask_head or task == "semantic") and 8 not in encoder_strides:
@@ -74,11 +83,13 @@ def _compose_native_model(
 
     backbone = HGNetv2(in_channels=in_channels, **backbone_config)
     encoder = HybridEncoder(**encoder_config)
+    decoder_kwargs = copy.deepcopy(decoder_config)
+    dec_num_classes = decoder_kwargs.pop("num_classes", num_classes)
     decoder: nn.Module
     if task == "semantic":
-        decoder = SemSegDecoder(num_classes=num_classes, **decoder_config)
+        decoder = SemSegDecoder(num_classes=dec_num_classes, **decoder_kwargs)
     else:
-        decoder = DFINETransformer(num_classes=num_classes, **decoder_config)
+        decoder = DFINETransformer(num_classes=dec_num_classes, **decoder_kwargs)
     native_model = DFINEModel(backbone=backbone, encoder=encoder, decoder=decoder)
     return native_model.to(device) if device is not None else native_model
 
@@ -91,7 +102,7 @@ def build_native_model(
     image_size: tuple[int, int] | None = None,
     in_channels: int = 3,
     device: str | torch.device | None = None,
-) -> DFINEModel:
+) -> nn.Module:
     """Build a native D-FINE model without loading pretrained weights."""
     if num_classes < 1:
         raise ValueError(f"num_classes must be positive, got {num_classes}")
@@ -123,7 +134,7 @@ def build_native_model_from_config(
     config: Mapping[str, Any],
     *,
     device: str | torch.device | None = None,
-) -> DFINEModel:
+) -> nn.Module:
     """Build from a current or legacy self-contained checkpoint configuration."""
     num_classes = config.get("num_classes")
     if not isinstance(num_classes, int) or num_classes < 1:
@@ -133,18 +144,17 @@ def build_native_model_from_config(
         raise ValueError("D-FINE config in_channels must be 3 or 4")
 
     task = _checkpoint_task(config)
-    decoder_key = "SemSegDecoder" if task == "semantic" else "DFINETransformer"
-    # Older semantic configs stored dense-head inputs under DFINETransformer.
-    # Retain that read path for checkpoint compatibility.
-    if decoder_key not in config and task == "semantic":
-        decoder_key = "DFINETransformer"
-    decoder_config = _component_config(config, decoder_key)
-    if task == "semantic" and decoder_key == "DFINETransformer":
-        decoder_config = {
-            key: decoder_config[key]
-            for key in ("feat_channels", "mask_dim", "mask_low_level_ch")
-            if key in decoder_config
-        }
+    if task == "semantic":
+        decoder_key = "SemSegDecoder" if "SemSegDecoder" in config else "DFINETransformer"
+        decoder_config = _component_config(config, decoder_key)
+        if decoder_key == "DFINETransformer":
+            decoder_config = {
+                key: decoder_config[key]
+                for key in ("feat_channels", "mask_dim", "mask_low_level_ch")
+                if key in decoder_config
+            }
+    else:
+        decoder_config = _component_config(config, "DFINETransformer")
 
     return _compose_native_model(
         backbone_config=_component_config(config, "HGNetv2"),
@@ -186,9 +196,9 @@ def build_native_criterion(
     if resolved_task == "segment" and "masks" not in criterion_config["losses"]:
         criterion_config["losses"].append("masks")
 
-    matcher = HungarianMatcher(**config["matcher"])
+    dfine_matcher = HungarianMatcher(**config["matcher"])
     return DFINECriterion(
-        matcher=matcher,
+        matcher=dfine_matcher,
         num_classes=num_classes,
         label_smoothing=label_smoothing,
         **criterion_config,
@@ -216,6 +226,7 @@ def build_native_criterion_from_config(config: Mapping[str, Any]) -> nn.Module:
 
     if task == "segment" and "masks" not in criterion_config["losses"]:
         criterion_config["losses"].append("masks")
+
     criterion_config.setdefault("label_smoothing", 0.0)
 
     return DFINECriterion(

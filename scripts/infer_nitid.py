@@ -11,12 +11,11 @@ Usage:
 Notes:
     - Expects a *nitid-wrapped* checkpoint (keys: model, config, names).
       Convert a raw D-FINE checkpoint first if needed:
-        uv run python tools/convert_checkpoint.py \
+        uv run python -m nitid.convert_checkpoint \
             --weights dfine_l.pth \
-            --model   dfine_l \
+            --model   model1l \
             --task    detect \
-            --names   configs/datasets/coco.yml \
-            --output  dfine_l_wrapped.pth
+            --output  model1l_detect.pth
     - Output image saved to nitid_result.jpg
 """
 

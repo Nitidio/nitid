@@ -14,4 +14,3 @@ build
 dist
 runs
 site
-web/frontend/node_modules

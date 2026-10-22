@@ -1,5 +1,9 @@
 # Fine-tuning
 
+For a step-by-step run from a fresh machine, on an NVIDIA GPU or on an Intel
+machine with OpenVINO, see
+[Training on CUDA and OpenVINO machines](training_cuda_openvino.md).
+
 ## Requirements
 
 Fine-tuning and validation require `pycocotools`. Install the `train` extras:
@@ -39,7 +43,7 @@ For `task="segment"`, every object must also contain a COCO polygon or RLE
 
 ### YOLO `.txt`
 
-Standard Ultralytics-style layout is also supported:
+The standard YOLO layout, as used by Ultralytics, is also supported:
 
 ```text
 my_dataset/
@@ -121,7 +125,7 @@ not accept instance-only `mosaic`, `mixup`, `classes`, or `single_cls` options.
 
 ### Data YAML
 
-Point to your dataset with an ultralytics-style YAML:
+Point to your dataset with a YOLO-format data YAML:
 
 ```yaml
 # configs/datasets/my_dataset.yml
@@ -201,15 +205,89 @@ needed when you want a *different* ordering than sorted order.
 
 ## Fine-tuning
 
+### COCO-mini example
+
+The repository includes COCO-mini, a small COCO-format dataset for exercising
+the full training path. It has 128 train and 32 val images, so it is a
+smoke-test dataset, not an accuracy benchmark. The same dataset serves
+`task="detect"` and `task="segment"`, because COCO annotations carry both boxes
+and instance masks.
+
+```python
+from nitid import NITID
+
+model = NITID("model1s", task="detect")  # or task="segment"
+metrics = model.train(
+    data="configs/datasets/coco-mini.yml",
+    epochs=5,
+    imgsz=640,
+    batch=8,
+    project="runs/train",
+    name="coco-mini",
+)
+print(metrics)
+```
+
+If `datasets/coco-mini/` is missing, nitid downloads the archive declared in
+the YAML's `download` key, checks it against `download_sha256` and extracts it
+before training. If the directory exists but a split is missing, nitid stops
+with an error instead of overwriting it.
+
+COCO-mini is built from COCO 2017 val with
+[`tools/build_coco_mini.py`](https://github.com/Nitidio/nitid/blob/develop/tools/build_coco_mini.py),
+keeping only images licensed CC BY 2.0, "No known copyright restrictions" or
+"United States Government Work". The archive includes an `ATTRIBUTION.md` with
+the source and licence of every image; the COCO annotations are CC BY 4.0.
+
+The same example is available as a script:
+
+```bash
+uv run python examples/train_coco_mini.py --task detect
+uv run python examples/train_coco_mini.py --task segment
+```
+
+and as a notebook that also validates, predicts and exports:
+[`examples/notebooks/02_training.ipynb`](https://github.com/Nitidio/nitid/blob/main/examples/notebooks/02_training.ipynb).
+
+The equivalent CLI command is:
+
+```bash
+uv run nitid train \
+    model=model1s task=detect \
+    data=configs/datasets/coco-mini.yml \
+    epochs=5 \
+    imgsz=640 \
+    batch=8 \
+    project=runs/train \
+    name=coco-mini
+```
+
 ### Python API
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-model = DFINE("dfine_l", task="detect")
+model = NITID("model1l", task="detect")
+
+# The default recipe follows the task-native training path. For detection this
+# uses D-FINE-style defaults, matching, losses, and augmentations.
+metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    recipe="default",
+)
+
+# DEIM is available for object detection only. It keeps nitid's dataset
+# auto-detection/conversion path, then switches detection training to DEIM's
+# MAL classification loss, flat-cosine schedule, Mosaic policy, and batch MixUp.
+deim_metrics = model.train(
+    data="configs/datasets/my_dataset.yml",
+    epochs=50,
+    recipe="deim",
+)
 
 # Instance segmentation uses the same training API and mask-aware annotations.
-segmenter = DFINE("dfine_s", task="segment")
+segmenter = NITID("model1s", task="segment")
 segment_metrics = segmenter.train(
     data="configs/datasets/my_segment_dataset.yml",
     epochs=50,
@@ -218,7 +296,7 @@ segment_metrics = segmenter.train(
 
 # Semantic models initialize shared features from the matching COCO
 # instance-segmentation checkpoint. The dense classifiers train on your taxonomy.
-semantic = DFINE("dfine_s", task="semantic")
+semantic = NITID("model1s", task="semantic")
 semantic_metrics = semantic.train(
     data="configs/datasets/my_semantic_dataset.yml",
     epochs=50,
@@ -237,6 +315,7 @@ metrics = model.train(
     data="configs/datasets/my_dataset.yml",
     epochs=50,
     batch=16,
+    recipe="default",
     lr0=1e-4,
     lrf=0.01,       # final lr = lr0 * lrf
     cos_lr=True,
@@ -273,12 +352,31 @@ print(metrics)
 # }
 ```
 
+### Training recipes
+
+`recipe="default"` is the task-native mode and is available for detection,
+instance segmentation, and semantic segmentation. For detection it
+uses nitid's D-FINE training path: D-FINE matching and losses, D-FINE-style
+detection augmentations, and model-size defaults when you omit values such as
+`epochs`, `batch`, `lr0`, `amp`, or `ema`.
+
+`recipe="deim"` is detection-only. It keeps nitid's normal dataset handling, so
+COCO JSON, YOLO TXT, and automatic conversion still work through the same
+dataset YAMLs. The recipe then switches detection training to DEIM's MAL
+classification loss, flat-cosine learning-rate schedule, recipe Mosaic policy,
+and batch-level MixUp. Calling it for instance or semantic segmentation raises a
+clear error.
+
+Explicit arguments always win over recipe defaults. For example, passing
+`mosaic=0.0` disables Mosaic even under `recipe="deim"`, and passing `batch=8`
+uses that batch size instead of the model-size recipe value.
+
 With the default `save_period=1`, checkpoints are saved after every epoch to
 `runs/train/my_experiment/epoch{N}.pth`. Use a larger interval or `-1` to reduce
 periodic checkpoint files; `last.pth` and `best.pth` remain available when
 `save=True`.
 Each checkpoint is a full nitid-wrapped `.pth` (config + names embedded) and can
-be loaded directly with `DFINE("epoch50.pth")`.
+be loaded directly with `NITID("epoch50.pth", task="detect")`.
 
 The top-level values are the final epoch summary for backward compatibility.
 Use `metrics["history"]` to inspect per-epoch training and validation metrics,
@@ -292,8 +390,7 @@ behavior without patching the core loop. Pass either:
 - an object with one or more lifecycle-hook methods, each taking `trainer`
 - a mapping from hook name to callable or list of callables, each taking `trainer`
 
-You can also register persistent callbacks on the model in an Ultralytics-like
-way:
+You can also register persistent callbacks on the model:
 
 ```python
 def stop_after_first_epoch(trainer):
@@ -303,8 +400,7 @@ def stop_after_first_epoch(trainer):
 model.add_callback("on_train_epoch_end", stop_after_first_epoch)
 ```
 
-Callbacks receive only the active `DFINETrainer` instance, for consistency
-with the Ultralytics style. The most useful callback attributes are:
+Callbacks receive only the active `DFINETrainer` instance. The most useful callback attributes are:
 
 | Attribute | Type | Meaning | Available |
 |-----------|------|---------|-----------|
@@ -350,12 +446,12 @@ pip install "nitid[wandb]"
 uv sync --extra wandb
 ```
 
-Enable logging directly from `train()`, in the same style as Ultralytics:
+Enable logging directly from `train()`:
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-model = DFINE("dfine_s.pth")
+model = NITID("model1s", task="detect")
 model.train(
     data="data.yaml",
     epochs=50,
@@ -438,9 +534,9 @@ uv sync --extra mlflow
 Enable MLflow directly on training:
 
 ```python
-from dfine import DFINE
+from nitid import NITID
 
-model = DFINE("dfine_s.pth")
+model = NITID("model1s", task="detect")
 model.train(
     data="data.yaml",
     epochs=50,
@@ -450,10 +546,12 @@ model.train(
 )
 ```
 
-This follows the Ultralytics MLflow conventions:
+Defaults and behaviour:
 
-- the tracking URI defaults to `runs/mlflow`
-- the experiment defaults to the training `project`
+- the tracking URI defaults to `runs/mlflow`; a plain local path like this one
+  is stored as a SQLite database (`mlflow.db`) with an `artifacts/` directory
+  inside it, which works with both MLflow 2 and MLflow 3
+- the experiment defaults to the training `project`, or `nitid` when there is none
 - the MLflow run name defaults to the training `name`
 - an already-active MLflow run is reused and is not closed by nitid
 - resolved training parameters are logged when training starts
@@ -466,7 +564,7 @@ the defaults and Python options:
 
 | Variable | Purpose |
 |----------|---------|
-| `MLFLOW_TRACKING_URI` | Local store or remote tracking-server URI |
+| `MLFLOW_TRACKING_URI` | Local directory, or any MLflow URI (`http://`, `sqlite://`, `databricks`) passed through unchanged |
 | `MLFLOW_EXPERIMENT_NAME` | Experiment name |
 | `MLFLOW_RUN` | Run name |
 | `MLFLOW_KEEP_RUN_ACTIVE` | Keep a nitid-created run open when set to `1`, `true`, `yes`, `on`, `y`, or `t` (case-insensitive) |
@@ -480,7 +578,7 @@ model.train(data="data.yaml", epochs=2, mlflow=True)
 Inspect those results through the MLflow UI:
 
 ```bash
-mlflow server --backend-store-uri runs/mlflow
+mlflow server --backend-store-uri sqlite:///runs/mlflow/mlflow.db
 ```
 
 Then open `http://127.0.0.1:5000`. To use a different local store without
@@ -532,8 +630,8 @@ this flag at safe lifecycle boundaries and finalizes the run cleanly.
 ### CLI
 
 ```bash
-uv run dfine train \
-    model=dfine_l \
+uv run nitid train \
+    model=model1l task=detect \
     data=configs/datasets/my_dataset.yml \
     epochs=50 \
     batch=16
@@ -542,18 +640,19 @@ uv run dfine train \
 ### Hyperparameter reference
 
 The table below documents the full public `model.train(...)` surface as it
-exists today. Defaults match [`DFINE.train()`](https://github.com/Vaelsys/nitid/blob/develop/dfine/model.py).
+exists today.
 Use this table as the authoritative reference for train-time arguments.
 
 | Parameter | Type | Default | Valid range / values | Description |
 |-----------|------|---------|----------------------|-------------|
-| `data` | `str` | required | path to a dataset YAML | Ultralytics-style dataset config describing `path`, split locations, class count, and names. |
-| `epochs` | `int` | `50` | `>= 1` | Number of full passes over the training set. |
+| `data` | `str` | required | path to a dataset YAML | YOLO-format dataset config describing `path`, split locations, class count, and names. |
+| `recipe` | `str` | `"default"` | `"default"`, `"deim"` | Training recipe. `"default"` uses each task's native path. `"deim"` is detection-only and enables DEIM's MAL loss, flat-cosine schedule, Mosaic policy, and batch MixUp while keeping nitid's dataset auto-detection/conversion. |
+| `epochs` | `int` | recipe/task dependent | `>= 1` | Number of full passes over the training set. Detection defaults follow official D-FINE/DEIM model-size recipes when omitted. |
 | `imgsz` | `int` | `640` | `>= 1` | Square training resolution applied during preprocessing. |
-| `batch` | `int` | `16` | positive integer | Images per batch. Choose this explicitly for the available device memory. |
-| `lr0` | `float` | `1e-4` | `> 0` | Initial learning rate passed to the optimizer. |
-| `lrf` | `float` | `0.01` | `> 0` | Final learning-rate multiplier. Both linear decay and cosine decay end at `lr0 * lrf`. |
-| `cos_lr` | `bool` | `False` | `True`, `False` | Switches the main schedule from linear decay to cosine decay. |
+| `batch` | `int` | recipe/task dependent | positive integer | Images per batch. Choose this explicitly for the available device memory. |
+| `lr0` | `float` | recipe/task dependent | `> 0` | Initial learning rate passed to the optimizer. |
+| `lrf` | `float` | recipe/task dependent | `> 0` | Final learning-rate multiplier. Linear and cosine decay end at `lr0 * lrf`; DEIM uses it as the flat-cosine minimum-LR multiplier. |
+| `cos_lr` | `bool` | `False` | `True`, `False` | Switches the non-DEIM main schedule from linear decay to cosine decay. DEIM uses its own flat-cosine schedule. |
 | `warmup_epochs` | `float` | `0.0` | `>= 0` | Number of warmup epochs before the main LR schedule begins. Fractional values are allowed. |
 | `warmup_momentum` | `float` | `0.8` | typically `0 <= x <= 1` | Starting momentum or Adam/AdamW beta1 used during warmup. It linearly ramps to the optimizer's target value. |
 | `warmup_bias_lr` | `float` | `0.1` | `>= 0` | Starting learning rate for bias parameters during warmup. Non-bias parameters warm up from `0.0`. |
@@ -562,8 +661,8 @@ Use this table as the authoritative reference for train-time arguments.
 | `weight_decay` | `float` | `1e-4` | `>= 0` | Weight decay applied to non-bias parameters. |
 | `clip_grad` | `float` | `0.1` | `>= 0` | Maximum gradient norm; `0` disables clipping. |
 | `resume` | `bool` | `False` | `True`, `False` | Restore the latest run state from `project/name/last.pth`. |
-| `amp` | `bool` | `False` | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. |
-| `ema` | `bool` | `False` | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. |
+| `amp` | `bool` | recipe/task dependent | `True`, `False` | Enables mixed-precision training through `torch.amp.autocast` and `GradScaler` on CUDA devices. Official detection recipes enable AMP by default when omitted. |
+| `ema` | `bool` | recipe/task dependent | `True`, `False` | Maintains an exponential moving average copy of the model and saves EMA weights in checkpoints. Official detection recipes enable EMA by default when omitted. |
 | `ema_decay` | `float` | `0.9999` | usually `0 < x < 1` | Target EMA smoothing factor. The effective decay ramps over the first 1,000 optimizer updates so newly initialized custom heads are not stale during early validation. |
 | `device` | `str \| None` | `None` | e.g. `"cpu"`, `"cuda"`, `"cuda:0"` | Optional override for the training device. If omitted, training uses the device selected when the `DFINE` object was created. |
 | `project` | `str` | `"runs/train"` | any writable path | Root directory for run artifacts such as checkpoints and metrics. |
@@ -586,7 +685,7 @@ Use this table as the authoritative reference for train-time arguments.
 | `fraction` | `float` | `1.0` | `(0, 1]` | Deterministically sample this fraction of training images. |
 | `accumulate` | `int` | `1` | `>= 1` | Accumulate gradients across batches before optimizer and EMA steps. |
 | `multi_scale` | `bool` | `False` | `True`, `False` | Randomly resize batches from roughly 0.5× to 1.5× `imgsz`, in multiples of 32. |
-| `augment` | `bool` | `True` | `True`, `False` | Enable box-aware training augmentation. Letterbox preprocessing remains active when disabled. |
+| `augment` | `bool` | `True` | `True`, `False` | Enable recipe-aware box transforms for detection and task-native transforms for other tasks. |
 | `fliplr` | `float` | `0.5` | `[0, 1]` | Probability of a horizontal flip. |
 | `scale` | `float` | `0.5` | `[0, 1)` | Maximum random isotropic scale gain. |
 | `translate` | `float` | `0.1` | `[0, 1]` | Maximum translation as a fraction of image width/height. |
@@ -594,25 +693,32 @@ Use this table as the authoritative reference for train-time arguments.
 | `hsv_h` | `float` | `0.015` | `[0, 0.5]` | Hue jitter gain. |
 | `hsv_s` | `float` | `0.7` | `[0, 1]` | Saturation jitter gain. |
 | `hsv_v` | `float` | `0.4` | `[0, 1]` | Brightness/value jitter gain. |
-| `mosaic` | `float` | `0.0` | `[0, 1]` | Mosaic probability. Experimental and disabled until a D-FINE benchmark demonstrates a gain. |
-| `mixup` | `float` | `0.0` | `[0, 1]` | MixUp probability. Experimental and disabled until benchmarked. |
+| `mosaic` | `float` | `0.0` (`0.5` in DEIM when omitted) | `[0, 1]` | Mosaic probability. Detection uses recipe-aware Mosaic; semantic segmentation does not support it. |
+| `mixup` | `float` | `0.0` | `[0, 1]` | Dataset-level MixUp probability. DEIM detection additionally uses recipe-controlled batch MixUp; semantic segmentation does not support dataset-level MixUp. |
 | `close_mosaic` | `int` | `10` | `>= 0` | Disable mosaic for the final N epochs; zero keeps it active. |
 | `time` | `float \| None` | `None` | positive hours or `None` | Training duration in hours. When supplied, this overrides `epochs` as the loop's stopping limit. |
 | `verbose` | `bool` | `True` | `True`, `False` | Enables per-epoch console logging during training. |
 | `callbacks` | `object \| dict \| None` | `None` | callback object or hook mapping | Optional lifecycle hooks for custom logging, experiment tracking, or other training-time integrations. |
 | `wandb` | `bool \| dict` | `False` | `True`, `False`, or WandB options | Enables the optional Weights & Biases integration. |
-| `mlflow` | `bool \| dict` | `False` | `True`, `False`, or MLflow options | Enables the optional Ultralytics-style MLflow integration. |
+| `mlflow` | `bool \| dict` | `False` | `True`, `False`, or MLflow options | Enables the optional MLflow integration. |
 
-Images are first resized with aspect ratio preserved and padded to `imgsz`. Every
-geometric transform operates on absolute `xyxy` boxes, clips them to the visible
-image, removes empty boxes and their labels, and only then converts targets to the
-normalized `cxcywh` format expected by D-FINE. The sample/epoch seed makes transform
-choices independent of DataLoader worker scheduling. All resolved values above are
-written to `args.yaml` and restored from `last.pth` on resume.
+Detection recipes use a D-FINE/DEIM-style transform profile: photometric
+distortion, zoom-out, IoU crop, horizontal flip, and final square resizing.
+Mosaic is applied before that profile when enabled. Every geometric transform
+operates on absolute `xyxy` boxes, clips them to the visible image, removes empty
+boxes and labels, and only then converts targets to the normalized `cxcywh`
+format expected by the model. The sample/epoch seed makes transform choices
+independent of DataLoader worker scheduling. Zoom-out downscales high-resolution
+images first, so its canvas's shorter side never exceeds `ceil(imgsz / 0.3)`
+(2134 px at `imgsz=640`): the smallest IoU crop then still covers at least
+`imgsz` pixels per axis, so no detail reaching the model is lost, and large photos
+no longer produce canvases of up to 16x their pixel count.
 
-Mosaic and MixUp are implemented as opt-in benchmark candidates rather than
-selected defaults. Validate them against the unaugmented baseline on the target
-dataset before enabling them by default.
+`recipe="deim"` enables its recipe Mosaic default and batch-level MixUp for
+detection. Without DEIM, Mosaic and dataset-level MixUp remain explicit opt-ins.
+Mosaic and MixUp are not supported for semantic segmentation. All
+resolved values above are written to `args.yaml` and restored from `last.pth` on
+resume.
 
 ## Resume training
 
@@ -650,8 +756,8 @@ history is returned.
 
 ## Cosine LR with warmup
 
-By default, nitid uses linear LR decay. To match the more common Ultralytics
-fine-tuning setup, enable cosine decay and a warmup phase:
+By default, nitid uses linear LR decay. To use cosine decay with a warmup
+phase instead:
 
 ```python
 metrics = model.train(
@@ -679,7 +785,7 @@ reduces the learning rate down to `lr0 * lrf`.
 - `ema_decay` only matters when `ema=True`.
 - `warmup_epochs=0` disables warmup entirely.
 - `warmup_momentum` affects SGD momentum and Adam/AdamW beta1 during warmup.
-- `device` in `train()` overrides the device selected in `DFINE(...)` for that
+- `device` in `train()` overrides the device selected in `NITID(...)` for that
   training run only.
 - `momentum`, `weight_decay`, and `clip_grad` explicitly control optimizer
   momentum/beta1, non-bias regularization, and maximum gradient norm.
@@ -712,7 +818,7 @@ ema_weight = decay × ema_weight + (1 − decay) × model_weight
 ```
 
 The EMA weights are what gets saved to the epoch checkpoint, so loading
-`DFINE("epoch50.pth")` gives you the more stable EMA model directly.
+`NITID("epoch50.pth", task="detect")` gives you the more stable EMA model directly.
 Integer parameters (e.g. anchor indices) are copied verbatim rather than
 blended.
 
@@ -769,19 +875,19 @@ print(metrics)
 ### CLI
 
 ```bash
-uv run dfine val \
-    model=dfine_l \
+uv run nitid val \
+    model=model1l task=detect \
     data=configs/datasets/my_dataset.yml \
     conf=0.001
 ```
 
 ## Notes
 
-- The model is **not** put into deploy mode during training (BN fusion would
-  prevent further training). Deploy happens automatically on the first
-  `predict()` call after training.
+- The trainable model is **not** put into deploy mode during training or
+  inference. `predict()` and `export()` use a separate deployed copy, and that
+  cache is rebuilt automatically after training or weight loading.
 - Loss weighting (`weight_dict`) comes from the checkpoint's embedded D-FINE
   config so it stays consistent with the original pre-training setup.
 - When `ema=True` the saved checkpoint contains EMA weights. Loading it with
-  `DFINE(path)` gives you the EMA model directly — no extra step needed.
+  `NITID(path, task="detect")` gives you the EMA model directly — no extra step needed.
 - AMP is only active on CUDA; on CPU it degrades gracefully to full precision.

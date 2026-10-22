@@ -111,7 +111,7 @@ class VGGBlock(nn.Module):
         self.ch_out = ch_out
         self.conv1 = ConvNormLayer(ch_in, ch_out, 3, 1, padding=1, act=None)
         self.conv2 = ConvNormLayer(ch_in, ch_out, 1, 1, padding=0, act=None)
-        self.act = nn.Identity() if act is None else act
+        self.act = nn.Identity() if act is None else get_activation(act)
 
     def forward(self, x):
         if hasattr(self, "conv"):
@@ -376,7 +376,7 @@ class HybridEncoder(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(in_channels) - 1, 0, -1):
-            self.lateral_convs.append(ConvNormLayer_fuse(hidden_dim, hidden_dim, 1, 1))
+            self.lateral_convs.append(ConvNormLayer(hidden_dim, hidden_dim, 1, 1, act=act))
             self.fpn_blocks.append(
                 RepNCSPELAN4(
                     hidden_dim * 2,
@@ -385,7 +385,6 @@ class HybridEncoder(nn.Module):
                     round(expansion * hidden_dim // 2),
                     round(3 * depth_mult),
                 )
-                # CSPLayer(hidden_dim * 2, hidden_dim, round(3 * depth_mult), act=act, expansion=expansion, bottletype=VGGBlock)
             )
 
         # bottom-up pan
@@ -414,14 +413,12 @@ class HybridEncoder(nn.Module):
         if self.eval_spatial_size:
             for idx in self.use_encoder_idx:
                 stride = self.feat_strides[idx]
+                h_val = self.eval_spatial_size[0] // stride
+                w_val = self.eval_spatial_size[1] // stride
                 pos_embed = self.build_2d_sincos_position_embedding(
-                    self.eval_spatial_size[1] // stride,
-                    self.eval_spatial_size[0] // stride,
-                    self.hidden_dim,
-                    self.pe_temperature,
+                    w_val, h_val, self.hidden_dim, self.pe_temperature
                 )
                 setattr(self, f"pos_embed{idx}", pos_embed)
-                # self.register_buffer(f'pos_embed{idx}', pos_embed)
 
     @staticmethod
     def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.0):
@@ -451,12 +448,22 @@ class HybridEncoder(nn.Module):
                 h, w = proj_feats[enc_ind].shape[2:]
                 # flatten [B, C, H, W] to [B, HxW, C]
                 src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
-                if self.training or self.eval_spatial_size is None:
+                cached_pos_embed = None
+                if not self.training and self.eval_spatial_size is not None:
+                    cached_pos_embed = getattr(self, f"pos_embed{enc_ind}", None)
+                    if cached_pos_embed is not None:
+                        cached_pos_embed = cached_pos_embed.to(src_flatten.device)
+                    if (
+                        cached_pos_embed is not None
+                        and cached_pos_embed.shape[1] == src_flatten.shape[1]
+                    ):
+                        pos_embed = cached_pos_embed
+                    else:
+                        cached_pos_embed = None
+                if self.training or self.eval_spatial_size is None or cached_pos_embed is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
                         w, h, self.hidden_dim, self.pe_temperature
                     ).to(src_flatten.device)
-                else:
-                    pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
 
                 memory: torch.Tensor = self.encoder[i](src_flatten, pos_embed=pos_embed)
                 proj_feats[enc_ind] = (

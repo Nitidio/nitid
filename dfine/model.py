@@ -1,11 +1,13 @@
 """
-DFINE — public entry point. Mirrors the ultralytics.YOLO interface.
+DFINE — internal model class behind the public ``NITID`` entry point.
 """
 
 from __future__ import annotations
 
+import copy
+import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Generator, Union
+from typing import TYPE_CHECKING, Any, Callable, Generator, TypeVar, Union, cast
 
 import numpy as np
 import torch.nn as nn
@@ -18,6 +20,21 @@ if TYPE_CHECKING:
 
 Source = Union[str, Path, int, np.ndarray, list, FrameSource]
 ModelCallback = Callable[..., object]
+_T = TypeVar("_T")
+
+
+class _DefaultTrainOption:
+    def __repr__(self) -> str:
+        return "default"
+
+
+_TRAIN_DEFAULT = _DefaultTrainOption()
+
+
+def _resolve_train_option(value: _T | _DefaultTrainOption, default: _T) -> _T:
+    if value is _TRAIN_DEFAULT:
+        return default
+    return cast(_T, value)
 
 
 class DFINE:
@@ -28,7 +45,16 @@ class DFINE:
         model:   D-FINE architecture name or path to a wrapped .pth checkpoint.
         task:    ``"detect"``, ``"segment"``, or ``"semantic"`` (alias ``"sem_seg"``).
         weights: Official weight variant: ``default``, ``obj2coco``, or ``coco``.
-        device:  "cuda", "cpu", "cuda:N", or None for auto-select.
+        backend: ``"torch"`` (default) or ``"openvino"``. ``"openvino"`` routes
+                 ``predict()``/``track()`` through OpenVINO Runtime, enabling
+                 Intel NPU and integrated GPU inference; every other method
+                 (``train``, ``val``, ``export``, ``info``) keeps running on
+                 PyTorch/CPU regardless of `backend`.
+        device:  Meaning depends on `backend`. For ``backend="torch"``: "cuda",
+                 "cpu", "cuda:N", or None for auto-select. For
+                 ``backend="openvino"``: an OpenVINO device string ("CPU",
+                 "GPU" for Intel integrated GPU, "NPU"), or "auto"/None to
+                 prefer NPU, then GPU, then CPU.
         verbose: Print model info on load.
 
     Example:
@@ -36,6 +62,10 @@ class DFINE:
         results = model("image.jpg", conf=0.5)
         model.train(data="coco.yaml", epochs=50)
         model.export(format="tensorrt")
+
+        # Intel NPU / integrated GPU inference via OpenVINO Runtime:
+        model = DFINE("dfine_l", backend="openvino", device="NPU")
+        results = model("image.jpg", conf=0.5)
     """
 
     def __init__(
@@ -44,16 +74,36 @@ class DFINE:
         *,
         task: str = "detect",
         weights: str = "default",
+        backend: str = "torch",
         device: str | int | None = None,
         verbose: bool = True,
     ) -> None:
-        self._device_str: str = resolve_device(device)
+        if backend not in ("torch", "openvino"):
+            raise ValueError(f"backend must be 'torch' or 'openvino', got {backend!r}")
+        self._backend = backend
+        if backend == "openvino":
+            from dfine.nn.openvino_runtime import resolve_openvino_device
+
+            # Fail fast at construction, not on the first predict() call.
+            self._openvino_device: str | None = resolve_openvino_device(
+                device if isinstance(device, str) else None
+            )
+            self._device_str: str = "cpu"
+        else:
+            self._openvino_device = None
+            self._device_str = resolve_device(device)
         self.verbose = verbose
         self._model: nn.Module
         self._cfg: dict[str, Any]
         self._names: dict[int, str]
         self._path: str
         self._weights: str | None = None
+        self._deployed_model: nn.Module | None = None
+        self._deployed_model_device: str | None = None
+        self._openvino_cache: dict[int, Any] = {}
+        # RLock: _get_openvino_model() calls _get_deployed_model() while
+        # already holding this lock, from the same thread.
+        self._model_lock = threading.RLock()
         from dfine.tasks import normalize_task
 
         self._task = normalize_task(task)
@@ -81,15 +131,6 @@ class DFINE:
         save_dir: str | Path | None = None,
         exist_ok: bool = False,
         verbose: bool = True,
-        backend: str = "opencv",
-        gst_pipeline: str | None = None,
-        reconnect: bool = False,
-        reconnect_initial_delay: float = 1.0,
-        reconnect_max_delay: float = 30.0,
-        reconnect_attempts: int | None = None,
-        rtsp_latency: int = 200,
-        rtsp_transport: str = "tcp",
-        hardware_profile: str | None = None,
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
         iou: float = 0.85,
@@ -102,7 +143,7 @@ class DFINE:
         Returns list[Results] when stream=False,
         Generator[Results] when stream=True.
         """
-        return self.predictor.run(
+        return self._predictor_for(imgsz).run(
             source,
             conf=conf,
             mask_threshold=mask_threshold,
@@ -117,15 +158,6 @@ class DFINE:
             save_dir=save_dir,
             exist_ok=exist_ok,
             verbose=verbose,
-            backend=backend,
-            gst_pipeline=gst_pipeline,
-            reconnect=reconnect,
-            reconnect_initial_delay=reconnect_initial_delay,
-            reconnect_max_delay=reconnect_max_delay,
-            reconnect_attempts=reconnect_attempts,
-            rtsp_latency=rtsp_latency,
-            rtsp_transport=rtsp_transport,
-            hardware_profile=hardware_profile,
             rtsp_username=rtsp_username,
             rtsp_password=rtsp_password,
             iou=iou,
@@ -148,15 +180,6 @@ class DFINE:
         save_dir: str | Path | None = None,
         exist_ok: bool = False,
         verbose: bool = True,
-        backend: str = "opencv",
-        gst_pipeline: str | None = None,
-        reconnect: bool = False,
-        reconnect_initial_delay: float = 1.0,
-        reconnect_max_delay: float = 30.0,
-        reconnect_attempts: int | None = None,
-        rtsp_latency: int = 200,
-        rtsp_transport: str = "tcp",
-        hardware_profile: str | None = None,
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
         iou: float = 0.85,
@@ -170,7 +193,7 @@ class DFINE:
         if self.task != "detect":
             raise ValueError("track() currently supports task='detect' only")
 
-        return DFINETracker(self.predictor).run(
+        return DFINETracker(self._predictor_for(imgsz)).run(
             source,
             tracker=tracker,
             tracker_kwargs=tracker_kwargs,
@@ -187,15 +210,6 @@ class DFINE:
             save_dir=save_dir,
             exist_ok=exist_ok,
             verbose=verbose,
-            backend=backend,
-            gst_pipeline=gst_pipeline,
-            reconnect=reconnect,
-            reconnect_initial_delay=reconnect_initial_delay,
-            reconnect_max_delay=reconnect_max_delay,
-            reconnect_attempts=reconnect_attempts,
-            rtsp_latency=rtsp_latency,
-            rtsp_transport=rtsp_transport,
-            hardware_profile=hardware_profile,
             rtsp_username=rtsp_username,
             rtsp_password=rtsp_password,
             iou=iou,
@@ -207,24 +221,24 @@ class DFINE:
     def train(
         self,
         data: str,
-        epochs: int = 50,
+        epochs: int | _DefaultTrainOption = _TRAIN_DEFAULT,
         imgsz: int = 640,
-        batch: int = 16,
-        lr0: float = 1e-4,
-        backbone_lr: float | None = None,
-        lrf: float = 0.01,
-        cos_lr: bool = False,
-        warmup_epochs: float = 0.0,
-        warmup_momentum: float = 0.8,
-        warmup_bias_lr: float = 0.1,
-        optimizer: str = "AdamW",
-        momentum: float = 0.9,
-        weight_decay: float = 1e-4,
-        clip_grad: float = 0.1,
+        batch: int | _DefaultTrainOption = _TRAIN_DEFAULT,
+        lr0: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        backbone_lr: float | None | _DefaultTrainOption = _TRAIN_DEFAULT,
+        lrf: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        cos_lr: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_epochs: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_momentum: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        warmup_bias_lr: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        optimizer: str | _DefaultTrainOption = _TRAIN_DEFAULT,
+        momentum: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        weight_decay: float | _DefaultTrainOption = _TRAIN_DEFAULT,
+        clip_grad: float | _DefaultTrainOption = _TRAIN_DEFAULT,
         resume: bool = False,
-        amp: bool = False,
-        ema: bool = False,
-        ema_decay: float = 0.9999,
+        amp: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        ema: bool | _DefaultTrainOption = _TRAIN_DEFAULT,
+        ema_decay: float | _DefaultTrainOption = _TRAIN_DEFAULT,
         device: str | None = None,
         project: str = "runs/train",
         name: str = "exp",
@@ -258,15 +272,52 @@ class DFINE:
         mixup: float = 0.0,
         close_mosaic: int = 10,
         time: float | None = None,
+        recipe: str = "default",
         verbose: bool = True,
         callbacks: object | None = None,
         wandb: bool | dict[str, Any] = False,
         mlflow: bool | dict[str, Any] = False,
     ) -> dict:
         """Fine-tune on a custom dataset. Returns final metrics plus per-epoch history."""
+        if self._backend == "openvino":
+            raise ValueError(
+                "train() requires backend='torch' — the openvino backend is inference-only"
+            )
         from dfine.nn.transfer import adapt_model_to_classes
         from dfine.trainer import DFINETrainer
+        from dfine.training_recipes import (
+            apply_training_recipe_to_config,
+            default_train_options,
+            resolve_training_recipe,
+            training_recipe_policy,
+        )
         from dfine.utils.data import load_data_yaml, normalize_names
+
+        resolved_recipe = resolve_training_recipe(
+            recipe, task=str(getattr(self, "_task", "detect"))
+        )
+        train_defaults = default_train_options(recipe=resolved_recipe, config=self._cfg)
+        recipe_policy = training_recipe_policy(recipe=resolved_recipe, config=self._cfg)
+        resolved_epochs = _resolve_train_option(epochs, train_defaults.epochs)
+        resolved_batch = _resolve_train_option(batch, train_defaults.batch)
+        resolved_lr0 = _resolve_train_option(lr0, train_defaults.lr0)
+        resolved_backbone_lr = _resolve_train_option(backbone_lr, train_defaults.backbone_lr)
+        resolved_lrf = _resolve_train_option(lrf, train_defaults.lrf)
+        resolved_cos_lr = _resolve_train_option(cos_lr, train_defaults.cos_lr)
+        resolved_warmup_epochs = _resolve_train_option(warmup_epochs, train_defaults.warmup_epochs)
+        resolved_warmup_momentum = _resolve_train_option(
+            warmup_momentum, train_defaults.warmup_momentum
+        )
+        resolved_warmup_bias_lr = _resolve_train_option(
+            warmup_bias_lr, train_defaults.warmup_bias_lr
+        )
+        resolved_optimizer = _resolve_train_option(optimizer, train_defaults.optimizer)
+        resolved_momentum = _resolve_train_option(momentum, train_defaults.momentum)
+        resolved_weight_decay = _resolve_train_option(weight_decay, train_defaults.weight_decay)
+        resolved_clip_grad = _resolve_train_option(clip_grad, train_defaults.clip_grad)
+        resolved_amp = _resolve_train_option(amp, train_defaults.amp)
+        resolved_ema = _resolve_train_option(ema, train_defaults.ema)
+        resolved_ema_decay = _resolve_train_option(ema_decay, train_defaults.ema_decay)
 
         data_config = load_data_yaml(data)
         dataset_names = {0: "object"} if single_cls else normalize_names(data_config)
@@ -306,8 +357,9 @@ class DFINE:
             dataset_names,
         )
         self._model = transfer.model
-        self._cfg = transfer.config
+        self._cfg = apply_training_recipe_to_config(transfer.config, recipe=resolved_recipe)
         self._names = dataset_names
+        self._invalidate_deployed_cache()
         if transfer.changed and self.verbose:
             mapped = list(transfer.mapped_proposal_scorer) or "unavailable"
             print(
@@ -325,26 +377,26 @@ class DFINE:
             callbacks=self._callbacks,
         )
         try:
-            return trainer.train(
+            metrics = trainer.train(
                 data=data,
-                epochs=epochs,
+                epochs=resolved_epochs,
                 imgsz=imgsz,
-                batch=batch,
-                lr0=lr0,
-                backbone_lr=backbone_lr,
-                lrf=lrf,
-                cos_lr=cos_lr,
-                warmup_epochs=warmup_epochs,
-                warmup_momentum=warmup_momentum,
-                warmup_bias_lr=warmup_bias_lr,
-                optimizer=optimizer,
-                momentum=momentum,
-                weight_decay=weight_decay,
-                clip_grad=clip_grad,
+                batch=resolved_batch,
+                lr0=resolved_lr0,
+                backbone_lr=resolved_backbone_lr,
+                lrf=resolved_lrf,
+                cos_lr=resolved_cos_lr,
+                warmup_epochs=resolved_warmup_epochs,
+                warmup_momentum=resolved_warmup_momentum,
+                warmup_bias_lr=resolved_warmup_bias_lr,
+                optimizer=resolved_optimizer,
+                momentum=resolved_momentum,
+                weight_decay=resolved_weight_decay,
+                clip_grad=resolved_clip_grad,
                 resume=resume,
-                amp=amp,
-                ema=ema,
-                ema_decay=ema_decay,
+                amp=resolved_amp,
+                ema=resolved_ema,
+                ema_decay=resolved_ema_decay,
                 project=project,
                 name=name,
                 save_dir=save_dir,
@@ -377,17 +429,28 @@ class DFINE:
                 mixup=mixup,
                 close_mosaic=close_mosaic,
                 time_limit=time,
+                recipe=resolved_recipe.name,
+                scheduler=recipe_policy.scheduler,
+                warmup_iter=recipe_policy.warmup_iter,
+                flat_epochs=recipe_policy.flat_epochs,
+                no_aug_epochs=recipe_policy.no_aug_epochs,
+                lr_gamma=recipe_policy.lr_gamma,
+                collate_mixup_prob=recipe_policy.collate_mixup_prob,
+                collate_mixup_epochs=recipe_policy.collate_mixup_epochs,
                 verbose=verbose,
                 callbacks=callbacks,
                 wandb=wandb,
                 mlflow=mlflow,
             )
+            self._invalidate_deployed_cache()
+            return metrics
         except BaseException as error:
+            self._invalidate_deployed_cache()
             trainer._handle_train_error(error)
             raise
 
     def add_callback(self, event: str, callback: ModelCallback) -> None:
-        """Register a persistent callback on the model, similar to Ultralytics."""
+        """Register a persistent callback on the model."""
         from dfine.trainer import DFINETrainer
 
         if event not in DFINETrainer.CALLBACK_EVENTS:
@@ -441,6 +504,10 @@ class DFINE:
         verbose: bool = True,
     ) -> dict:
         """Evaluate on val/test split. Returns mAP50, mAP50-95, etc."""
+        if self._backend == "openvino":
+            raise ValueError(
+                "val() requires backend='torch' — the openvino backend is inference-only"
+            )
         from dfine.utils.runs import resolve_run_dir, write_run_metadata
         from dfine.validator import DFINEValidator
 
@@ -485,6 +552,7 @@ class DFINE:
         simplify: bool = True,
         opset: int = 17,
         half: bool = False,
+        postprocess: bool = True,
         device: str | None = None,
         verbose: bool = True,
         project: str = "runs/export",
@@ -493,13 +561,23 @@ class DFINE:
         output: str | Path | None = None,
         exist_ok: bool = False,
     ) -> Path:
-        """Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path."""
-        if self.task == "semantic" and format.lower() != "onnx":
-            raise ValueError("Semantic segmentation currently supports format='onnx' only")
+        """
+        Export to ONNX, OpenVINO, TensorRT, or TorchScript. Returns output path.
+
+        Set ``postprocess=False`` to export the raw decoder outputs
+        (``pred_logits``/``pred_boxes``/…) instead of the decoded
+        ``(labels, boxes, scores, …)`` contract, leaving score activation, top-k
+        selection and box decoding to the consuming runtime. TorchScript always
+        traces the raw model, so the flag has no effect on that format.
+        """
+        if self.task == "semantic" and format.lower() not in {"onnx", "openvino"}:
+            raise ValueError(
+                "Semantic segmentation currently supports format='onnx' or 'openvino' only"
+            )
         from dfine.exporter import DFINEExporter
 
         exporter = DFINEExporter(
-            self._model,
+            self._get_deployed_model(device or self._device_str),
             self._cfg,
             device=device or self._device_str,
         )
@@ -511,6 +589,7 @@ class DFINE:
             simplify=simplify,
             opset=opset,
             half=half,
+            postprocess=postprocess,
             verbose=verbose,
             project=project,
             name=name,
@@ -589,7 +668,16 @@ class DFINE:
 
     @property
     def device(self) -> str:
+        """Effective compute device: an OpenVINO device string for
+        `backend="openvino"`, otherwise the torch device string."""
+        if self._backend == "openvino":
+            assert self._openvino_device is not None
+            return self._openvino_device
         return self._device_str
+
+    @property
+    def backend(self) -> str:
+        return self._backend
 
     @property
     def task(self) -> str:
@@ -602,11 +690,79 @@ class DFINE:
 
     @property
     def predictor(self):
+        """Predictor built for the default 640 imgsz. `predict()`/`track()`
+        build one sized to the requested `imgsz` instead — for
+        `backend="openvino"` with a non-default `imgsz`, prefer those over
+        this property."""
+        return self._predictor_for(640)
+
+    def _predictor_for(self, imgsz: int):
         from dfine.predictor import DFINEPredictor
 
-        return DFINEPredictor(self._model, self._cfg, self._device_str, self._names)
+        if self._backend == "openvino":
+            return DFINEPredictor(
+                self._get_openvino_model(imgsz),
+                self._cfg,
+                "cpu",
+                self._names,
+            )
+        return DFINEPredictor(
+            self._get_deployed_model(),
+            self._cfg,
+            self._device_str,
+            self._names,
+        )
+
+    def _get_openvino_model(self, imgsz: int):
+        """Return the OpenVINO-compiled raw model for `imgsz`, compiling and
+        caching it on first use (OpenVINO compiles per fixed input shape).
+        Locked so concurrent callers (e.g. parallel requests against a
+        shared DFINE instance) don't each compile the same shape."""
+        cached = self._openvino_cache.get(imgsz)
+        if cached is not None:
+            return cached
+
+        with self._model_lock:
+            cached = self._openvino_cache.get(imgsz)
+            if cached is not None:
+                return cached
+
+            from dfine.exporter import DFINEExporter
+            from dfine.nn.openvino_runtime import compile_raw_openvino
+
+            exporter = DFINEExporter(self._get_deployed_model(), self._cfg, device=self._device_str)
+            assert self._openvino_device is not None
+            compiled = compile_raw_openvino(exporter, imgsz=imgsz, ov_device=self._openvino_device)
+            self._openvino_cache[imgsz] = compiled
+            return compiled
 
     # ── Internal ────────────────────────────────────────────────────────────
+
+    def _invalidate_deployed_cache(self) -> None:
+        """Discard the cached deployed inference copy after model changes."""
+        self._deployed_model = None
+        self._deployed_model_device = None
+        self._openvino_cache.clear()
+
+    def _get_deployed_model(self, device: str | None = None) -> nn.Module:
+        """Return a cached deployed copy without mutating the trainable model.
+        Locked so concurrent callers don't each deep-copy/deploy the model."""
+        target_device = device or self._device_str
+        if self._deployed_model is not None and self._deployed_model_device == target_device:
+            return self._deployed_model
+
+        with self._model_lock:
+            if self._deployed_model is None or self._deployed_model_device != target_device:
+                deployed = copy.deepcopy(self._model)
+                deployed.to(target_device)
+                deployed.eval()
+                deploy_fn = getattr(deployed, "deploy", None)
+                if callable(deploy_fn) and not bool(getattr(deployed, "_deployed", False)):
+                    deploy_fn()
+                    setattr(deployed, "_deployed", True)
+                self._deployed_model = deployed
+                self._deployed_model_device = target_device
+            return self._deployed_model
 
     def _load(self, path: str, *, task: str, weights: str = "default") -> None:
         """Load checkpoint, deserialise config, build model."""
@@ -672,6 +828,7 @@ class DFINE:
             )
         self._task = resolved_task
         self._model.eval()
+        self._invalidate_deployed_cache()
         if self.verbose:
             n_params = sum(p.numel() for p in self._model.parameters())
             print(f"[D-FINE] Loaded '{path}' — {n_params / 1e6:.1f}M params on {self._device_str}")

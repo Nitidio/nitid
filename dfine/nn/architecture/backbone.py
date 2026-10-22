@@ -1,3 +1,5 @@
+# Copyright (c) 2023 PaddlePaddle Authors. All Rights Reserve.
+# HGNetv2 derived from PaddleDetection (Apache-2.0); see THIRD_PARTY_NOTICES.md.
 """
 reference
 - https://github.com/PaddlePaddle/PaddleDetection/blob/develop/ppdet/modeling/backbones/hgnet_v2.py

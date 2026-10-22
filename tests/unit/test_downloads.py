@@ -139,7 +139,21 @@ def test_download_model_converts_selected_checkpoint(
     assert calls["config"]["task"] == "detect"
     assert calls["config"]["num_classes"] == 80
     assert calls["config"]["HGNetv2"]["name"] == "B0"
-    assert calls["names_file"].endswith("configs/datasets/coco.yml")
+    assert Path(calls["names_file"]).name == "coco_names.yml"
+
+
+def test_bundled_coco_names_match_dataset_config():
+    import yaml
+
+    from dfine.data import COCO_NAMES
+
+    bundled = yaml.safe_load(COCO_NAMES.read_text())
+    repo_config = Path(__file__).parents[2] / "configs" / "datasets" / "coco.yml"
+    dataset = yaml.safe_load(repo_config.read_text())
+
+    assert bundled["nc"] == 80
+    assert len(bundled["names"]) == 80
+    assert bundled["names"] == dataset["names"]
 
 
 def test_download_model_skips_existing_variant_output(monkeypatch, tmp_path):

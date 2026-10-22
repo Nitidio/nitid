@@ -39,9 +39,14 @@ import math
 import os
 import random
 import sys
+import tempfile
+import zipfile
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Sequence
+from urllib.parse import urlparse
+from urllib.request import urlretrieve
 
 import numpy as np
 import torch
@@ -51,12 +56,16 @@ from torch.utils.data import DataLoader, Dataset, Subset
 
 from dfine.utils.augmentations import (
     AugmentationConfig,
+    _clip_boxes,
     color_jitter_hsv,
     horizontal_flip,
     horizontal_flip_masks,
     random_crop,
     random_crop_instances,
     random_crop_semantic,
+    random_iou_crop,
+    random_photometric_distort,
+    random_zoom_out,
     resize_masks,
     resize_semantic_mask,
     sanitize,
@@ -66,6 +75,7 @@ from dfine.utils.augmentations import (
     scale_translate_semantic,
     stretch_resize,
     to_tensor,
+    zoom_out_short_side_limit,
 )
 from dfine.utils.logging import LOGGER
 
@@ -89,9 +99,112 @@ class SemanticSplitSpec:
 
 
 def load_data_yaml(path: str | Path) -> dict:
-    """Load an ultralytics-style data YAML and return it as a plain dict."""
+    """Load a YOLO-format data YAML and return it as a plain dict."""
     with open(path) as f:
         return yaml.safe_load(f)
+
+
+def _resolve_dataset_root(data: str | Path, cfg: dict) -> Path:
+    root_value = cfg.get("path")
+    if not isinstance(root_value, (str, Path)):
+        raise ValueError("Data YAML must define a dataset 'path'")
+    root = Path(root_value).expanduser()
+    if not root.is_absolute():
+        root = (Path(data).resolve().parent / root).resolve()
+    return root
+
+
+def _maybe_download_dataset(data: str | Path, cfg: dict, split: str) -> None:
+    """Download a missing dataset archive declared by a YOLO-format data YAML."""
+    if split not in cfg:
+        raise KeyError(f"Data YAML does not define split {split!r}")
+
+    root = _resolve_dataset_root(data, cfg)
+    split_value = cfg[split]
+    if not isinstance(split_value, (str, Path)):
+        raise ValueError(f"Data YAML {split!r} must be a directory path")
+    if (root / split_value).is_dir():
+        return
+
+    download = cfg.get("download")
+    if download is None:
+        return
+    if not isinstance(download, str):
+        raise ValueError("Data YAML 'download' must be a URL string")
+
+    parsed = urlparse(download)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Data YAML 'download' must be an http(s) URL")
+    if not parsed.path.lower().endswith(".zip"):
+        raise ValueError(f"Dataset download must be a .zip archive: {download}")
+
+    expected_sha256 = cfg.get("download_sha256")
+    if expected_sha256 is not None and not isinstance(expected_sha256, str):
+        raise ValueError("Data YAML 'download_sha256' must be a hex string")
+
+    if root.exists():
+        raise FileNotFoundError(
+            f"Dataset split {split!r} not found at {root / split_value}. The dataset directory "
+            f"{root} exists, so it is not downloaded again; remove it to re-download {download}"
+        )
+
+    LOGGER.info("Dataset split %s is missing; downloading dataset from %s", split, download)
+    _download_dataset_archive(download, root, expected_sha256)
+
+
+def _download_dataset_archive(
+    url: str, dataset_root: Path, expected_sha256: str | None = None
+) -> None:
+    """Download, verify and safely extract a dataset zip next to its configured root.
+
+    The archive is extracted into a temporary directory first and its dataset
+    directory is moved into place only once extraction succeeded, so an
+    interrupted download never leaves a partial dataset behind.
+    """
+    dataset_root = dataset_root.expanduser().resolve()
+    extract_dir = dataset_root.parent
+    extract_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix=".nitid-dataset-", dir=extract_dir) as tmp_dir:
+        archive_path = Path(tmp_dir) / Path(urlparse(url).path).name
+        urlretrieve(url, archive_path)
+        if expected_sha256 is not None:
+            digest = _file_sha256(archive_path)
+            if digest != expected_sha256.lower():
+                raise RuntimeError(
+                    f"Checksum mismatch for downloaded dataset {archive_path.name}: "
+                    f"expected {expected_sha256}, got {digest}"
+                )
+
+        staging_dir = Path(tmp_dir) / "extracted"
+        with zipfile.ZipFile(archive_path) as archive:
+            _safe_extract_zip(archive, staging_dir)
+
+        extracted_root = staging_dir / dataset_root.name
+        if not extracted_root.is_dir():
+            raise FileNotFoundError(
+                "Downloaded dataset archive did not create the configured dataset path: "
+                f"{dataset_root}"
+            )
+        extracted_root.replace(dataset_root)
+
+
+def _file_sha256(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _safe_extract_zip(archive: zipfile.ZipFile, extract_dir: Path) -> None:
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    extract_dir = extract_dir.resolve()
+    for member in archive.infolist():
+        target = (extract_dir / member.filename).resolve()
+        if target != extract_dir and extract_dir not in target.parents:
+            raise ValueError(f"Refusing to extract unsafe zip member: {member.filename}")
+    archive.extractall(extract_dir)
 
 
 def normalize_names(cfg: dict) -> dict[int, str]:
@@ -111,7 +224,8 @@ def normalize_names(cfg: dict) -> dict[int, str]:
 def resolve_detection_split(data: str | Path, split: str) -> DetectionSplitSpec:
     """Resolve one split to either a COCO annotation file or YOLO label directory."""
     cfg = load_data_yaml(data)
-    root = Path(cfg["path"])
+    _maybe_download_dataset(data, cfg, split)
+    root = _resolve_dataset_root(data, cfg)
     img_dir = root / cfg[split]
 
     ann_file = _find_coco_annotation(root, cfg, split, img_dir)
@@ -344,6 +458,7 @@ class CocoFinetuneDataset(Dataset):
         self.imgsz = imgsz
         self.augment = augment
         self.mosaic_enabled = True
+        self.sample_indices: list[int] | None = None
         self.seed = seed
         self.epoch = 0
         self.task = task
@@ -376,6 +491,9 @@ class CocoFinetuneDataset(Dataset):
         image, boxes, labels, masks, img_id = self._load_item(idx)
         rng = random.Random(self.seed + self.epoch * max(len(self), 1) + idx)
         cfg = self.augment
+        detection_recipe_aug = bool(
+            cfg and cfg.enabled and self.task == "detect" and cfg.profile in {"dfine", "deim"}
+        )
         mosaic_active = bool(
             cfg
             and cfg.enabled
@@ -385,11 +503,25 @@ class CocoFinetuneDataset(Dataset):
         )
         if mosaic_active:
             image, boxes, labels, masks = self._mosaic(idx, rng)
+        elif detection_recipe_aug:
+            assert cfg is not None
+            image = random_photometric_distort(image, rng, cfg.photometric)
+            image, boxes = random_zoom_out(
+                image,
+                boxes,
+                rng,
+                cfg.zoomout,
+                short_side_limit=zoom_out_short_side_limit(self.imgsz),
+            )
+            image, boxes, labels = random_iou_crop(image, boxes, labels, rng, cfg.iou_crop)
+            boxes, labels = sanitize(boxes, labels, image.size[0], image.size[1])
+            image, boxes = stretch_resize(image, boxes, self.imgsz)
+            masks = resize_masks(masks, self.imgsz)
         else:
             image, boxes = stretch_resize(image, boxes, self.imgsz)
             masks = resize_masks(masks, self.imgsz)
 
-        if cfg and cfg.enabled:
+        if cfg and cfg.enabled and not detection_recipe_aug:
             if cfg.fliplr and rng.random() < cfg.fliplr:
                 image, boxes = horizontal_flip(image, boxes)
                 masks = horizontal_flip_masks(masks)
@@ -412,7 +544,7 @@ class CocoFinetuneDataset(Dataset):
                 masks = resize_masks(masks, self.imgsz)
             image = color_jitter_hsv(image, cfg, rng)
             if cfg.mixup and rng.random() < cfg.mixup:
-                other_idx = rng.randrange(len(self))
+                other_idx = self._sample_partner_index(rng)
                 other_image, other_boxes, other_labels, other_masks, _ = self._load_item(other_idx)
                 other_image, other_boxes = stretch_resize(other_image, other_boxes, self.imgsz)
                 other_masks = resize_masks(other_masks, self.imgsz)
@@ -421,6 +553,15 @@ class CocoFinetuneDataset(Dataset):
                 boxes = torch.cat((boxes, other_boxes))
                 labels = torch.cat((labels, other_labels))
                 masks = torch.cat((masks, other_masks))
+        elif detection_recipe_aug:
+            assert cfg is not None
+            if not mosaic_active:
+                pass
+            image = random_photometric_distort(
+                image, rng, cfg.photometric if mosaic_active else 0.0
+            )
+            if cfg.fliplr and rng.random() < cfg.fliplr:
+                image, boxes = horizontal_flip(image, boxes)
 
         if self.task == "segment":
             boxes, labels, masks = sanitize_instances(boxes, labels, masks, self.imgsz, self.imgsz)
@@ -471,39 +612,61 @@ class CocoFinetuneDataset(Dataset):
     def _mosaic(
         self, idx: int, rng: random.Random
     ) -> tuple[Image.Image, torch.Tensor, torch.Tensor, torch.Tensor]:
-        half = self.imgsz // 2
-        canvas = Image.new("RGB", (self.imgsz, self.imgsz), (114, 114, 114))
-        indices = [idx, *(rng.randrange(len(self)) for _ in range(3))]
+        canvas_size = self.imgsz * 2
+        canvas = Image.new("RGB", (canvas_size, canvas_size), (114, 114, 114))
+        indices = [idx, *(self._sample_partner_index(rng) for _ in range(3))]
         all_boxes, all_labels, all_masks = [], [], []
-        offsets = ((0, 0), (half, 0), (0, half), (half, half))
+        offsets = ((0, 0), (self.imgsz, 0), (0, self.imgsz), (self.imgsz, self.imgsz))
         for item_idx, (left, top) in zip(indices, offsets):
             image, boxes, labels, masks, _ = self._load_item(item_idx)
-            image, boxes = stretch_resize(image, boxes, half)
-            masks = resize_masks(masks, half)
+            image, boxes = stretch_resize(image, boxes, self.imgsz)
+            masks = resize_masks(masks, self.imgsz)
             canvas.paste(image, (left, top))
             boxes[:, [0, 2]] += left
             boxes[:, [1, 3]] += top
             all_boxes.append(boxes)
             all_labels.append(labels)
-            placed_masks = torch.zeros((len(masks), self.imgsz, self.imgsz), dtype=torch.uint8)
-            placed_masks[:, top : top + half, left : left + half] = masks
+            placed_masks = torch.zeros((len(masks), canvas_size, canvas_size), dtype=torch.uint8)
+            placed_masks[:, top : top + self.imgsz, left : left + self.imgsz] = masks
             all_masks.append(placed_masks)
-        return canvas, torch.cat(all_boxes), torch.cat(all_labels), torch.cat(all_masks)
+        crop_left = rng.randint(self.imgsz // 2, self.imgsz + self.imgsz // 2) - self.imgsz // 2
+        crop_top = rng.randint(self.imgsz // 2, self.imgsz + self.imgsz // 2) - self.imgsz // 2
+        crop_right, crop_bottom = crop_left + self.imgsz, crop_top + self.imgsz
+        boxes = torch.cat(all_boxes)
+        labels = torch.cat(all_labels)
+        masks = torch.cat(all_masks)
+        boxes[:, [0, 2]] -= crop_left
+        boxes[:, [1, 3]] -= crop_top
+        masks = masks[:, crop_top:crop_bottom, crop_left:crop_right]
+        if len(masks) != len(boxes):
+            masks = torch.zeros((len(boxes), self.imgsz, self.imgsz), dtype=torch.uint8)
+        boxes, labels, masks = sanitize_instances(boxes, labels, masks, self.imgsz, self.imgsz)
+        return canvas.crop((crop_left, crop_top, crop_right, crop_bottom)), boxes, labels, masks
 
     def _normalize_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
-        result = boxes.clone()
+        result = _clip_boxes(boxes, self.imgsz, self.imgsz)
         if result.numel():
             xyxy = result.clone()
             result[:, 0] = (xyxy[:, 0] + xyxy[:, 2]) / 2 / self.imgsz
             result[:, 1] = (xyxy[:, 1] + xyxy[:, 3]) / 2 / self.imgsz
             result[:, 2] = (xyxy[:, 2] - xyxy[:, 0]) / self.imgsz
             result[:, 3] = (xyxy[:, 3] - xyxy[:, 1]) / self.imgsz
+            result.clamp_(0.0, 1.0)
         return result
 
     def set_epoch(self, epoch: int, mosaic: bool = True) -> None:
         """Select the deterministic transform stream and optionally disable mosaic."""
         self.epoch = epoch
         self.mosaic_enabled = mosaic
+
+    def set_sample_indices(self, indices: list[int] | None) -> None:
+        """Restrict partner augmentations to the active subset of source samples."""
+        self.sample_indices = list(indices) if indices is not None else None
+
+    def _sample_partner_index(self, rng: random.Random) -> int:
+        if self.sample_indices:
+            return self.sample_indices[rng.randrange(len(self.sample_indices))]
+        return rng.randrange(len(self))
 
     def _load_image(self, idx: int) -> Image.Image:
         info = self.coco.imgs[self.ids[idx]]
@@ -515,6 +678,57 @@ def _collate(batch):
     """Stack images into [B,C,H,W]; keep targets as a list of dicts."""
     images, targets = zip(*batch)
     return torch.stack(images), list(targets)
+
+
+class DetectionBatchCollate:
+    """DEIM-style detection collate with optional batch-level MixUp."""
+
+    def __init__(
+        self,
+        *,
+        mixup_prob: float = 0.0,
+        mixup_epochs: tuple[int, int] = (0, 0),
+        seed: int = 0,
+    ) -> None:
+        self.mixup_prob = float(mixup_prob)
+        self.mixup_epochs = mixup_epochs
+        self.seed = seed
+        self.epoch = 0
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = epoch
+
+    def __call__(self, batch):
+        images, targets = _collate(batch)
+        if not self._mixup_active():
+            return images, targets
+
+        rng = random.Random(self.seed + self.epoch)
+        beta = round(rng.uniform(0.45, 0.55), 6)
+        source_images = images
+        rolled_images = source_images.roll(shifts=1, dims=0)
+        images = rolled_images.mul(1.0 - beta).add(source_images.mul(beta))
+        shifted_targets = targets[-1:] + targets[:-1]
+        mixed_targets = deepcopy(targets)
+        for index, target in enumerate(targets):
+            shifted = shifted_targets[index]
+            for key in ("boxes", "labels", "area", "masks"):
+                if key in target and key in shifted:
+                    mixed_targets[index][key] = torch.cat((target[key], shifted[key]), dim=0)
+            primary_count = len(target["labels"])
+            shifted_count = len(shifted["labels"])
+            mixed_targets[index]["mixup"] = torch.tensor(
+                [beta] * primary_count + [1.0 - beta] * shifted_count,
+                dtype=torch.float32,
+            )
+        return images, mixed_targets
+
+    def _mixup_active(self) -> bool:
+        start_epoch, stop_epoch = self.mixup_epochs
+        if self.mixup_prob <= 0.0 or not start_epoch <= self.epoch < stop_epoch:
+            return False
+        rng = random.Random(self.seed + self.epoch * 1_000_003)
+        return rng.random() < self.mixup_prob
 
 
 def build_detection_dataloader(
@@ -532,6 +746,8 @@ def build_detection_dataloader(
     fraction: float = 1.0,
     augment: AugmentationConfig | None = None,
     task: Literal["detect", "segment"] = "detect",
+    collate_mixup_prob: float = 0.0,
+    collate_mixup_epochs: Sequence[int] = (0, 0),
 ) -> DataLoader:
     """Build a DataLoader from COCO JSON or YOLO txt labels."""
     cfg = load_data_yaml(data)
@@ -561,8 +777,19 @@ def build_detection_dataloader(
         count = max(1, int(len(base_dataset) * fraction))
         generator = torch.Generator().manual_seed(seed)
         indices = torch.randperm(len(base_dataset), generator=generator)[:count].tolist()
+        base_dataset.set_sample_indices(indices)
         dataset = Subset(base_dataset, indices)
         dataset_size = count
+
+    collate_fn = _collate
+    if task == "detect" and collate_mixup_prob > 0.0:
+        if len(collate_mixup_epochs) != 2:
+            raise ValueError("collate_mixup_epochs must contain start and stop epochs")
+        collate_fn = DetectionBatchCollate(
+            mixup_prob=collate_mixup_prob,
+            mixup_epochs=(int(collate_mixup_epochs[0]), int(collate_mixup_epochs[1])),
+            seed=seed,
+        )
 
     generator = torch.Generator().manual_seed(seed)
     return DataLoader(
@@ -570,7 +797,7 @@ def build_detection_dataloader(
         batch_size=batch_size,
         shuffle=split == "train",
         num_workers=workers,
-        collate_fn=_collate,
+        collate_fn=collate_fn,
         drop_last=split == "train" and dataset_size >= batch_size,
         generator=generator,
         worker_init_fn=_seed_worker if workers > 0 and deterministic else None,

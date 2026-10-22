@@ -22,16 +22,19 @@ class DFINEPredictor:
     """
     Runs inference for a single source (image, video, directory, stream, …).
 
-    On first use the model is put into deploy mode (BN fusion + weighting
-    function materialisation). The ``_deployed`` flag prevents a second
-    deploy() call if the same DFINE instance is used for multiple predict()
-    calls, since BN fusion is a one-way operation.
+    The public ``DFINE`` wrapper passes a deployed inference copy here. The
+    predictor must not deploy or otherwise structurally mutate the authoritative
+    training model.
     """
 
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
-        if not getattr(model, "_deployed", False):
-            model.deploy()  # fuses BN, materialises weighting fn as static tensor
-            model._deployed = True
+        deploy_fn = getattr(model, "deploy", None)
+        if callable(deploy_fn) and not bool(getattr(model, "_deployed", False)):
+            raise RuntimeError(
+                "DFINEPredictor expects a deployed inference model. "
+                "Use DFINE.predict() or DFINE.predictor so the trainable model "
+                "is preserved."
+            )
         self.model = model
         self.device = device
         self.names = names
@@ -58,15 +61,6 @@ class DFINEPredictor:
         save_dir: str | Path | None,
         exist_ok: bool,
         verbose: bool,
-        backend: str = "opencv",
-        gst_pipeline: str | None = None,
-        reconnect: bool = False,
-        reconnect_initial_delay: float = 1.0,
-        reconnect_max_delay: float = 30.0,
-        reconnect_attempts: int | None = None,
-        rtsp_latency: int = 200,
-        rtsp_transport: str = "tcp",
-        hardware_profile: str | None = None,
         rtsp_username: str | None = None,
         rtsp_password: str | None = None,
         iou: float = 0.85,
@@ -86,15 +80,6 @@ class DFINEPredictor:
             imgsz=imgsz,
             device=self.device,
             vid_stride=vid_stride,
-            backend=backend,
-            gst_pipeline=gst_pipeline,
-            reconnect=reconnect,
-            reconnect_initial_delay=reconnect_initial_delay,
-            reconnect_max_delay=reconnect_max_delay,
-            reconnect_attempts=reconnect_attempts,
-            rtsp_latency=rtsp_latency,
-            rtsp_transport=rtsp_transport,
-            hardware_profile=hardware_profile,
             rtsp_username=rtsp_username,
             rtsp_password=rtsp_password,
         )
@@ -120,15 +105,6 @@ class DFINEPredictor:
                 "save_dir": str(save_dir),
                 "exist_ok": exist_ok,
                 "verbose": verbose,
-                "backend": backend,
-                "gst_pipeline": gst_pipeline,
-                "reconnect": reconnect,
-                "reconnect_initial_delay": reconnect_initial_delay,
-                "reconnect_max_delay": reconnect_max_delay,
-                "reconnect_attempts": reconnect_attempts,
-                "rtsp_latency": rtsp_latency,
-                "rtsp_transport": rtsp_transport,
-                "hardware_profile": hardware_profile,
                 "rtsp_username": rtsp_username,
                 "rtsp_authenticated": rtsp_username is not None,
                 "iou": iou,
@@ -443,6 +419,7 @@ class DFINEPredictor:
             if masks is not None:
                 masks = masks[class_mask]
 
+        h, w = orig_img.shape[:2]
         if augment and len(boxes) > 0:
             import torchvision
 
@@ -469,7 +446,6 @@ class DFINEPredictor:
             if masks is not None:
                 masks = masks[keep_indices]
 
-        h, w = orig_img.shape[:2]
         boxes = clip_boxes(boxes, (h, w))
         result_masks = None
         if masks is not None:

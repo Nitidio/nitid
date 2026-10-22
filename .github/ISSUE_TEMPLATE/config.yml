@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or help with nitid
+    url: https://github.com/Nitidio/nitid/discussions/categories/q-a
+    about: Ask usage questions in Discussions instead of opening an issue.
+  - name: Idea or show and tell
+    url: https://github.com/Nitidio/nitid/discussions
+    about: Share ideas and projects built with nitid.

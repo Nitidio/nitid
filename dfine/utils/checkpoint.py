@@ -83,7 +83,7 @@ def load_checkpoint(path: str | Path, device: str = "cpu"):
     if "config" not in ckpt:
         raise KeyError(
             f"'{path}' has no embedded config. "
-            "Run tools/convert_checkpoint.py to migrate a raw D-FINE .pth."
+            "Run python -m nitid.convert_checkpoint to migrate a raw D-FINE .pth."
         )
 
     _validate_checkpoint_format(ckpt)
@@ -92,7 +92,7 @@ def load_checkpoint(path: str | Path, device: str = "cpu"):
     cfg["task"] = task
     names = ckpt.get("names", {})
     model = build_model(cfg)
-    model.load_state_dict(ckpt["model"])
+    model.load_state_dict(ckpt["model"], strict=True)
     model.to(device)
     model.eval()
     return model, cfg, names

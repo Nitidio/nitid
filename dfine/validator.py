@@ -1,5 +1,5 @@
 """
-DFINEValidator — COCO mAP evaluation plus Ultralytics-style detection plots.
+DFINEValidator — COCO mAP evaluation plus detection plots.
 Called internally by DFINE.val() and DFINETrainer.
 """
 
@@ -164,7 +164,7 @@ class DFINEValidator:
     The postprocessor is rebuilt from the checkpoint config so that validation
     can run without mutating the model state. In addition to COCO metrics, the
     validator computes precision/recall/F1 curves, a confusion matrix, and
-    per-class AP summaries for Ultralytics-style artifacts.
+    per-class AP summaries.
     """
 
     def __init__(self, model, cfg: dict, device: str, names: dict) -> None:
@@ -211,7 +211,6 @@ class DFINEValidator:
                 single_cls=single_cls,
                 show_progress=show_progress,
             )
-
         COCO = importlib.import_module("pycocotools.coco").COCO
         COCOeval = importlib.import_module("pycocotools.cocoeval").COCOeval
         mask_utils = importlib.import_module("pycocotools.mask")
@@ -288,6 +287,7 @@ class DFINEValidator:
                         original_height=int(image_info["height"]),
                         imgsz=imgsz,
                     )
+
                     mask = pred_scores > conf
                     selected = torch.where(mask)[0]
                     selected_masks = None
@@ -379,6 +379,7 @@ class DFINEValidator:
                     "mask_mAP50-95": mean_valid(mask_precision[:, :, :, 0, -1]),
                     "mask_mAP50": mean_valid(mask_precision[0, :, :, 0, -1]),
                 }
+
         elif verbose:
             LOGGER.info("No detections above conf threshold — metrics are zero")
 

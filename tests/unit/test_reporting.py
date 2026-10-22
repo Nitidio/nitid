@@ -6,7 +6,7 @@ import pytest
 
 from dfine import BugReport, bugreport
 from dfine.utils import runs
-from tools import dfine_cli
+from nitid import cli as dfine_cli
 
 
 def _only_report(tmp_path):

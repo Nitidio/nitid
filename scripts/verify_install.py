@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import tempfile
 from importlib.metadata import version
+from importlib.resources import as_file
 from pathlib import Path
 
 import torch
+import yaml
 
 import dfine
 from dfine import DFINE, __version__
+from dfine.data import COCO_NAMES
 from dfine.nn.build import build_model
 from dfine.nn.configs import make_model_config
 
@@ -40,12 +43,21 @@ def _checkpoint(root: Path, task: str) -> Path:
     return path
 
 
+def _verify_coco_names() -> None:
+    """Pretrained downloads embed these names; a missing resource breaks NITID("model1s")."""
+    with as_file(COCO_NAMES) as path:
+        names = yaml.safe_load(path.read_text()).get("names", {})
+    if len(names) != 80:
+        raise RuntimeError(f"Bundled COCO names are incomplete: {len(names)} of 80 classes")
+
+
 def main() -> None:
     package_path = Path(dfine.__file__).resolve()
     if "site-packages" not in package_path.parts:
         raise RuntimeError(f"Expected an installed package, imported {package_path}")
     if version("nitid") != __version__:
         raise RuntimeError("Installed distribution version does not match the release candidate")
+    _verify_coco_names()
 
     with tempfile.TemporaryDirectory(prefix="nitid-wheel-") as directory:
         root = Path(directory)
