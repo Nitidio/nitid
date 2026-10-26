@@ -261,6 +261,17 @@ def test_phase_one_semantic_config_remains_constructible():
     assert model.decoder.__class__.__name__ == "SemSegDecoder"
 
 
+@pytest.mark.parametrize("task", ["detect", "segment"])
+def test_encoder_lateral_convs_have_no_activation(task):
+    # D-FINE's lateral convs are conv + BN only; an activation there loads the
+    # pretrained weights without error but costs up to 11 COCO mAP points (#53).
+    model = build_native_model("dfine_s", num_classes=3, task=task)
+
+    assert model.encoder.lateral_convs
+    for conv in model.encoder.lateral_convs:
+        assert isinstance(conv.act, torch.nn.Identity)
+
+
 def test_model_configs_are_isolated():
     first = get_model_config("dfine_s")
     first["DFINETransformer"]["num_layers"] = 99
