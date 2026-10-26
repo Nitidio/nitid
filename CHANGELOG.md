@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pretrained detection and segmentation models reach the D-FINE paper's COCO
+  accuracy again. The encoder's lateral convolutions applied a SiLU that
+  D-FINE does not have, which cost 4 to 11 mAP points (`model1s` obj2coco:
+  39.3 → 50.7 mAP50-95 on COCO val2017). Models fine-tuned with nitid 0.9.x
+  were trained with that activation; re-validate them after upgrading.
+
 ### Changed
 
 - The MLflow integration names the experiment `nitid` when training has no

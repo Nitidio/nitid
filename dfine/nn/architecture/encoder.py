@@ -376,7 +376,8 @@ class HybridEncoder(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(in_channels) - 1, 0, -1):
-            self.lateral_convs.append(ConvNormLayer(hidden_dim, hidden_dim, 1, 1, act=act))
+            # No activation, as in D-FINE: the pretrained weights expect a linear lateral path.
+            self.lateral_convs.append(ConvNormLayer_fuse(hidden_dim, hidden_dim, 1, 1))
             self.fpn_blocks.append(
                 RepNCSPELAN4(
                     hidden_dim * 2,
