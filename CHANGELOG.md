@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   D-FINE does not have, which cost 4 to 11 mAP points (`model1s` obj2coco:
   39.3 → 50.7 mAP50-95 on COCO val2017). Models fine-tuned with nitid 0.9.x
   were trained with that activation; re-validate them after upgrading.
+- `model1m` returns valid detections on Intel GPUs with FP16 precision. The
+  `openvino` extra now requires OpenVINO 2026.4.1 or later; 2026.2.1 corrupted
+  every inference after the first one on the GPU, which gave 0.0 mAP.
 
 ### Changed
 

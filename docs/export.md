@@ -113,6 +113,16 @@ default preserves FP32 weights to make numerical comparison with ONNX easier.
 Detection, instance segmentation, and semantic segmentation all route through
 this ONNX-to-IR path.
 
+Run exported models with OpenVINO 2026.4.1 or later, which the `openvino`
+extra installs. On an Intel GPU with FP16 inference precision, OpenVINO
+2026.2.1 returns correct detections for `model1m` only on the first inference
+after `compile_model()`; every later inference returns the same low score for
+all 300 queries, which evaluates to 0.0 mAP. The bug is in the GPU plugin, so
+an IR exported with any nitid version works once the runtime is upgraded.
+Keeping the model on FP32 (`INFERENCE_PRECISION_HINT: "f32"`) also avoids it,
+at about 3.4 times the latency. See
+[#52](https://github.com/Nitidio/nitid/issues/52).
+
 ## TorchScript
 
 ```python
