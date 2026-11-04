@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `tools/benchmark_openvino.py` measures latency and COCO mAP of the exported
+  detection models on OpenVINO CPU, GPU and NPU devices, using the same method
+  as the D-FINE paper's T4 TensorRT figures, and writes a JSON report stamped
+  with the hardware, drivers and library versions. `scripts/benchmark_openvino.sh`
+  checks the machine, downloads COCO val2017 and runs it end to end. Runs where
+  other processes competed for the CPU are flagged as unreliable, and runs that
+  return broken outputs are flagged as invalid and get no latency figure.
+- The README's detection table gains the latency measured with that tool on the
+  Intel Arc B390 integrated GPU (Core Ultra X7 358H, OpenVINO 2026.4.1, FP16).
+
 ### Fixed
 
 - Pretrained detection and segmentation models reach the D-FINE paper's COCO
