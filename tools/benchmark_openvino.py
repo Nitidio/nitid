@@ -178,7 +178,7 @@ def to_coco_detections(
 ) -> list[dict[str, Any]]:
     """Convert postprocessed outputs at ``imgsz`` to COCO results in original pixels."""
     width, height = original_size
-    scaled = boxes.astype(np.float64).copy()
+    scaled: np.ndarray = boxes.astype(np.float64).copy()
     scaled[:, [0, 2]] = np.clip(scaled[:, [0, 2]] * width / imgsz, 0, width)
     scaled[:, [1, 3]] = np.clip(scaled[:, [1, 3]] * height / imgsz, 0, height)
     detections = []
