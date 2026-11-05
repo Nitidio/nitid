@@ -78,7 +78,7 @@ cd nitid
 ```
 
 To reproduce a release exactly, check out its tag, for example
-`git checkout v0.9.2`.
+`git checkout v0.9.3`.
 
 Create the environment. The `train` extra adds `pycocotools`, needed for
 training and validation. The `openvino` extra adds OpenVINO Runtime.

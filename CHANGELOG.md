@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-11-05
+
 ### Added
 
 - `tools/benchmark_openvino.py` measures latency and COCO mAP of the exported
@@ -116,4 +118,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default `runs/mlflow` is stored as SQLite instead of MLflow's file store,
   which MLflow 3 refuses by default.
 
-[Unreleased]: https://github.com/Nitidio/nitid/commits/main
+[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/Nitidio/nitid/releases/tag/v0.9.3
