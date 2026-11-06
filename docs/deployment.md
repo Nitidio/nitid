@@ -236,3 +236,23 @@ Example dynamic export:
 ```bash
 nitid export model=model1l task=detect format=onnx batch=4 dynamic=true
 ```
+
+## Benchmark exported formats
+
+Use the benchmark command to export and compare formats on the target machine.
+Warm-up calls are excluded from the reported mean latency, throughput in
+batches per second, and image FPS:
+
+```bash
+nitid benchmark model=model1s formats=[onnx,torchscript,tensorrt] \
+  imgsz=640 batch=1 warmup=10 iterations=100
+```
+
+Each run writes its artifacts, arguments, environment details, and
+`benchmark.json` under `runs/benchmark/`. A missing runtime is shown as skipped
+without hiding results from the formats that are installed. TensorRT requires
+`device=cuda` and a CUDA-capable machine.
+
+Use `formats=[onnx,torchscript]` on CPU-only systems. Always compare on the
+final production hardware because laptop results do not predict accelerator or
+server performance.
