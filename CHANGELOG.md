@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-06
+
+### Added
+
+- `nitid benchmark` exports a model to ONNX, TorchScript and TensorRT and
+  compares mean latency, batches per second and image FPS on the current
+  machine. Runtimes that are not installed are reported as skipped instead of
+  aborting the other formats. See "Benchmark exported formats" in
+  `docs/deployment.md`.
+- `half=True` in prediction runs the forward pass under CUDA FP16 autocast and
+  casts the outputs back to FP32 before postprocessing. On CPU it falls back to
+  FP32.
+
 ## [0.9.3] - 2026-11-05
 
 ### Added
@@ -119,5 +132,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default `runs/mlflow` is stored as SQLite instead of MLflow's file store,
   which MLflow 3 refuses by default.
 
-[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/Nitidio/nitid/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/Nitidio/nitid/releases/tag/v0.9.3

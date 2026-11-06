@@ -10,7 +10,7 @@ include = ["dfine*", "nitid*"]
 
 [project]
 name = "nitid"
-version = "0.9.3"
+version = "0.9.4"
 description = "Object detection, instance segmentation and semantic segmentation, Apache 2.0 code and weights"
 readme = "README.md"
 license = "Apache-2.0"
