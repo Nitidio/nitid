@@ -89,6 +89,7 @@ Options:
   rtsp_password_env=NAME  Environment variable containing the RTSP password
   augment=BOOL        Use test-time augmentation (default: false)
   return_probs=BOOL   Retain full-resolution semantic probabilities (default: false)
+  half=BOOL           Use CUDA FP16 mixed precision; CPU stays FP32 (default: false)
   iou=FLOAT            IoU threshold for augmented-view NMS (default: 0.85)
   save=BOOL           Save overlays and semantic class-ID maps (default: false)
   project=PATH        Parent output directory when save=true (default: runs/detect)

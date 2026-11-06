@@ -136,9 +136,12 @@ class DFINE:
         iou: float = 0.85,
         sink: FrameSink | None = None,
         return_probs: bool = False,
+        half: bool = False,
     ) -> list | Generator:
         """
         Run detection, instance segmentation, or semantic segmentation on a source.
+
+        half=True enables CUDA FP16 autocast; other devices keep FP32.
 
         Returns list[Results] when stream=False,
         Generator[Results] when stream=True.
@@ -163,6 +166,7 @@ class DFINE:
             iou=iou,
             frame_sink=sink,
             return_probs=return_probs,
+            half=half,
         )
 
     def track(
