@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument("--task", choices=("detect", "segment"), default="detect")
     args = parser.parse_args()
 
-    model = NITID("model1s", task=args.task)
+    model = NITID("nitid1s", task=args.task)
     metrics = model.train(
         data="configs/datasets/coco-mini.yml",
         epochs=5,

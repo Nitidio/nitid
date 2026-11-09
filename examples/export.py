@@ -6,7 +6,7 @@ Every exported graph includes the postprocessor, so it returns
 
 from nitid import NITID
 
-model = NITID("model1s", task="detect")
+model = NITID("nitid1s", task="detect")
 
 # ONNX: any ONNX runtime, CPU or GPU
 onnx_path = model.export(format="onnx", imgsz=640, simplify=True, opset=17)

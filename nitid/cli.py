@@ -1,12 +1,12 @@
 """Nitid command-line interface.
 
 Usage:
-    nitid predict  model=model1l weights=obj2coco source=image.jpg conf=0.5
-    nitid track    model=model1s source=video.mp4 conf=0.5 save=true
-    nitid download model=model1l weights=coco
-    nitid train    model=model1l data=coco.yaml epochs=50
-    nitid val      model=model1l data=coco.yaml
-    nitid export   model=model1l format=onnx
+    nitid predict  model=nitid1l weights=obj2coco source=image.jpg conf=0.5
+    nitid track    model=nitid1s source=video.mp4 conf=0.5 save=true
+    nitid download model=nitid1l weights=coco
+    nitid train    model=nitid1l data=coco.yaml epochs=50
+    nitid val      model=nitid1l data=coco.yaml
+    nitid export   model=nitid1l format=onnx
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ Required:
   source=SOURCE       Image, directory, video, URL, webcam index, or stream URL
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: model1l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   conf=FLOAT          Confidence threshold (default: 0.5)
@@ -100,10 +100,10 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
-  nitid predict model=model1l source=image.jpg
-  nitid predict model=model1l weights=coco source=image.jpg save=true
+  nitid predict model=nitid1l source=image.jpg
+  nitid predict model=nitid1l weights=coco source=image.jpg save=true
   nitid predict model=semantic_best.pth task=semantic source=image.jpg save=true
-  nitid predict model=model1l source=video.mp4 conf=0.3 stream=true
+  nitid predict model=nitid1l source=video.mp4 conf=0.3 stream=true
 """,
     "track": """\
 Usage:
@@ -113,7 +113,7 @@ Required:
   source=SOURCE       Video, webcam index, or stream URL
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: model1l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   weights=NAME        default, obj2coco, or coco (default: default)
   tracker=NAME        bytetrack (default), botsort, or ocsort
   conf=FLOAT          Detection confidence threshold (default: 0.1)
@@ -163,21 +163,21 @@ OC-SORT options:
 Install tracking support first with: uv sync --extra track
 
 Examples:
-  nitid track model=model1s source=video.mp4
-  nitid track model=model1s source=video.mp4 tracker=botsort
-  nitid track model=model1s source=video.mp4 tracker=ocsort
-  nitid track model=model1s source=video.mp4 conf=0.5 save=true
-  nitid track model=model1s source=0 classes=[0] stream=true
-  nitid track model=model1s source=rtsp://camera/stream lost_track_buffer=60
-  nitid track model=model1s source=rtsp://cam/stream rtsp_username=viewer rtsp_password_env=CAM_PW
+  nitid track model=nitid1s source=video.mp4
+  nitid track model=nitid1s source=video.mp4 tracker=botsort
+  nitid track model=nitid1s source=video.mp4 tracker=ocsort
+  nitid track model=nitid1s source=video.mp4 conf=0.5 save=true
+  nitid track model=nitid1s source=0 classes=[0] stream=true
+  nitid track model=nitid1s source=rtsp://camera/stream lost_track_buffer=60
+  nitid track model=nitid1s source=rtsp://cam/stream rtsp_username=viewer rtsp_password_env=CAM_PW
 """,
     "download": """\
 Usage:
   nitid download [model=MODEL] [key=value ...]
 
 Options:
-  model=NAME          model1n (segmentation only), model1s, model1m, model1l, or model1x
-                      (default: model1l)
+  model=NAME          nitid1n (segmentation only), nitid1s, nitid1m, nitid1l, or nitid1x
+                      (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   output=PATH         Output directory or .pth file (default: current directory)
@@ -187,12 +187,12 @@ The command downloads the official raw checkpoint and converts it to nitid's
 wrapped .pth format. The filename includes the resolved weight variant.
 
 Examples:
-  nitid download model=model1s
-  nitid download model=model1s task=segment
-  nitid download model=model1s task=semantic
-  nitid download model=model1s weights=coco
-  nitid download model=model1m output=models
-  nitid download model=model1l output=models/custom.pth force=true
+  nitid download model=nitid1s
+  nitid download model=nitid1s task=segment
+  nitid download model=nitid1s task=semantic
+  nitid download model=nitid1s weights=coco
+  nitid download model=nitid1m output=models
+  nitid download model=nitid1l output=models/custom.pth force=true
 """,
     "train": """\
 Usage:
@@ -202,7 +202,7 @@ Required:
   data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: model1l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   epochs=INT          Number of training epochs (default: 50)
@@ -257,9 +257,9 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
-  nitid train model=model1l data=coco.yaml epochs=50 batch=16 mlflow=true
-  nitid train model=model1s task=segment data=instances.yaml epochs=50
-  nitid train model=model1s task=semantic data=semantic.yaml epochs=50
+  nitid train model=nitid1l data=coco.yaml epochs=50 batch=16 mlflow=true
+  nitid train model=nitid1s task=segment data=instances.yaml epochs=50
+  nitid train model=nitid1s task=semantic data=semantic.yaml epochs=50
 """,
     "val": """\
 Usage:
@@ -269,7 +269,7 @@ Required:
   data=PATH           Dataset YAML using COCO/YOLO annotations or dense semantic PNG masks
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: model1l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   imgsz=INT           Square validation image size (default: 640)
@@ -285,8 +285,8 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Example:
-  nitid val model=model1l data=coco.yaml split=val batch=16
-  nitid val model=model1s task=segment data=instances.yaml
+  nitid val model=nitid1l data=coco.yaml split=val batch=16
+  nitid val model=nitid1s task=segment data=instances.yaml
   nitid val model=semantic_last.pth task=semantic data=semantic.yaml
 """,
     "export": """\
@@ -294,7 +294,7 @@ Usage:
   nitid export model=MODEL [key=value ...]
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: model1l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
@@ -316,12 +316,12 @@ Options:
   --report            Tee stdout/stderr and environment details to a bug-report log
 
 Examples:
-  nitid export model=model1l format=onnx
-  nitid export model=model1s task=segment format=onnx
+  nitid export model=nitid1l format=onnx
+  nitid export model=nitid1s task=segment format=onnx
   nitid export model=semantic_best.pth task=semantic format=onnx
-  nitid export model=model1l weights=coco format=openvino
-  nitid export model=model1l format=openvino postprocess=false
-  nitid export model=model1l format=tensorrt half=true
+  nitid export model=nitid1l weights=coco format=openvino
+  nitid export model=nitid1l format=openvino postprocess=false
+  nitid export model=nitid1l format=tensorrt half=true
 """,
     "convert": """\
 Usage:
@@ -347,7 +347,7 @@ Usage:
   nitid benchmark model=MODEL [key=value ...]
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: model1l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   formats=LIST        onnx, torchscript, tensorrt (default: all three)
@@ -366,20 +366,20 @@ The table reports mean latency per batch, batches per second, and image FPS.
 Unavailable runtimes are shown as skipped instead of aborting other formats.
 
 Example:
-  nitid benchmark model=model1s formats=[onnx,torchscript] iterations=50
+  nitid benchmark model=nitid1s formats=[onnx,torchscript] iterations=50
 """,
     "info": """\
 Usage:
   nitid info model=MODEL [key=value ...]
 
 Options:
-  model=MODEL         Architecture name or wrapped checkpoint path (default: model1l)
+  model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect or segment (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
   detailed=BOOL       Include per-layer parameter counts (default: false)
 
 Example:
-  nitid info model=model1l weights=obj2coco detailed=true
+  nitid info model=nitid1l weights=obj2coco detailed=true
 """,
     "bugreport": """\
 Usage:
@@ -475,16 +475,15 @@ def _execute(argv: list[str]) -> None:
         return
 
     if command == "download":
-        model_name = kwargs.pop("model", "model1l")
+        model_name = kwargs.pop("model", "nitid1l")
         task = kwargs.pop("task", "detect")
         weights = kwargs.pop("weights", "default")
         output = kwargs.pop("output", None)
         force = kwargs.pop("force", False)
+        from dfine.nitid import is_public_model_name, resolve_nitid_backend_model
         from dfine.utils.downloads import download_model
 
-        if str(model_name).lower().startswith("model"):
-            from dfine.nitid import resolve_nitid_backend_model
-
+        if is_public_model_name(str(model_name)):
             model_name = resolve_nitid_backend_model(model_name, task=task)
         path = download_model(
             model=model_name,
@@ -515,7 +514,7 @@ def _execute(argv: list[str]) -> None:
         print(f"Dataset config saved to {result.config_path}")
         return
 
-    model_path = kwargs.pop("model", "model1l")
+    model_path = kwargs.pop("model", "nitid1l")
     task = kwargs.pop("task", "detect")
     weights = kwargs.pop("weights", "default")
 

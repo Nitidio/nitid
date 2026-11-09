@@ -14,7 +14,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="$REPO_DIR/datasets/coco"
 OUTPUT_DIR="$REPO_DIR/runs/benchmark/openvino-$(hostname)-$(date +%Y%m%d-%H%M)"
-MODELS="model1s model1m model1l model1x"
+MODELS="nitid1s nitid1m nitid1l nitid1x"
 LATENCY_ONLY=0
 ASSUME_YES=0
 MIN_FREE_GB=20

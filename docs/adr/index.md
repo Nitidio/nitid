@@ -8,8 +8,11 @@ and what was considered instead?* A dated, immutable record is the cheapest way 
 
 ## Index
 
-No ADRs are published yet. Numbers up to 0003 were used before the first public release and are
-retired, so the next record is ADR-0004.
+Numbers up to 0003 were used before the first public release and are retired.
+
+| ADR | Title | Status |
+| --- | ----- | ------ |
+| [0004](0004-public-model-naming.md) | Public model naming (`nitid<version><size>`) | Proposed |
 
 ## Convention
 

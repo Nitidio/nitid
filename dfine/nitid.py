@@ -10,8 +10,14 @@ from typing import Any
 from dfine.model import DFINE
 from dfine.tasks import normalize_task
 
-_NITID_MODEL_RE = re.compile(r"^model(?P<version>\d+)(?P<size>[nsmxl])$")
+# Accepted spellings, after lower-casing and dropping "-" and "_":
+#   nitid1s   canonical public name (``nitid<version><size>``)
+#   nitid1s   legacy alias used up to 0.9.4; resolves to ``nitid1s``
+#   dfines    technical alias (``d-fine-s``, ``dfine_s``); resolves to the
+#             current model generation of that size
+_NITID_MODEL_RE = re.compile(r"^(?:(?:nitid|model)(?P<version>\d+)|dfine)(?P<size>[nsmxl])$")
 _SUPPORTED_VERSION = 1
+PUBLIC_NAME_PREFIXES = ("nitid", "model", "d-fine")
 
 
 @dataclass(frozen=True)
@@ -23,20 +29,37 @@ class NitidModelSpec:
     size: str
 
 
+def is_public_model_name(model: str | Path) -> bool:
+    """Return whether ``model`` is spelled like a public nitid name or alias.
+
+    This only looks at the prefix so callers can route public names through
+    :func:`parse_nitid_model_name` (which validates them) and pass everything
+    else, such as ``dfine_s`` backend names and checkpoint paths, through
+    unchanged.
+    """
+    return isinstance(model, str) and model.lower().strip().startswith(PUBLIC_NAME_PREFIXES)
+
+
 def parse_nitid_model_name(model: str | Path) -> NitidModelSpec:
-    """Parse a public model name such as ``model1s``."""
+    """Parse a public model name such as ``nitid1s``.
+
+    ``nitid1s`` (legacy) and ``d-fine-s`` / ``dfine_s`` (technical alias) are
+    accepted and resolve to the same canonical ``nitid1s``.
+    """
     if not isinstance(model, str):
-        raise TypeError("NITID model names must be strings such as 'model1s'")
+        raise TypeError("NITID model names must be strings such as 'nitid1s'")
 
     normalized = model.lower().strip().replace("-", "").replace("_", "")
     match = _NITID_MODEL_RE.fullmatch(normalized)
     if match is None:
         raise ValueError(
             f"Unsupported NITID model {model!r}. Expected names like "
-            "'model1n', 'model1s', 'model1m', 'model1l', or 'model1x'."
+            "'nitid1n', 'nitid1s', 'nitid1m', 'nitid1l', or 'nitid1x' "
+            "(aliases: 'd-fine-s', ...)."
         )
 
-    version = int(match.group("version"))
+    version_text = match.group("version")
+    version = int(version_text) if version_text is not None else _SUPPORTED_VERSION
     if version != _SUPPORTED_VERSION:
         raise ValueError(
             f"Unsupported NITID model version {version}. "
@@ -44,7 +67,7 @@ def parse_nitid_model_name(model: str | Path) -> NitidModelSpec:
         )
 
     size = match.group("size")
-    return NitidModelSpec(name=f"model{version}{size}", version=version, size=size)
+    return NitidModelSpec(name=f"nitid{version}{size}", version=version, size=size)
 
 
 def resolve_nitid_backend_model(model: str | Path, *, task: str) -> str:
@@ -54,8 +77,8 @@ def resolve_nitid_backend_model(model: str | Path, *, task: str) -> str:
 
     if resolved_task == "detect" and spec.size == "n":
         raise ValueError(
-            "NITID('model1n', task='detect') is not available because no official "
-            "DFINE-N detection checkpoint is registered. Use model1s/m/l/x or a "
+            f"NITID({spec.name!r}, task='detect') is not available because no official "
+            "DFINE-N detection checkpoint is registered. Use nitid1s/m/l/x or a "
             "checkpoint path."
         )
 
@@ -92,7 +115,7 @@ def infer_nitid_model_spec(config: dict[str, Any]) -> NitidModelSpec | None:
     for size, size_config in MODEL_CONFIGS.items():
         if signature(size_config) == checkpoint_signature:
             return NitidModelSpec(
-                name=f"model{_SUPPORTED_VERSION}{size}", version=_SUPPORTED_VERSION, size=size
+                name=f"nitid{_SUPPORTED_VERSION}{size}", version=_SUPPORTED_VERSION, size=size
             )
     return None
 
@@ -100,7 +123,7 @@ def infer_nitid_model_spec(config: dict[str, Any]) -> NitidModelSpec | None:
 class NITID(DFINE):
     """Model-family-neutral public entry point for nitid models.
 
-    ``NITID`` accepts public model identifiers such as ``model1s`` and maps them
+    ``NITID`` accepts public model identifiers such as ``nitid1s`` and maps them
     to the concrete architecture backend for the requested task. It also
     accepts a path to a self-contained checkpoint, such as one written by
     ``train()``; the checkpoint's embedded task must match ``task``. Existing
@@ -110,7 +133,7 @@ class NITID(DFINE):
 
     def __init__(
         self,
-        model: str | Path = "model1s",
+        model: str | Path = "nitid1s",
         *,
         task: str = "detect",
         weights: str = "default",
@@ -136,7 +159,7 @@ class NITID(DFINE):
 
     @property
     def nitid_model(self) -> str | None:
-        """Public nitid model identifier, for example ``'model1s'``.
+        """Public nitid model identifier, for example ``'nitid1s'``.
 
         ``None`` for a checkpoint whose architecture matches no supported size.
         """
