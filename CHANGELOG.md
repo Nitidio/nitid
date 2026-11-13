@@ -15,12 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `spaces/demo/` holds the source of an interactive Gradio demo for a Hugging Face
-  Space (detection and instance segmentation on CPU), with unit and integration
-  tests and publishing instructions in `spaces/README.md` (#7).
 - `nitid.__version__` is now available (it was only exposed as
   `dfine.__version__`). A unit test keeps it equal to the version in
   `pyproject.toml` (#24).
+- `spaces/demo/` holds the source of an interactive Gradio demo for a Hugging Face
+  Space (detection and instance segmentation on CPU), with unit and integration
+  tests and publishing instructions in `spaces/README.md` (#7).
 - `d-fine-n/s/m/l/x` (and `dfine_*`) are accepted as technical aliases for the
   current model generation. `nitid1-s` and any letter case are also accepted.
 - `dfine.nitid.is_public_model_name` decides which names are routed through the
