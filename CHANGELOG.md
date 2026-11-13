@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Tagging a version now creates the GitHub Release automatically after the PyPI
+  upload: notes come from the matching `CHANGELOG.md` section, the wheel and
+  sdist are attached, and `a`/`b`/`rc`/`dev` tags are marked as pre-releases
+  (#3). `scripts/changelog_notes.py` previews the notes.
 - `nitid.__version__` is now available (it was only exposed as
   `dfine.__version__`). A unit test keeps it equal to the version in
   `pyproject.toml` (#24).

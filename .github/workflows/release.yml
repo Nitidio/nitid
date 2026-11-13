@@ -33,6 +33,10 @@ jobs:
             exit 1
           fi
 
+      - name: Check the CHANGELOG has notes for this version
+        if: github.ref_type == 'tag'
+        run: python scripts/changelog_notes.py "${GITHUB_REF_NAME#v}" > /dev/null
+
       # PyPI cannot resolve repository-relative paths, so point the README's
       # images and links at this ref on GitHub before building.
       - name: Make README links absolute for PyPI
@@ -101,3 +105,56 @@ jobs:
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create GitHub Release
+    if: github.ref_type == 'tag'
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Build the release notes from the CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          python scripts/changelog_notes.py "$version" --output notes.md
+          {
+            echo
+            echo "---"
+            echo
+            echo "Install: \`pip install nitid==$version\`"
+            echo
+            echo "Full changelog: https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/CHANGELOG.md"
+          } >> notes.md
+
+      # Re-running the job after a failure updates the release instead of failing.
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [[ "$GITHUB_REF_NAME" =~ (a|b|rc|dev)[0-9]*$ ]]; then
+            flags+=(--prerelease)
+          fi
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file notes.md "${flags[@]}"
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "nitid ${GITHUB_REF_NAME#v}" \
+              --notes-file notes.md \
+              --verify-tag \
+              "${flags[@]}"
+          fi
