@@ -12,7 +12,7 @@ Numbers up to 0003 were used before the first public release and are retired.
 
 | ADR | Title | Status |
 | --- | ----- | ------ |
-| [0004](0004-public-model-naming.md) | Public model naming (`nitid<version><size>`) | Proposed |
+| [0004](0004-public-model-naming.md) | Public model naming (`nitid<version><size>`) | Accepted |
 
 ## Convention
 

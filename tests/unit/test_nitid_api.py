@@ -155,6 +155,7 @@ def test_every_spelling_of_a_size_resolves_to_the_same_backend(size: str) -> Non
         ("detect", "d-fine-x", "nitid1x", "dfine_x"),
     ],
 )
+@pytest.mark.filterwarnings("ignore:.*legacy model name:DeprecationWarning")
 def test_nitid_resolves_existing_tasks_to_backend_models(
     monkeypatch: pytest.MonkeyPatch,
     task: str,
@@ -220,3 +221,52 @@ def test_infer_nitid_model_spec_returns_none_for_unknown_configs(config: dict) -
     from dfine.nitid import infer_nitid_model_spec
 
     assert infer_nitid_model_spec(config) is None
+
+
+@pytest.mark.parametrize(
+    ("legacy", "canonical"),
+    [("model1l", "nitid1l"), ("MODEL-1-M", "nitid1m"), ("model_1_s", "nitid1s")],
+)
+def test_legacy_model_name_emits_deprecation_warning(
+    monkeypatch: pytest.MonkeyPatch, legacy: str, canonical: str
+) -> None:
+    from dfine import NITID
+
+    _patch_checkpoint_loading(monkeypatch)
+
+    with pytest.warns(DeprecationWarning, match="legacy model name") as record:
+        model = NITID(legacy, task="segment", device="cpu", verbose=False)
+
+    assert model.nitid_model == canonical
+    legacy_warnings = [w for w in record if "legacy model name" in str(w.message)]
+    assert len(legacy_warnings) == 1
+    assert repr(legacy) in str(legacy_warnings[0].message)
+    assert repr(canonical) in str(legacy_warnings[0].message)
+    # The warning must point at the caller, or Python's default filter hides it.
+    assert legacy_warnings[0].filename == __file__
+
+
+@pytest.mark.parametrize("name", ["nitid1s", "nitid1-s", "NITID-1-S", "d-fine-s", "dfine_s"])
+def test_current_model_names_do_not_warn(
+    monkeypatch: pytest.MonkeyPatch, recwarn: pytest.WarningsRecorder, name: str
+) -> None:
+    from dfine import NITID
+
+    _patch_checkpoint_loading(monkeypatch)
+
+    NITID(name, task="segment", device="cpu", verbose=False)
+
+    assert not [w for w in recwarn if "legacy model name" in str(w.message)]
+
+
+def test_legacy_name_for_unavailable_model_raises_without_warning(
+    monkeypatch: pytest.MonkeyPatch, recwarn: pytest.WarningsRecorder
+) -> None:
+    from dfine import NITID
+
+    _patch_checkpoint_loading(monkeypatch)
+
+    with pytest.raises(ValueError, match="nitid1n.*detect"):
+        NITID("model1n", task="detect", device="cpu", verbose=False)
+
+    assert not [w for w in recwarn if "legacy model name" in str(w.message)]

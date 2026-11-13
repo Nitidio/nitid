@@ -1,6 +1,6 @@
 # ADR-0004: Public model naming (`nitid<version><size>`)
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-11-09
 - **Deciders**: Jorge Abrines (Vaelsys)
 - **Related**: [`THIRD_PARTY_NOTICES.md`](https://github.com/Nitidio/nitid/blob/main/THIRD_PARTY_NOTICES.md), README model tables

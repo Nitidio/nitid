@@ -22,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 
-- The `model1n/s/m/l/x` names remain accepted and resolve to `nitid1*`; they
-  will be removed in a later minor release.
+- The `model1n/s/m/l/x` names remain accepted and resolve to `nitid1*`;
+  `NITID("model1s")` now emits a `DeprecationWarning` naming the canonical
+  replacement. They will be removed in a later minor release.
 
 ## [0.9.4] - 2026-11-06
 

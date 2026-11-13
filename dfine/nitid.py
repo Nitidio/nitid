@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,10 +13,11 @@ from dfine.tasks import normalize_task
 
 # Accepted spellings, after lower-casing and dropping "-" and "_":
 #   nitid1s   canonical public name (``nitid<version><size>``)
-#   nitid1s   legacy alias used up to 0.9.4; resolves to ``nitid1s``
+#   model1s   legacy alias used up to 0.9.4; resolves to ``nitid1s``
 #   dfines    technical alias (``d-fine-s``, ``dfine_s``); resolves to the
 #             current model generation of that size
 _NITID_MODEL_RE = re.compile(r"^(?:(?:nitid|model)(?P<version>\d+)|dfine)(?P<size>[nsmxl])$")
+_LEGACY_NAME_RE = re.compile(r"^model\d+[nsmxl]$")
 _SUPPORTED_VERSION = 1
 PUBLIC_NAME_PREFIXES = ("nitid", "model", "d-fine")
 
@@ -43,7 +45,7 @@ def is_public_model_name(model: str | Path) -> bool:
 def parse_nitid_model_name(model: str | Path) -> NitidModelSpec:
     """Parse a public model name such as ``nitid1s``.
 
-    ``nitid1s`` (legacy) and ``d-fine-s`` / ``dfine_s`` (technical alias) are
+    ``model1s`` (legacy) and ``d-fine-s`` / ``dfine_s`` (technical alias) are
     accepted and resolve to the same canonical ``nitid1s``.
     """
     if not isinstance(model, str):
@@ -68,6 +70,30 @@ def parse_nitid_model_name(model: str | Path) -> NitidModelSpec:
 
     size = match.group("size")
     return NitidModelSpec(name=f"nitid{version}{size}", version=version, size=size)
+
+
+def _warn_if_legacy_name(model: str | Path, *, stacklevel: int) -> None:
+    """Warn when ``model`` uses a legacy ``model<version><size>`` name (<= 0.9.4).
+
+    The technical aliases (``d-fine-s``) and the hyphenated canonical spelling
+    (``nitid1-s``) are not deprecated and never warn. ``stacklevel`` is counted
+    from this function, so ``3`` attributes the warning to the caller of the
+    function that calls it (here, the user's ``NITID(...)`` call). That keeps
+    it visible under Python's default filter, which only shows
+    ``DeprecationWarning`` raised from ``__main__``.
+    """
+    if not isinstance(model, str):
+        return
+    normalized = model.lower().strip().replace("-", "").replace("_", "")
+    if _LEGACY_NAME_RE.fullmatch(normalized) is None:
+        return
+    canonical = parse_nitid_model_name(model).name
+    warnings.warn(
+        f"{model!r} is a legacy model name and will be removed in a later minor "
+        f"release; use {canonical!r} instead.",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
 
 
 def resolve_nitid_backend_model(model: str | Path, *, task: str) -> str:
@@ -145,6 +171,8 @@ class NITID(DFINE):
         backend_model = (
             str(model) if from_checkpoint else resolve_nitid_backend_model(model, task=task)
         )
+        if not from_checkpoint:
+            _warn_if_legacy_name(model, stacklevel=3)
         super().__init__(
             backend_model,
             task=task,
