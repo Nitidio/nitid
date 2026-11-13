@@ -1,6 +1,6 @@
 # nitid Roadmap
 
-*Last reviewed: 2026-10-22.*
+*Last reviewed: 2026-11-13.*
 
 nitid is a focused library for DETR-style vision models, released under Apache 2.0
 with its pretrained weights. The project is
@@ -76,34 +76,37 @@ Available today:
 - Video files, webcams, and RTSP/HTTP streams, including authenticated cameras.
 - OpenVINO Runtime inference on Intel CPU, integrated GPU, and NPU.
 - Export to ONNX, OpenVINO, TorchScript, and TensorRT.
+- FP16 prediction with `half=True` on CUDA ([#2](https://github.com/Nitidio/nitid/issues/2),
+  0.9.4). On CPU it falls back to FP32.
+- `nitid benchmark`, which compares latency and throughput across export formats
+  on the current machine ([#5](https://github.com/Nitidio/nitid/issues/5), 0.9.4).
 
 Known gaps:
 
 - Semantic benchmark parity still needs larger public benchmark runs.
 - TensorRT export is not available for semantic segmentation.
-- PyTorch inference runs in FP32. FP16 is available through OpenVINO and
-  TensorRT export, not yet for direct PyTorch inference.
-- Training uses a single GPU.
+- Training uses a single GPU (multi-GPU is deferred, see
+  [#9](https://github.com/Nitidio/nitid/issues/9)).
 - Quantized deployment is not implemented.
 
 ## Near-term priorities
 
-1. FP16 PyTorch inference on CUDA ([#6](https://github.com/Nitidio/nitid/issues/6)).
-2. A `benchmark` command for comparing speed across devices and export formats
-   ([#9](https://github.com/Nitidio/nitid/issues/9)).
-3. Safer checkpoint loading with `torch.load(weights_only=True)`
-   ([#27](https://github.com/Nitidio/nitid/issues/27)).
+1. Safer checkpoint loading with `torch.load(weights_only=True)`
+   ([#8](https://github.com/Nitidio/nitid/issues/8)).
+2. An interactive demo on Hugging Face Spaces
+   ([#7](https://github.com/Nitidio/nitid/issues/7)).
+3. Automated GitHub Releases from a version tag
+   ([#3](https://github.com/Nitidio/nitid/issues/3)).
 4. Benchmark-grade validation runs for segmentation on datasets larger than
    smoke tests.
-5. An interactive demo on Hugging Face Spaces
-   ([#16](https://github.com/Nitidio/nitid/issues/16)).
 
 Further out, and accepted but not yet scheduled: multi-GPU training with
-DistributedDataParallel ([#37](https://github.com/Nitidio/nitid/issues/37)),
+DistributedDataParallel ([#9](https://github.com/Nitidio/nitid/issues/9)),
 a model registry on the Hugging Face Hub
-([#10](https://github.com/Nitidio/nitid/issues/10)), SAHI sliced inference
-([#5](https://github.com/Nitidio/nitid/issues/5)), and a conda package
-([#8](https://github.com/Nitidio/nitid/issues/8)).
+([#6](https://github.com/Nitidio/nitid/issues/6)), SAHI sliced inference
+([#1](https://github.com/Nitidio/nitid/issues/1)), a conda package
+([#4](https://github.com/Nitidio/nitid/issues/4)), and Python 3.14 support
+([#21](https://github.com/Nitidio/nitid/issues/21)).
 
 ## Documentation
 

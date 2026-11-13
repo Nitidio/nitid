@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `tools/check_roadmap.py` checks that every issue link in `docs/roadmap.md`
+  exists and that "Near-term priorities" only links to open issues.
 - `nitid.__version__` is now available (it was only exposed as
   `dfine.__version__`). A unit test keeps it equal to the version in
   `pyproject.toml` (#24).
