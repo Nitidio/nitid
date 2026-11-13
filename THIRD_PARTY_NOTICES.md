@@ -83,7 +83,7 @@ nitid does not redistribute pretrained weights. The official checkpoints are
 downloaded on first use from the sources their authors publish them in, and
 keep the licence given there:
 
-- D-FINE detection checkpoints (`model1n`-`model1x`, `task="detect"`):
+- D-FINE detection checkpoints (`nitid1n`-`nitid1x`, `task="detect"`):
   https://github.com/Peterande/storage/releases/tag/dfinev1.0, published with
   https://github.com/Peterande/D-FINE.
   License: Apache-2.0.

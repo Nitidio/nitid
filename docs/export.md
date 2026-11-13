@@ -22,13 +22,13 @@ task. To run the exported artifact outside nitid, see
 ```python
 from nitid import NITID
 
-model = NITID("model1l", task="detect")
+model = NITID("nitid1l", task="detect")
 model.export(format="onnx")
 # → dfine_640.onnx
 ```
 
 ```bash
-uv run nitid export model=model1l task=detect format=onnx
+uv run nitid export model=nitid1l task=detect format=onnx
 ```
 
 The exported model takes a single input `images [B, 3, H, W]`. Detection returns
@@ -81,14 +81,14 @@ Export through the corrected ONNX graph to OpenVINO Intermediate Representation
 ```python
 from nitid import NITID
 
-model = NITID("model1l", task="detect")
+model = NITID("nitid1l", task="detect")
 xml_path = model.export(format="openvino")
 # → runs/export/exp/dfine_640.xml
 # → runs/export/exp/dfine_640.bin
 ```
 
 ```bash
-uv run nitid export model=model1l task=detect format=openvino
+uv run nitid export model=nitid1l task=detect format=openvino
 ```
 
 The `.xml` file stores the graph and the matching `.bin` file stores its weights.
@@ -115,7 +115,7 @@ this ONNX-to-IR path.
 
 Run exported models with OpenVINO 2026.4.1 or later, which the `openvino`
 extra installs. On an Intel GPU with FP16 inference precision, OpenVINO
-2026.2.1 returns correct detections for `model1m` only on the first inference
+2026.2.1 returns correct detections for `nitid1m` only on the first inference
 after `compile_model()`; every later inference returns the same low score for
 all 300 queries, which evaluates to 0.0 mAP. The bug is in the GPU plugin, so
 an IR exported with any nitid version works once the runtime is upgraded.
@@ -145,7 +145,7 @@ model.export(format="tensorrt")
 ```
 
 ```bash
-uv run nitid export model=model1l task=detect format=tensorrt
+uv run nitid export model=nitid1l task=detect format=tensorrt
 ```
 
 The workflow is: trace model → temporary ONNX → TensorRT engine (the intermediate ONNX is removed automatically). Requires a CUDA-capable GPU.
@@ -187,7 +187,7 @@ model.export(format="onnx", postprocess=False)
 ```
 
 ```bash
-uv run nitid export model=model1l task=detect format=openvino postprocess=false
+uv run nitid export model=nitid1l task=detect format=openvino postprocess=false
 ```
 
 This is the same graph the `backend="openvino"` inference path compiles in

@@ -44,7 +44,7 @@ def _checkpoint(root: Path, task: str) -> Path:
 
 
 def _verify_coco_names() -> None:
-    """Pretrained downloads embed these names; a missing resource breaks NITID("model1s")."""
+    """Pretrained downloads embed these names; a missing resource breaks NITID("nitid1s")."""
     with as_file(COCO_NAMES) as path:
         names = yaml.safe_load(path.read_text()).get("names", {})
     if len(names) != 80:

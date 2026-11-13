@@ -44,7 +44,7 @@ from typing import Any
 
 import numpy as np
 
-DEFAULT_MODELS = ["model1s", "model1m", "model1l", "model1x"]
+DEFAULT_MODELS = ["nitid1s", "nitid1m", "nitid1l", "nitid1x"]
 DEFAULT_MATRIX = ["CPU:FP32", "GPU:FP16", "NPU:FP16"]
 # Mean CPU, in cores, that other processes may use during a run before it is flagged unreliable.
 DEFAULT_MAX_BACKGROUND_CPU = 1.0
@@ -52,18 +52,18 @@ PRECISION_HINTS = {"FP32": "f32", "FP16": "f16"}
 
 # Published D-FINE reference figures, as listed in the README.
 REFERENCE_T4_TRT10_FP16_MS = {
-    "model1n": 2.12,
-    "model1s": 3.49,
-    "model1m": 5.62,
-    "model1l": 8.07,
-    "model1x": 12.89,
+    "nitid1n": 2.12,
+    "nitid1s": 3.49,
+    "nitid1m": 5.62,
+    "nitid1l": 8.07,
+    "nitid1x": 12.89,
 }
 REFERENCE_COCO_MAP = {
-    "model1n": 42.8,
-    "model1s": 50.7,
-    "model1m": 55.1,
-    "model1l": 57.3,
-    "model1x": 59.3,
+    "nitid1n": 42.8,
+    "nitid1s": 50.7,
+    "nitid1m": 55.1,
+    "nitid1l": 57.3,
+    "nitid1x": 59.3,
 }
 
 
@@ -141,6 +141,18 @@ def parse_matrix(entries: list[str]) -> list[tuple[str, str]]:
     return combos
 
 
+def canonical_model_name(name: str) -> str:
+    """Return the canonical public name (``nitid1s``) for legacy or alias spellings.
+
+    Reference tables are keyed by canonical name, so ``model1s`` or ``d-fine-s``
+    must be normalised or their reference columns would silently be empty.
+    Anything that is not a public name is returned unchanged.
+    """
+    from dfine.nitid import is_public_model_name, parse_nitid_model_name
+
+    return parse_nitid_model_name(name).name if is_public_model_name(name) else name
+
+
 def parse_weights(entries: list[str]) -> dict[str, str]:
     """Parse ``MODEL=PATH`` checkpoint overrides."""
     weights: dict[str, str] = {}
@@ -148,7 +160,7 @@ def parse_weights(entries: list[str]) -> dict[str, str]:
         name, sep, path = entry.partition("=")
         if not sep or not name or not path:
             raise ValueError(f"Invalid --weights entry {entry!r}: expected MODEL=PATH")
-        weights[name] = path
+        weights[canonical_model_name(name)] = path
     return weights
 
 
@@ -694,7 +706,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--coco", type=Path, required=True, help="COCO root with val2017/")
     parser.add_argument("--annotations", type=Path, help="defaults to <coco>/annotations/...")
     parser.add_argument("--images", type=Path, help="image directory, defaults to <coco>/val2017")
-    parser.add_argument("--models", nargs="+", default=DEFAULT_MODELS)
+    parser.add_argument("--models", nargs="+", default=DEFAULT_MODELS, type=canonical_model_name)
     parser.add_argument("--weights", nargs="*", default=[], help="MODEL=PATH checkpoint overrides")
     parser.add_argument(
         "--matrix", nargs="+", default=DEFAULT_MATRIX, help="DEVICE:PRECISION entries"

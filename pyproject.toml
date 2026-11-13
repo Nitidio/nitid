@@ -67,7 +67,7 @@ track = [
 ]
 
 openvino = [
-    # 2026.2.x corrupts model1m on Intel GPU with FP16 after the first inference (#52).
+    # 2026.2.x corrupts nitid1m on Intel GPU with FP16 after the first inference (#52).
     "openvino>=2026.4.1",
 ]
 

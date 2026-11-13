@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Public model names are now `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l` and
+  `nitid1x` (see ADR-0004). `NITID.nitid_model`, the CLI help, the docs and the
+  benchmark tooling use the new names.
+
+### Added
+
+- `d-fine-n/s/m/l/x` (and `dfine_*`) are accepted as technical aliases for the
+  current model generation. `nitid1-s` and any letter case are also accepted.
+- `dfine.nitid.is_public_model_name` decides which names are routed through the
+  public-name resolver.
+
+### Deprecated
+
+- The `model1n/s/m/l/x` names remain accepted and resolve to `nitid1*`;
+  `NITID("model1s")` now emits a `DeprecationWarning` naming the canonical
+  replacement. They will be removed in a later minor release.
+
 ## [0.9.4] - 2026-11-06
 
 ### Added

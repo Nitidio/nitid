@@ -120,10 +120,10 @@ def test_cli_passes_weights_to_model_constructor(monkeypatch):
     fake_module.NITID = FakeDFINE
     monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
-    main(["nitid", "predict", "model=model1s", "weights=coco", "source=image.jpg"])
+    main(["nitid", "predict", "model=nitid1s", "weights=coco", "source=image.jpg"])
 
     assert observed == {
-        "model": "model1s",
+        "model": "nitid1s",
         "task": "detect",
         "weights": "coco",
         "source": "image.jpg",
@@ -153,7 +153,7 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
         [
             "nitid",
             "track",
-            "model=model1s",
+            "model=nitid1s",
             "source=video.mp4",
             "conf=0.5",
             "save=true",
@@ -163,7 +163,7 @@ def test_track_cli_streams_and_groups_tracker_options(monkeypatch, capsys):
     )
 
     assert observed == {
-        "model": "model1s",
+        "model": "nitid1s",
         "task": "detect",
         "weights": "default",
         "source": "video.mp4",
@@ -196,7 +196,7 @@ def test_cli_passes_segment_task_to_model(monkeypatch):
     fake_module.NITID = FakeDFINE
     monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
-    main(["nitid", "predict", "model=model1s", "task=segment", "source=image.jpg"])
+    main(["nitid", "predict", "model=nitid1s", "task=segment", "source=image.jpg"])
 
     assert observed["task"] == "segment"
 
@@ -344,7 +344,7 @@ def test_track_cli_requires_source(monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "nitid", fake_module)
 
     with pytest.raises(SystemExit) as error:
-        main(["nitid", "track", "model=model1s"])
+        main(["nitid", "track", "model=nitid1s"])
 
     assert error.value.code == 1
     assert "source= is required for track" in capsys.readouterr().out
@@ -368,9 +368,11 @@ def captured_download(monkeypatch, tmp_path):
     ("args", "model", "task"),
     [
         ([], "dfine_l", "detect"),
-        (["model=model1s"], "dfine_s", "detect"),
-        (["model=MODEL1X", "task=segment"], "dfine_x", "segment"),
-        (["model=model1n", "task=segment"], "dfine_n", "segment"),
+        (["model=nitid1s"], "dfine_s", "detect"),
+        (["model=NITID1X", "task=segment"], "dfine_x", "segment"),
+        (["model=model1x", "task=segment"], "dfine_x", "segment"),
+        (["model=d-fine-m"], "dfine_m", "detect"),
+        (["model=nitid1n", "task=segment"], "dfine_n", "segment"),
         (["model=dfine_m"], "dfine_m", "detect"),
     ],
 )
@@ -383,8 +385,8 @@ def test_download_cli_maps_public_model_names(captured_download, capsys, args, m
     assert "Downloaded wrapped checkpoint" in capsys.readouterr().out
 
 
-def test_download_cli_rejects_model1n_detection(captured_download):
-    with pytest.raises(ValueError, match="model1n"):
-        main(["nitid", "download", "model=model1n"])
+def test_download_cli_rejects_nitid1n_detection(captured_download):
+    with pytest.raises(ValueError, match="nitid1n"):
+        main(["nitid", "download", "model=nitid1n"])
 
     assert captured_download == []

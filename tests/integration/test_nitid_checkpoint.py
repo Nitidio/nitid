@@ -11,9 +11,9 @@ from PIL import Image
 @pytest.mark.parametrize(
     ("fixture", "task", "expected_model"),
     [
-        ("tiny_checkpoint", "detect", "model1s"),
-        ("tiny_segment_checkpoint", "segment", "model1s"),
-        ("tiny_semantic_checkpoint", "semantic", "model1n"),
+        ("tiny_checkpoint", "detect", "nitid1s"),
+        ("tiny_segment_checkpoint", "segment", "nitid1s"),
+        ("tiny_semantic_checkpoint", "semantic", "nitid1n"),
     ],
 )
 def test_nitid_loads_checkpoint_path(request, fixture, task, expected_model):
@@ -35,7 +35,7 @@ def test_nitid_accepts_path_objects(tiny_checkpoint):
 
     model = NITID(Path(tiny_checkpoint), device="cpu", verbose=False)
 
-    assert model.nitid_model == "model1s"
+    assert model.nitid_model == "nitid1s"
 
 
 def test_nitid_checkpoint_task_must_match(tiny_segment_checkpoint):

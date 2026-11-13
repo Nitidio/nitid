@@ -29,7 +29,7 @@ download, wrap, and load the corresponding checkpoint on first use.
 ```python
 from nitid import NITID
 
-model = NITID("model1s", task="detect")
+model = NITID("nitid1s", task="detect")
 results = model.predict("image.jpg", conf=0.5)
 results[0].save("out.jpg")
 ```
@@ -40,7 +40,7 @@ rescaling is needed.
 For instance segmentation, select the task when constructing the model:
 
 ```python
-model = NITID("model1s", task="segment")
+model = NITID("nitid1s", task="segment")
 result = model.predict("image.jpg", conf=0.5)[0]
 
 boxes = result.boxes.xyxy
@@ -51,14 +51,14 @@ result.save("segmented.jpg")
 
 Segmentation defaults to the official COCO-pretrained mask weights.
 
-The same street frame with `model1s` and `conf=0.5`, `task="detect"` on the
+The same street frame with `nitid1s` and `conf=0.5`, `task="detect"` on the
 left and `task="segment"` on the right:
 
-![Object detection and instance segmentation with model1s](assets/demo/street.jpg)
+![Object detection and instance segmentation with nitid1s](assets/demo/street.jpg)
 
 For dense semantic segmentation, read the original-resolution class map from
 `result.semantic.mask`. There are no pretrained semantic weights yet:
-`NITID("model1s", task="semantic")` initializes the shared features from the COCO
+`NITID("nitid1s", task="semantic")` initializes the shared features from the COCO
 instance-segmentation checkpoint and is meant for [fine-tuning](fine_tuning.md).
 Predict with your fine-tuned checkpoint:
 
@@ -81,7 +81,7 @@ Use the same model object for inference, training, validation, and export:
 ```python
 from nitid import NITID
 
-model = NITID("model1s", task="detect")
+model = NITID("nitid1s", task="detect")
 
 # Inference
 results = model.predict("image.jpg", conf=0.5)
@@ -159,7 +159,7 @@ CLI equivalent.
 
 ## Working with checkpoints
 
-Official model names such as `model1s` with `task="detect"`, `task="segment"`,
+Official model names such as `nitid1s` with `task="detect"`, `task="segment"`,
 or `task="semantic"` download the matching supported checkpoint automatically. Training
 runs save self-contained `.pth` files with the architecture config and class
 names embedded, so a saved checkpoint can be moved and loaded directly:
@@ -225,7 +225,7 @@ model = YOLO("yolo11n.pt")
 
 # After
 from nitid import NITID
-model = NITID("model1s", task="detect")
+model = NITID("nitid1s", task="detect")
 ```
 
 ### Results access
@@ -280,7 +280,7 @@ model.export(format="tensorrt", half=True)
 from nitid import NITID, bugreport
 
 with bugreport("prediction") as report:
-    model = NITID("model1s", task="detect")
+    model = NITID("nitid1s", task="detect")
     results = model.predict("image.jpg")
 
 print(report.path)
@@ -308,7 +308,7 @@ Use the CLI when you want to run nitid from the terminal instead of Python.
 Run prediction and save the annotated image:
 
 ```bash
-nitid predict model=model1s task=detect source=image.jpg save=true conf=0.5
+nitid predict model=nitid1s task=detect source=image.jpg save=true conf=0.5
 ```
 
 This automatically downloads the matching checkpoint on first use, runs detection
@@ -322,7 +322,7 @@ Choose your own output folder name:
 
 ```bash
 nitid predict \
-    model=model1s task=detect \
+    model=nitid1s task=detect \
     source=image.jpg \
     save=true \
     project=runs/detect \
@@ -339,7 +339,7 @@ Track a video and save annotations with persistent IDs:
 
 ```bash
 pip install "nitid[track]"
-nitid track model=model1s task=detect source=video.mp4 conf=0.5 save=true
+nitid track model=nitid1s task=detect source=video.mp4 conf=0.5 save=true
 ```
 
 The tracked video defaults to `runs/track/exp/video.mp4`.
@@ -347,10 +347,10 @@ The tracked video defaults to `runs/track/exp/video.mp4`.
 Other common CLI commands:
 
 ```bash
-nitid train model=model1l task=detect data=my_dataset.yml epochs=50
-nitid train model=model1l task=detect data=my_dataset.yml epochs=50 recipe=deim
-nitid val model=model1l task=detect data=my_dataset.yml
-nitid export model=model1l task=detect format=onnx
+nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50
+nitid train model=nitid1l task=detect data=my_dataset.yml epochs=50 recipe=deim
+nitid val model=nitid1l task=detect data=my_dataset.yml
+nitid export model=nitid1l task=detect format=onnx
 ```
 
 - `train`: fine-tune a model on a supported dataset YAML.

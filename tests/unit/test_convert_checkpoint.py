@@ -35,9 +35,11 @@ def _run(model: str) -> None:
 @pytest.mark.parametrize(
     ("model", "backend"),
     [
+        ("nitid1l", "dfine_l"),
+        ("NITID1S", "dfine_s"),
         ("model1l", "dfine_l"),
-        ("MODEL1S", "dfine_s"),
-        ("model1n", "dfine_n"),
+        ("d-fine-m", "dfine_m"),
+        ("nitid1n", "dfine_n"),
         ("dfine_m", "dfine_m"),
     ],
 )
@@ -50,7 +52,7 @@ def test_model_accepts_public_and_dfine_names(captured, model, backend):
     assert config == make_model_config(backend, task="detect")
 
 
-@pytest.mark.parametrize("model", ["model2l", "model1q", "nitid1l", "yolo11l"])
+@pytest.mark.parametrize("model", ["nitid2l", "nitid1q", "model2l", "model1q", "yolo11l"])
 def test_model_rejects_unknown_names(captured, capsys, model):
     with pytest.raises(SystemExit) as exc:
         _run(model)
@@ -69,7 +71,7 @@ def test_names_default_to_bundled_coco_names(monkeypatch):
             calls.append((names_file, f.read()))
 
     monkeypatch.setattr(convert_checkpoint, "convert", fake_convert)
-    convert_checkpoint.main(["--weights", "raw.pth", "--model", "model1s", "--output", "out.pth"])
+    convert_checkpoint.main(["--weights", "raw.pth", "--model", "nitid1s", "--output", "out.pth"])
 
     assert len(calls) == 1
     names_file, content = calls[0]

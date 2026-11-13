@@ -13,7 +13,7 @@ or paying for a license.
 *nitid*, from Latin *nitidus*: clear, transparent, precise. **No AGPL, no
 surprises.**
 
-![Object detection with model1m](assets/demo/detect-ski.jpg)
+![Object detection with nitid1m](assets/demo/detect-ski.jpg)
 
 ## Why nitid?
 

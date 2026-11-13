@@ -27,7 +27,7 @@ OpenVINO is an inference runtime. In nitid it is used in two places:
 Training on an Intel GPU or NPU is not supported. The PyTorch build that nitid
 installs has no Intel GPU (`xpu`) support, and the trainer only selects CUDA or
 the CPU. On an Intel machine, training therefore runs on the CPU and is slow.
-Keep the model small (`model1s`) and the dataset small.
+Keep the model small (`nitid1s`) and the dataset small.
 
 `backend="openvino"` is inference-only: `train()` and `val()` raise an error on
 such a model.
@@ -40,7 +40,7 @@ configuration is at hand. No GitHub account is needed. To use the package from
 PyPI instead, see [Without a clone](#without-a-clone).
 
 **Pretrained weights.** These are not stored in the nitid repository.
-`NITID("model1s", task="detect")` downloads the original D-FINE weights from a
+`NITID("nitid1s", task="detect")` downloads the original D-FINE weights from a
 public GitHub release (`github.com/Peterande/storage`). Instance segmentation
 weights come from a public Hugging Face repository (`huggingface.co/ArgoSA/D-FINE-seg`).
 No account or token is needed. The machine needs outbound HTTPS to `github.com`,
@@ -55,7 +55,7 @@ steps below are Linux-only.
 
 **Disk and memory.** Allow about 10 GB of free disk: the virtual environment
 is about 6 GB, because Linux x86_64 installs the CUDA build of PyTorch even on
-machines without an NVIDIA GPU. CPU training of `model1s` with `batch=4` peaked
+machines without an NVIDIA GPU. CPU training of `nitid1s` with `batch=4` peaked
 at about 5 GB of RAM.
 
 ## Step 1: Install nitid (both machines)
@@ -171,7 +171,7 @@ of the environment:
 | Requirement | Value |
 |-------------|-------|
 | CUDA toolkit | Not needed. The PyTorch wheel includes the CUDA runtime and cuDNN |
-| GPU memory | Start with `batch=8` for `model1s`; lower it if you hit out-of-memory errors |
+| GPU memory | Start with `batch=8` for `nitid1s`; lower it if you hit out-of-memory errors |
 
 > **RTX 50 series and other Blackwell GPUs** (compute capability 10.0 or 12.0)
 > need the Python 3.13 environment: create it with
@@ -206,7 +206,7 @@ from nitid import NITID
 
 data = "configs/datasets/coco-mini.yml"
 
-model = NITID("model1s", task="detect", device="cuda:0")
+model = NITID("nitid1s", task="detect", device="cuda:0")
 metrics = model.train(
     data=data,
     epochs=2,
@@ -224,12 +224,12 @@ uv run python train_cuda.py
 The same run from the command line:
 
 ```bash
-uv run nitid train model=model1s task=detect \
+uv run nitid train model=nitid1s task=detect \
     data=configs/datasets/coco-mini.yml \
     epochs=2 imgsz=640 batch=8 workers=4 device=cuda:0 name=cuda-smoke-cli
 ```
 
-On the first run, nitid downloads the `model1s` detection weights (about 40 MB)
+On the first run, nitid downloads the `nitid1s` detection weights (about 40 MB)
 and saves `dfine_s_obj2coco_wrapped.pth` in the current directory. AMP (mixed
 precision) and EMA are on by default for detection on CUDA.
 
@@ -351,7 +351,7 @@ from nitid import NITID
 
 data = "configs/datasets/coco-mini.yml"
 
-model = NITID("model1s", task="detect", device="cpu")
+model = NITID("nitid1s", task="detect", device="cpu")
 metrics = model.train(
     data=data,
     epochs=2,
@@ -370,7 +370,7 @@ uv run python train_cpu.py
 Command line:
 
 ```bash
-uv run nitid train model=model1s task=detect \
+uv run nitid train model=nitid1s task=detect \
     data=configs/datasets/coco-mini.yml \
     epochs=2 imgsz=640 batch=4 workers=2 amp=false device=cpu name=cpu-smoke-cli
 ```
@@ -526,7 +526,7 @@ fitness, `last.pth` the latest one, and both hold EMA weights when EMA is on.
 ## Instance segmentation
 
 The dataset from step 2 also contains polygon masks, so the same steps work for
-instance segmentation. Use `task="segment"` everywhere: `NITID("model1s",
+instance segmentation. Use `task="segment"` everywhere: `NITID("nitid1s",
 task="segment")` downloads the segmentation weights from Hugging Face, and
 `results[0].masks` holds the predicted masks. OpenVINO export and
 `backend="openvino"` work for segmentation models too. On the CPU, one epoch over

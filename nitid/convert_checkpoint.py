@@ -7,11 +7,11 @@ Migrates a raw D-FINE .pth (weights only) into the dfine-wrap format
 Usage:
     python -m nitid.convert_checkpoint \
         --weights dfine_l.pth \
-        --model   model1l \
+        --model   nitid1l \
         --task    detect \
-        --output  model1l_detect.pth
+        --output  nitid1l_detect.pth
 
-``--model`` takes the public ``model1{n,s,m,l,x}`` names or their ``dfine_*``
+``--model`` takes the public ``nitid1{n,s,m,l,x}`` names or their ``dfine_*``
 equivalents. ``--names`` defaults to the COCO class names bundled with the package.
 """
 
@@ -105,10 +105,11 @@ def convert(
 
 
 def _model_name(value: str) -> str:
-    """Map a public ``model1*`` name to its ``dfine_*`` config; pass other names through."""
-    if not value.lower().startswith("model"):
+    """Map a public ``nitid1*`` name to its ``dfine_*`` config; pass other names through."""
+    from dfine.nitid import is_public_model_name, parse_nitid_model_name
+
+    if not is_public_model_name(value):
         return value
-    from dfine.nitid import parse_nitid_model_name
 
     try:
         spec = parse_nitid_model_name(value)
@@ -124,7 +125,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     source.add_argument(
         "--model",
         type=_model_name,
-        help="Model config: model1n/s/m/l/x, or the equivalent dfine_n/s/m/l/x",
+        help="Model config: nitid1n/s/m/l/x, or the equivalent dfine_n/s/m/l/x",
         choices=[
             "dfine_n",
             "dfine_s",

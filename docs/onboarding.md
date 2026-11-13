@@ -162,8 +162,8 @@ The integration tests use synthetic tiny models — they never need to download 
 real checkpoint. For manual testing, prefer official model names:
 
 ```bash
-uv run nitid predict model=model1s task=detect source=image.jpg conf=0.5
-uv run nitid predict model=model1s task=segment source=image.jpg conf=0.5
+uv run nitid predict model=nitid1s task=detect source=image.jpg conf=0.5
+uv run nitid predict model=nitid1s task=segment source=image.jpg conf=0.5
 ```
 
 If you are maintaining support for a new upstream checkpoint, use the conversion
@@ -172,9 +172,9 @@ tool explicitly:
 ```bash
 uv run python -m nitid.convert_checkpoint \
     --weights upstream_checkpoint.pth \
-    --model   model1l \
+    --model   nitid1l \
     --task    detect \
-    --output  model1l_detect.pth
+    --output  nitid1l_detect.pth
 ```
 
 Class names default to the COCO names bundled with the package; pass

@@ -38,7 +38,7 @@ Install ONNX Runtime and export a detection model:
 
 ```bash
 pip install onnxruntime
-nitid export model=model1l task=detect format=onnx output=model.onnx
+nitid export model=nitid1l task=detect format=onnx output=model.onnx
 ```
 
 ```python
@@ -71,7 +71,7 @@ For Intel CPUs, integrated GPUs and NPUs. Install the extra and export:
 
 ```bash
 pip install "nitid[openvino]"
-nitid export model=model1l task=detect format=openvino output=model.xml
+nitid export model=nitid1l task=detect format=openvino output=model.xml
 ```
 
 The exported IR has the same inputs and outputs as the ONNX model, so the
@@ -114,8 +114,8 @@ uv run python -m tools.benchmark_openvino --coco datasets/coco --output runs/ben
 ```
 
 `--coco` points at a COCO root with `val2017/` and
-`annotations/instances_val2017.json`. By default the script exports `model1s`
-to `model1x`, then runs CPU in FP32 and the integrated GPU and NPU in FP16
+`annotations/instances_val2017.json`. By default the script exports `nitid1s`
+to `nitid1x`, then runs CPU in FP32 and the integrated GPU and NPU in FP16
 (`--models` and `--matrix GPU:FP32 ...` change that). For each combination it
 reports:
 
@@ -132,7 +132,7 @@ reports:
 - whether the outputs are valid. A run whose scores are non-finite, or the
   same for every query, is a broken computation: its latency is replaced by
   "invalid" and the run is listed under "Invalid outputs". OpenVINO 2026.2.1
-  did this for `model1m` on Intel GPUs with FP16
+  did this for `nitid1m` on Intel GPUs with FP16
   ([#52](https://github.com/Nitidio/nitid/issues/52)).
 
 Results go to `results.json`, stamped with the CPU, devices, driver packages,
@@ -147,7 +147,7 @@ run reads the same memory.
 Export the PyTorch graph:
 
 ```bash
-nitid export model=model1l task=detect format=torchscript output=model.torchscript
+nitid export model=nitid1l task=detect format=torchscript output=model.torchscript
 ```
 
 Link against LibTorch and load the module with the same preprocessing:
@@ -182,7 +182,7 @@ The export needs a CUDA-capable system with TensorRT installed (see
 [Export › TensorRT](export.md#tensorrt)):
 
 ```bash
-nitid export model=model1l task=detect format=tensorrt batch=1 output=model.engine
+nitid export model=nitid1l task=detect format=tensorrt batch=1 output=model.engine
 ```
 
 Create a Triton model repository:
@@ -234,7 +234,7 @@ tritonserver --model-repository=/models/model_repository
 Example dynamic export:
 
 ```bash
-nitid export model=model1l task=detect format=onnx batch=4 dynamic=true
+nitid export model=nitid1l task=detect format=onnx batch=4 dynamic=true
 ```
 
 ## Benchmark exported formats
@@ -244,7 +244,7 @@ Warm-up calls are excluded from the reported mean latency, throughput in
 batches per second, and image FPS:
 
 ```bash
-nitid benchmark model=model1s formats=[onnx,torchscript,tensorrt] \
+nitid benchmark model=nitid1s formats=[onnx,torchscript,tensorrt] \
   imgsz=640 batch=1 warmup=10 iterations=100
 ```
 
