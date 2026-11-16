@@ -1,0 +1,4 @@
+# CPU-only PyTorch wheels keep the Space build small; Gradio is installed from
+# `sdk_version` in README.md.
+--extra-index-url https://download.pytorch.org/whl/cpu
+nitid>=0.9.4
