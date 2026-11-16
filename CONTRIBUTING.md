@@ -217,12 +217,22 @@ Releases are published to PyPI by
 trusted publisher, so no API token is stored in the repository.
 
 1. Fast-forward `main` to `develop`.
-2. In one commit on `develop`, set `version` in `pyproject.toml` and the release
-   date in `CHANGELOG.md`, then fast-forward `main` again.
+2. In one commit on `develop`, set `version` in `pyproject.toml` and rename
+   `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - DATE`, then fast-forward
+   `main` again. The section text becomes the release notes, so the tag is
+   refused when `CHANGELOG.md` has no section for the version.
 3. Tag that commit and push the tag: `git tag v0.9.1 && git push origin v0.9.1`.
-   The workflow checks that the tag matches the package version, builds the
-   sdist and wheel, runs `scripts/verify_wheel.py`, installs the wheel into a
-   clean environment, runs `scripts/verify_install.py`, and publishes.
+   The workflow checks that the tag matches the package version and that the
+   changelog has notes for it, builds the sdist and wheel, runs
+   `scripts/verify_wheel.py`, installs the wheel into a clean environment, runs
+   `scripts/verify_install.py`, and publishes to PyPI.
+4. After PyPI accepts the files, the `github-release` job creates the GitHub
+   Release for the tag. The notes are the changelog section for that version plus
+   an install line and a link to the changelog. The wheel and sdist are attached.
+   Tags with an `a`, `b`, `rc` or `dev` suffix (for example `v0.10.0rc1`) are
+   marked as pre-releases. Re-running the job updates the release instead of
+   failing. Preview the notes locally with
+   `python scripts/changelog_notes.py 0.9.1`.
 
 Running the workflow by hand (`workflow_dispatch`) publishes the same build to
 TestPyPI instead. Use it as a dry run before a release.
@@ -237,7 +247,7 @@ gh act push -W .github/workflows/release.yml -j build \
 The whole build job, including the clean-environment install check, passes under
 `act`: nitid depends on `opencv-python-headless`, so it does not need `libGL`.
 
-The publish jobs cannot run locally: trusted publishing needs the OIDC token
+The publish and release jobs cannot run locally: trusted publishing needs the OIDC token
 that only GitHub-hosted runs receive.
 
 ## Extending nitid
