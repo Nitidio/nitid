@@ -93,7 +93,7 @@ Known gaps:
 
 1. Safer checkpoint loading with `torch.load(weights_only=True)`
    ([#8](https://github.com/Nitidio/nitid/issues/8)).
-2. An interactive demo on Hugging Face Spaces
+2. An interactive demo on Google Cloud Run
    ([#7](https://github.com/Nitidio/nitid/issues/7)).
 3. Automated GitHub Releases from a version tag
    ([#3](https://github.com/Nitidio/nitid/issues/3)).

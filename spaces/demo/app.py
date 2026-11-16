@@ -1,4 +1,4 @@
-"""Gradio demo for nitid, meant to run as a Hugging Face Space.
+"""Gradio demo for nitid, built as a container image for Google Cloud Run.
 
 Upload an image, pick a task and a model size, and see the detections or the
 instance masks drawn on it. Everything runs on CPU, so the default size is the
