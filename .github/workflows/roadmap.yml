@@ -1,0 +1,32 @@
+name: Roadmap links
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - docs/roadmap.md
+      - tools/check_roadmap.py
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  check:
+    name: Roadmap issue links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Check roadmap links
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m tools.check_roadmap
