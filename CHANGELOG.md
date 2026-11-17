@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-11-17
+
+nitid's public models now carry the project's name: use `nitid1n`, `nitid1s`,
+`nitid1m`, `nitid1l` and `nitid1x`, for example
+`NITID("nitid1s", task="detect")` or `NITID("nitid1s", task="segment")`. Code
+written for earlier releases keeps working: the old `model1*` names resolve to
+the new ones and emit a `DeprecationWarning` that names the replacement. This
+release also adds `nitid.__version__`, and the tooling that publishes releases
+from now on.
+
 ### Changed
 
 - Public model names are now `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l` and
@@ -163,6 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default `runs/mlflow` is stored as SQLite instead of MLflow's file store,
   which MLflow 3 refuses by default.
 
-[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/Nitidio/nitid/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/Nitidio/nitid/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/Nitidio/nitid/releases/tag/v0.9.3
