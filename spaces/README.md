@@ -1,8 +1,11 @@
-# Hugging Face Space
+# Interactive demo (source)
 
 `demo/` is the source of the interactive demo ([#7](https://github.com/Nitidio/nitid/issues/7)).
 It is a small Gradio app that runs the **published** `nitid` package from PyPI on CPU, so what
 visitors try is what `pip install nitid` gives them.
+
+**Status: not published yet** ([#7](https://github.com/Nitidio/nitid/issues/7) stays open until it is).
+The folder is laid out as a Hugging Face Space, but where the demo will run has not been decided.
 
 | File | Purpose |
 |---|---|
@@ -21,10 +24,14 @@ uv run python spaces/demo/app.py
 
 ## Publish it
 
-You need a Hugging Face account that can create Spaces in the organization.
+Hugging Face's documentation says that creating a Space that runs compute (Gradio or Docker)
+requires a paid plan, while static Spaces are free
+(<https://huggingface.co/docs/hub/en/spaces-overview>, checked 2026-11-17). So the steps below need
+an account in the organization **with a paid plan**. Any other host that runs a container with Python
+3.12 and enough RAM for CPU PyTorch (not measured) can also run `demo/app.py`; the app only needs `nitid` and `gradio`.
 
-1. Create the Space: **New Space**, SDK **Gradio**, hardware **CPU basic**, visibility **Public**
-   (for example `<org>/nitid-demo`).
+1. Create the Space: **New Space**, SDK **Gradio**, hardware **CPU basic** (no hourly cost, but see above),
+   visibility **Public** (for example `<org>/nitid-demo`).
 2. Upload the folder contents to the root of the Space:
 
    ```bash
