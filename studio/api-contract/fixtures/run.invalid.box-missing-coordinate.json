@@ -1,0 +1,36 @@
+{
+  "id": "r_01",
+  "model": "nitid1s",
+  "task": "detect",
+  "backend": "openvino",
+  "device": "CPU",
+  "status": "done",
+  "error_msg": null,
+  "item_count": 1,
+  "items": [
+    {
+      "id": 0,
+      "name": "street.jpg",
+      "width": 1280,
+      "height": 720,
+      "detections": [
+        {
+          "box": {
+            "x1": 1,
+            "y1": 2,
+            "x2": 3
+          },
+          "confidence": 0.91,
+          "class_id": 0,
+          "name": "person",
+          "has_mask": false
+        }
+      ],
+      "speed": {
+        "preprocess": 3.1,
+        "inference": 28.4,
+        "postprocess": 1.2
+      }
+    }
+  ]
+}

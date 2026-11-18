@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task": "detect",
+  "model": "nitid1s",
+  "imgsz": 640,
+  "input": {
+    "name": "images",
+    "shape": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "dtype": "float32",
+    "range": "0-1",
+    "color": "RGB",
+    "resize": "squash"
+  },
+  "outputs": [
+    {
+      "name": "scores",
+      "dtype": "float32"
+    },
+    {
+      "name": "boxes",
+      "dtype": "float32",
+      "format": "xyxy_input_px"
+    },
+    {
+      "name": "labels",
+      "dtype": "int64"
+    }
+  ],
+  "names": {
+    "0": "person",
+    "1": "bicycle",
+    "2": "car"
+  },
+  "topk": 300,
+  "default_iou": 0.85,
+  "nitid_version": "0.9.6"
+}
