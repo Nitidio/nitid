@@ -5,3 +5,5 @@ dist-hosted/
 .vite/
 coverage/
 *.tsbuildinfo
+# ONNX Runtime Web runtime copied by scripts/copy-ort.mjs (never commit .wasm)
+public/ort/
