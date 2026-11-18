@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import torch
 
+from dfine.export_meta import META_TASKS, build_onnx_meta, embed_onnx_meta
 from dfine.tasks import normalize_task
 from dfine.utils.logging import LOGGER
 from dfine.utils.runs import atomic_output_path, resolve_run_dir, write_run_metadata
@@ -56,10 +59,19 @@ class DeployModel(torch.nn.Module):
 
 
 class DFINEExporter:
-    def __init__(self, model, cfg: dict, device: str) -> None:
+    def __init__(
+        self,
+        model,
+        cfg: dict,
+        device: str,
+        names: Mapping[Any, Any] | None = None,
+    ) -> None:
         self.model = model
         self.cfg = cfg
         self.device = device
+        # Class names to embed in exported ONNX files (see dfine.export_meta).
+        # ``None`` (e.g. the raw-trace OpenVINO runtime) embeds no meta.
+        self.names = names
 
     def export(
         self,
@@ -130,7 +142,15 @@ class DFINEExporter:
         )
         if format == "onnx":
             return self._to_onnx(
-                out, imgsz, batch, dynamic, simplify, opset, verbose, postprocess=postprocess
+                out,
+                imgsz,
+                batch,
+                dynamic,
+                simplify,
+                opset,
+                verbose,
+                postprocess=postprocess,
+                embed_meta=True,
             )
         if format == "openvino":
             return self._to_openvino(
@@ -155,7 +175,17 @@ class DFINEExporter:
     # ── ONNX ────────────────────────────────────────────────────────────────
 
     def _to_onnx(
-        self, out, imgsz, batch, dynamic, simplify, opset, verbose, *, postprocess: bool = True
+        self,
+        out,
+        imgsz,
+        batch,
+        dynamic,
+        simplify,
+        opset,
+        verbose,
+        *,
+        postprocess: bool = True,
+        embed_meta: bool = False,
     ) -> Path:
         import onnx
 
@@ -170,9 +200,51 @@ class DFINEExporter:
                 model_onnx, ok = onnxsim.simplify(model_onnx)
                 if ok:
                     onnx.save(model_onnx, str(temporary))
+            # Embed last: onnxsim rewrites the model and may drop metadata_props.
+            if embed_meta:
+                self._embed_onnx_meta(temporary, imgsz, batch, postprocess=postprocess)
         if verbose:
             LOGGER.info("ONNX export saved to %s", out)
         return out
+
+    def _effective_topk(self) -> int:
+        """Rows the post-processor keeps per image (dfine/nn/postprocessor.py:53,68-69)."""
+        from dfine.nn.build import build_postprocessor
+
+        post = build_postprocessor(self.cfg)
+        top = int(getattr(post, "num_top_queries", 300))
+        if not getattr(post, "use_focal_loss", True):
+            queries = int(self.cfg["DFINETransformer"]["num_queries"])
+            top = min(top, queries)
+        return top
+
+    def _embed_onnx_meta(self, path: Path, imgsz: int, batch: int, *, postprocess: bool) -> None:
+        """Add the ``nitid_meta`` entry to ``path``'s ``metadata_props`` (additive only).
+
+        Skipped for semantic exports and when no class names were provided.
+        """
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        if self.names is None or task not in META_TASKS:
+            return
+        import onnx
+
+        from dfine import __version__
+        from dfine.nitid import infer_nitid_model_spec
+
+        spec = infer_nitid_model_spec(self.cfg)
+        meta = build_onnx_meta(
+            task=task,
+            imgsz=imgsz,
+            names=self.names,
+            topk=self._effective_topk(),
+            nitid_version=__version__,
+            postprocess=postprocess,
+            model=spec.name if spec else None,
+            batch=batch,
+        )
+        proto = onnx.load(str(path))
+        embed_onnx_meta(proto, meta)
+        onnx.save(proto, str(path))
 
     # ── OpenVINO ────────────────────────────────────────────────────────────
 
@@ -251,7 +323,6 @@ class DFINEExporter:
         graph exposes the decoder's raw outputs (``pred_logits``/``pred_boxes``/…)
         instead of the decoded ``(labels, boxes, scores, …)`` contract.
         """
-        from typing import Any
 
         from dfine.nn.build import build_postprocessor
 
