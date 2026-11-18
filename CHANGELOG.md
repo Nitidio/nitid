@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `nitid studio` (and `python -m nitid.studio`) starts the local Nitid Studio backend: a token-protected FastAPI app with `GET /api/v1/health`, Host/Origin guards, security headers and a single-page-app static fallback. It needs the new optional extra `pip install "nitid[studio]"`; the web UI, model management and jobs arrive in later changes.
+
 ## [0.9.6] - 2026-11-18
 
 Metadata-only release: PyPI and the repository now present nitid.io as the
