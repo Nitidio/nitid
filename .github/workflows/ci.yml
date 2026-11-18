@@ -56,8 +56,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # The studio extra makes the Studio tests run instead of skipping.
       - name: Install dependencies
-        run: uv sync --extra dev --extra train
+        run: uv sync --extra dev --extra train --extra studio
 
       - name: Run tests with coverage
         run: |
@@ -90,16 +91,68 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra studio
 
       - name: Run mypy
         run: uv run mypy dfine/ nitid/ tools/ scripts/
 
+  studio-ui:
+    name: Studio UI (Node 22)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: studio
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Corepack reads "packageManager" in studio/package.json and uses exactly that pnpm.
+      - name: Enable pnpm (version pinned in package.json)
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # lint, typecheck, unit tests and the production build (into nitid/studio/static)
+      - name: Check the frontend
+        run: pnpm run check
+
+      - name: Check the frontend size policy
+        run: pnpm run check:size
+
+      - name: Require the built index.html
+        working-directory: .
+        run: test -f nitid/studio/static/index.html
+
+      - name: Upload the built UI
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-static
+          path: nitid/studio/static
+          if-no-files-found: error
+          retention-days: 7
+
   package:
     name: Installed wheel acceptance
+    needs: studio-ui
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # The wheel must ship the UI, so it is built before `uv build` (see docs/studio-packaging.md).
+      - name: Download the built UI
+        uses: actions/download-artifact@v4
+        with:
+          name: studio-static
+          path: nitid/studio/static
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -109,8 +162,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check the UI is in place
+        run: python scripts/build_studio.py --check-only
+
       - name: Install test dependencies
-        run: uv sync --extra dev --extra train
+        run: uv sync --extra dev --extra train --extra studio
 
       - name: Build distributions
         run: uv build
@@ -124,7 +180,7 @@ jobs:
       - name: Verify installed detection and segmentation APIs
         run: |
           cd "$RUNNER_TEMP"
-          "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/scripts/verify_install.py"
+          "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/scripts/verify_install.py" --require-ui
           "$GITHUB_WORKSPACE/.venv/bin/dfine" --help
 
       - name: Verify the wheel in a slim container without libGL
@@ -133,9 +189,10 @@ jobs:
             set -e
             pip install -q uv
             uv venv -q /venv
+            wheel=$(ls /repo/dist/*.whl)
             uv pip install -q --python /venv/bin/python \
               --index-url https://download.pytorch.org/whl/cpu \
               --extra-index-url https://pypi.org/simple \
-              /repo/dist/*.whl
-            cd /tmp && /venv/bin/python /repo/scripts/verify_install.py
+              "$wheel[studio]"
+            cd /tmp && /venv/bin/python /repo/scripts/verify_install.py --require-ui
           '
