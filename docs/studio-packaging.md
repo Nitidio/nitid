@@ -161,7 +161,7 @@ missing, and runs the same wheel and installed-package checks. The publishing st
   releases were not checked (no GitHub access from the authoring environment) `[NV]`;
   dependabot will propose bumps.
 - The workflows were linted with `actionlint` and parsed as YAML; they have not been run
-  on GitHub `[NV]`. The slim-container step was not run locally (no Docker) `[NV]`.
+  on GitHub `[NV]`. The slim-container step was not run locally (the Docker daemon is not available there) `[NV]`.
 - The pnpm store is not cached in CI; add `cache: pnpm` to `setup-node` if install time
   matters `[NV]`.
 - This page is not in the `mkdocs.yml` navigation, like `studio-development.md`
