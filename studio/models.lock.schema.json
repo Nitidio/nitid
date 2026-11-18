@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nitidio/nitid/studio/models.lock.schema.json",
+  "title": "Nitid Studio models lock",
+  "description": "Pinned, licence-audited list of the pretrained weights Studio may ever load or host. Structure only: the business rules (licence allowlist, pinned revision, hostable gate, unique ids) live in tools/check_models_lock.py. See docs/licensing/studio-weights.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_on", "entries"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "generated_on": {
+      "description": "ISO date on which the facts in this file were last checked.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "task",
+        "nitid_model",
+        "weights_variant",
+        "format",
+        "upstream_repo",
+        "revision",
+        "revision_kind",
+        "url",
+        "size_bytes",
+        "sha256",
+        "sha256_status",
+        "license",
+        "license_source",
+        "training_data",
+        "open_caveats",
+        "notice_required",
+        "notice_files",
+        "hostable",
+        "hostable_reason"
+      ],
+      "properties": {
+        "id": {
+          "description": "Unique, stable, lowercase identifier.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "task": { "enum": ["detect", "segment"] },
+        "nitid_model": {
+          "description": "Public nitid name that resolves to this checkpoint (ADR-0004).",
+          "type": "string",
+          "pattern": "^nitid[0-9]+[nsmlx]$"
+        },
+        "weights_variant": {
+          "description": "Variant name used by dfine/utils/downloads.py (for example coco, obj2coco).",
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "description": "Format of the pinned artefact. A derived ONNX file would be a separate entry with its own hash.",
+          "enum": ["pytorch-checkpoint", "onnx"]
+        },
+        "upstream_repo": {
+          "description": "Repository that publishes the code and states the licence.",
+          "type": "string",
+          "pattern": "^https://github\\.com/[^/]+/[^/]+$"
+        },
+        "revision": {
+          "description": "Pinned release tag, release id or commit. Floating names (main, master, latest, head) are rejected by the checker.",
+          "type": "string",
+          "minLength": 1
+        },
+        "revision_kind": { "enum": ["release-tag", "release-id", "commit"] },
+        "url": { "type": "string", "pattern": "^https://" },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 1 },
+        "sha256": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "sha256_status": { "enum": ["verified", "unverified"] },
+        "sha256_note": {
+          "description": "How and when the hash was obtained, or why it is missing.",
+          "type": "string"
+        },
+        "license": {
+          "description": "SPDX identifier of the licence that covers the weights, as stated by the upstream source.",
+          "type": "string",
+          "minLength": 1
+        },
+        "license_source": {
+          "description": "Exact place where the licence statement was read (file and revision, or API call).",
+          "type": "string",
+          "minLength": 1
+        },
+        "training_data": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "open_caveats": {
+          "description": "Unresolved licence questions. Any item blocks hostable=true.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "notice_required": { "type": "boolean" },
+        "notice_files": {
+          "description": "Files that must travel with the weights (for example LICENSE, NOTICE). Must be non-empty when notice_required is true.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "hostable": {
+          "description": "Result of the repository gate (see the checker), not a legal opinion: true means Studio is not blocked by this repository's rules from hosting a derived ONNX of this checkpoint.",
+          "type": "boolean"
+        },
+        "hostable_reason": { "type": "string", "minLength": 1 },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "sha256_status": { "const": "verified" } },
+            "required": ["sha256_status"]
+          },
+          "then": { "properties": { "sha256": { "$ref": "#/$defs/sha256" } } },
+          "else": { "properties": { "sha256": { "type": "null" } } }
+        }
+      ]
+    }
+  }
+}
