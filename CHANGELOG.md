@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-11-18
+
+Metadata-only release: PyPI and the repository now present nitid.io as the
+project's home, with the tagline "Nitid Object detection that's actually open
+source". No code or model changes.
+
 ### Changed
 
 - Project metadata: the PyPI `Homepage` now points to <https://nitid.io> (documentation stays on GitHub Pages) and the tagline reads "Nitid Object detection that's actually open source" in the README, docs and MkDocs config.
