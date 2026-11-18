@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
+import { defaultClientConditions } from "vite";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -21,6 +22,12 @@ export default defineConfig(({ mode }) => {
   return {
     base: "/",
     plugins: [react()],
+    resolve: {
+      // onnxruntime-web: use its "extern wasm" entry points, which do not embed
+      // the 15-29 MB .wasm files in the bundle. The runtime loads them from
+      // /ort/ (copied by scripts/copy-ort.mjs) through env.wasm.wasmPaths.
+      conditions: ["onnxruntime-web-use-extern-wasm", ...defaultClientConditions],
+    },
     define: {
       __STUDIO_MODE__: JSON.stringify(hosted ? "hosted" : "auto"),
     },
