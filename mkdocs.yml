@@ -35,6 +35,7 @@ nav:
   - Home: index.md
   - Quick Start: quickstart.md
   - Command Line: cli.md
+  - Nitid Studio: studio.md
   - Fine-tuning: fine_tuning.md
   - "Guide: CUDA and OpenVINO": training_cuda_openvino.md
   - Export: export.md

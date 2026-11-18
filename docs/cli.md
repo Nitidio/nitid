@@ -82,6 +82,7 @@ uv run nitid val --help
 uv run nitid export --help
 uv run nitid info --help
 uv run nitid bugreport --help
+uv run nitid studio --help
 ```
 
 The shorter `-h` flag also works:
@@ -356,6 +357,42 @@ When no model command can run, create an environment-only report:
 ```bash
 uv run nitid bugreport
 ```
+
+## Start Nitid Studio
+
+`nitid studio` starts the local Nitid Studio web app. It needs the optional
+`studio` extra, which installs FastAPI and uvicorn:
+
+```bash
+pip install "nitid[studio]"
+uv run nitid studio
+```
+
+The command prints the access URL, which carries a random per-start token in
+the URL fragment, and opens it in your browser:
+
+```text
+Open: http://127.0.0.1:8000/#t=<token>
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `host=HOST` | `127.0.0.1` | Interface to listen on. Anything other than loopback requires `token=`. |
+| `port=INT` | `8000` | TCP port. `port=0` picks a free port. |
+| `models=PATH` | `./models` | Directory for models. |
+| `open=BOOL` | `true` | Open the browser when the server is ready. |
+| `--no-browser` | | Same as `open=false`. |
+| `token=TOKEN` | random | Access token, at least 8 characters. |
+
+```bash
+uv run nitid studio port=8080 --no-browser
+uv run nitid studio host=0.0.0.0 token=a-long-secret-value open=false
+python -m nitid.studio port=0
+```
+
+Without the extra, the command prints `pip install "nitid[studio]"` and exits
+with a non-zero code. `--report` is not supported for `studio`. See the
+[Nitid Studio guide](studio.md) for security notes and current limits.
 
 ## Using the development Docker container
 

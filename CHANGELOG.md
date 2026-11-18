@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ONNX exports of detection and instance-segmentation models now embed a `nitid_meta` entry in the ONNX `metadata_props` with class names, input preprocessing, output contract, `topk` and default IoU. It is additive and does not change the graph; read it with `dfine.export_meta.read_onnx_meta` or plain `onnx`/`onnxruntime` (see `docs/export.md`).
+- `nitid studio` (and `python -m nitid.studio`) starts the local Nitid Studio backend: a token-protected FastAPI app with `GET /api/v1/health`, Host/Origin guards, security headers and a single-page-app static fallback. It needs the new optional extra `pip install "nitid[studio]"`; the web UI, model management and jobs arrive in later changes.
 
 ## [0.9.6] - 2026-11-18
 
