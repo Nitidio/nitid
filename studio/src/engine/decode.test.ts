@@ -99,7 +99,7 @@ function tensors(rows: { label: number; score: number; box: [number, number, num
   };
 }
 
-describe("decode: filters (predictor.py:419-431)", () => {
+describe("decode: filters (predictor.py:428-443)", () => {
   const rows = [
     { label: 0, score: 0.9, box: [0, 0, 32, 32] as [number, number, number, number] },
     { label: 1, score: 0.5, box: [8, 8, 40, 40] as [number, number, number, number] },
@@ -226,7 +226,7 @@ function segTensors(box: [number, number, number, number], maskValues: number[],
   };
 }
 
-describe("decode: masks (predictor.py:462-470, ops.py:11-36)", () => {
+describe("decode: masks (predictor.py:473-484, ops.py:11-36)", () => {
   it("thresholds with >= (a probability equal to the threshold is foreground)", () => {
     // 1x1 source mask resized to 4x4: every pixel interpolates to the same value.
     const at = (value: number, threshold: number) =>
@@ -282,7 +282,7 @@ describe("decode: masks (predictor.py:462-470, ops.py:11-36)", () => {
   });
 });
 
-describe("decode: raw layout replays the post-processor (postprocessor.py:55-62)", () => {
+describe("decode: raw layout replays the post-processor (postprocessor.py:51-59)", () => {
   const rawMeta = (): OnnxMeta =>
     detectMeta({
       outputs: [

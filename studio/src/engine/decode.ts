@@ -1,19 +1,19 @@
 /**
  * Decoding of the ONNX outputs into detections, replicating Python.
  *
- * Reference: `DFINEPredictor._postprocess` (`dfine/predictor.py:377-470`) fed by
+ * Reference: `DFINEPredictor._postprocess` (`dfine/predictor.py:377-497`) fed by
  * `DFINEPostProcessor` (`dfine/nn/postprocessor.py`). What the Python code does
  * in the default path (`augment=False`), and what this file therefore does:
  *
- * 1. Rows with `scores > conf` are kept (STRICT `>`; `predictor.py:419`). Default
+ * 1. Rows with `scores > conf` are kept (STRICT `>`; `predictor.py:428`). Default
  *    `conf = 0.5` (`dfine/model.py:121`), not 0.25.
- * 2. If `classes` is given, rows whose label is in it are kept (`predictor.py:421-431`).
+ * 2. If `classes` is given, rows whose label is in it are kept (`predictor.py:433-443`).
  * 3. NO NMS is applied. The only suppression in Python is the cross-view merge of
- *    `augment=True` (flip TTA, `predictor.py:433-458`), which needs two forward
+ *    `augment=True` (flip TTA, `predictor.py:446-470`), which needs two forward
  *    passes and is not implemented here (`[NV]` v1 scope). `iou` is therefore
  *    unused (the meta's `default_iou` is informational). Overlapping boxes of
  *    one class are all kept, exactly like Python; the top-K selection already
- *    happened in the graph (`postprocessor.py:53,68-69`, `topk` of the meta).
+ *    happened in the graph (`postprocessor.py:53,69`, `topk` of the meta).
  * 4. Boxes: the graph returns `xyxy` in pixels of the model INPUT (S x S, the
  *    deploy wrapper passes `(W, H) = input size`, `exporter.py` `DeployModel`).
  *    They are rescaled to the original image with `x * W / S`, `y * H / S`
@@ -23,7 +23,7 @@
  *    Filtering happens BEFORE clipping, like Python.
  * 5. Masks (segment): the graph returns SIGMOID PROBABILITIES at `S/4`
  *    (`decoder.py:1198-1199`, eval mode), already gathered per selected query.
- *    Python resizes them to the original `(H, W)` with
+ *    Python (`predictor.py:473-484`) resizes them to the original `(H, W)` with
  *    `F.interpolate(mode="bilinear", align_corners=False)` (no antialiasing),
  *    thresholds with `>= mask_threshold` (default 0.5, `model.py:122`) and then
  *    zeroes everything outside the clipped box (`crop_masks_to_boxes`,
@@ -33,9 +33,9 @@
  *
  * The raw layout (`postprocess=False` exports) is also supported by replaying
  * the post-processor: sigmoid, top-K over the flattened `[queries * classes]`
- * scores, `label = idx % C`, `query = idx // C` (`postprocessor.py:55-62`).
+ * scores, `label = idx % C`, `query = idx // C` (`postprocessor.py:51-59`).
  * `[NV]`: it assumes `use_focal_loss=True` (the nitid default); the meta does
- * not record that flag, and the softmax variant (`postprocessor.py:63-77`) is
+ * not record that flag, and the softmax variant (`postprocessor.py:60-76`) is
  * not implemented.
  */
 import { EngineError } from "./errors";
@@ -132,7 +132,7 @@ export function decodeOutputs(
     (c) => c.score > conf && (classSet === null || classSet.has(c.label)),
   );
 
-  // Clip AFTER filtering (predictor.py:460 `clip_boxes` runs after the filters).
+  // Clip AFTER filtering (predictor.py:472 `clip_boxes` runs after the filters).
   const clipped = kept.map((c) => ({
     ...c,
     x1: clamp(c.x1, 0, width),
@@ -234,7 +234,7 @@ function readRaw(
   const classes = logits.dims[2]!;
   expectDims("pred_boxes", boxes, 3, [queries, 4]);
 
-  // sigmoid + top-K over the flattened [queries * classes] (postprocessor.py:55-58).
+  // sigmoid + top-K over the flattened [queries * classes] (postprocessor.py:51-59).
   const total = queries * classes;
   const probabilities = new Float64Array(total);
   for (let i = 0; i < total; i++) probabilities[i] = 1 / (1 + Math.exp(-numberAt(logits.data, i)));
