@@ -3,7 +3,7 @@
 ![nitid](assets/brand/nitid-logo-on-light.png#only-light)
 ![nitid](assets/brand/nitid-logo-on-dark.png#only-dark)
 
-**One library. DETR made simple.**
+**Nitid Object detection that's actually open source**
 
 Train, validate, export and run vision models. The code and the official
 pretrained weights are released under the Apache License 2.0, patent grant

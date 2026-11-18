@@ -1,5 +1,5 @@
 site_name: nitid
-site_description: One library. DETR made simple. — Apache 2.0 code and weights
+site_description: Nitid Object detection that's actually open source — Apache 2.0 code and weights
 repo_url: https://github.com/Nitidio/nitid
 
 theme:

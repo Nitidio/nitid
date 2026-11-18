@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>One library. DETR made simple.</strong></p>
+<p align="center"><strong>Nitid Object detection that's actually open source</strong></p>
 
 <p align="center">
   <a href="https://nitidio.github.io/nitid/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>

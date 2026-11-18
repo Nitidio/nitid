@@ -84,7 +84,7 @@ nitid = "nitid.cli:main"
 dfine = "nitid.cli:main"
 
 [project.urls]
-Homepage = "https://nitidio.github.io/nitid/"
+Homepage = "https://nitid.io"
 Documentation = "https://nitidio.github.io/nitid/"
 Issues = "https://github.com/Nitidio/nitid/issues"
 Repository = "https://github.com/Nitidio/nitid"
