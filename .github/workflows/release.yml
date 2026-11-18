@@ -42,6 +42,22 @@ jobs:
       - name: Make README links absolute for PyPI
         run: python scripts/pypi_readme.py --ref "$GITHUB_REF_NAME"
 
+      # The wheel ships the compiled Studio UI, which is not committed: build it first
+      # (Node >= 22.13, pnpm from the "packageManager" pin) and fail if it is missing.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build the Studio UI
+        run: |
+          corepack enable
+          python scripts/build_studio.py
+          test -f nitid/studio/static/index.html || {
+            echo "::error::nitid/studio/static/index.html is missing; the wheel would ship without the UI"
+            exit 1
+          }
+
       - name: Build distributions
         run: uv build
 
@@ -54,12 +70,13 @@ jobs:
       - name: Install the wheel into a clean environment
         run: |
           uv venv "$RUNNER_TEMP/venv"
-          uv pip install --python "$RUNNER_TEMP/venv/bin/python" dist/*.whl
+          wheel=$(ls dist/*.whl)
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" "$wheel[studio]"
 
       - name: Verify installed detection and segmentation APIs
         run: |
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/venv/bin/python" "$GITHUB_WORKSPACE/scripts/verify_install.py"
+          "$RUNNER_TEMP/venv/bin/python" "$GITHUB_WORKSPACE/scripts/verify_install.py" --require-ui
           "$RUNNER_TEMP/venv/bin/nitid" --help
 
       - uses: actions/upload-artifact@v4
