@@ -1,0 +1,7 @@
+# Build and tooling output (see also the "Nitid Studio" block in the root .gitignore)
+node_modules/
+dist/
+dist-hosted/
+.vite/
+coverage/
+*.tsbuildinfo
