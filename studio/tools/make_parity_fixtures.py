@@ -206,7 +206,9 @@ def run_task(task: str, root: Path) -> dict[str, Any]:
     assert tensor.shape == (1, 3, IMGSZ, IMGSZ)
 
     # --- ONNX: postprocessed and raw layouts -----------------------------------
-    onnx_path = model.export(format="onnx", imgsz=IMGSZ, save_dir=root / f"onnx-{task}", verbose=False)
+    onnx_path = model.export(
+        format="onnx", imgsz=IMGSZ, save_dir=root / f"onnx-{task}", verbose=False
+    )
     meta = read_onnx_meta(onnx_path)
     assert meta is not None
     session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
@@ -274,11 +276,20 @@ def run_task(task: str, root: Path) -> dict[str, Any]:
         "scores": flat(outputs["scores"], 6),
     }
     raw_layout = {
-        "pred_logits": {"dims": list(raw_outputs["pred_logits"].shape), "data": flat(raw_outputs["pred_logits"], 5)},
-        "pred_boxes": {"dims": list(raw_outputs["pred_boxes"].shape), "data": flat(raw_outputs["pred_boxes"], 6)},
+        "pred_logits": {
+            "dims": list(raw_outputs["pred_logits"].shape),
+            "data": flat(raw_outputs["pred_logits"], 5),
+        },
+        "pred_boxes": {
+            "dims": list(raw_outputs["pred_boxes"].shape),
+            "data": flat(raw_outputs["pred_boxes"], 6),
+        },
     }
     if task == "segment":
-        raw_post["masks"] = {"dims": list(outputs["masks"].shape), "data": flat(outputs["masks"], 4)}
+        raw_post["masks"] = {
+            "dims": list(outputs["masks"].shape),
+            "data": flat(outputs["masks"], 4),
+        }
         raw_layout["pred_masks"] = {
             "dims": list(raw_outputs["pred_masks"].shape),
             "data": flat(raw_outputs["pred_masks"], 4),
@@ -299,7 +310,10 @@ def run_task(task: str, root: Path) -> dict[str, Any]:
         "raw_meta": raw_meta,
         "preprocess": [preprocess_expected(MAIN_IMAGE["width"], MAIN_IMAGE["height"])]
         + [preprocess_expected(c["width"], c["height"]) for c in PREPROCESS_CASES],
-        "postprocessed_outputs": {**raw_post, "dims": {k: list(v.shape) for k, v in outputs.items()}},
+        "postprocessed_outputs": {
+            **raw_post,
+            "dims": {k: list(v.shape) for k, v in outputs.items()},
+        },
         "raw_outputs": raw_layout,
         "cases": cases,
         "all_scores": [r(s, 6) for s in scores_all],
