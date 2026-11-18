@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ONNX exports of detection and instance-segmentation models now embed a `nitid_meta` entry in the ONNX `metadata_props` with class names, input preprocessing, output contract, `topk` and default IoU. It is additive and does not change the graph; read it with `dfine.export_meta.read_onnx_meta` or plain `onnx`/`onnxruntime` (see `docs/export.md`).
 - `nitid studio` (and `python -m nitid.studio`) starts the local Nitid Studio backend: a token-protected FastAPI app with `GET /api/v1/health`, Host/Origin guards, security headers and a single-page-app static fallback. It needs the new optional extra `pip install "nitid[studio]"`; the web UI, model management and jobs arrive in later changes.
+- Nitid Studio: `GET /api/v1/devices`, `GET /api/v1/models`, `POST /api/v1/models/{id}/download` and `GET /api/v1/jobs/{job_id}` list the installed compute devices (CPU, OpenVINO CPU/iGPU/NPU, CUDA), the available `nitid1*` models and their download state.
+- Nitid Studio packaging: `scripts/build_studio.py` builds the UI into the wheel, `scripts/verify_wheel.py` and `scripts/verify_install.py --require-ui` check size, contents and a clean install; CI has a `studio-ui` job and releases build the UI first.
+- Licensing for Studio weights: `studio/models.lock.json` pins revision, SHA-256 and SPDX licence per model, `tools/check_models_lock.py` validates it, and `THIRD_PARTY_NOTICES.md` plus `docs/licensing/studio-weights.md` document redistribution terms.
+- Nitid Studio in-browser engine: ONNX Runtime Web in a Web Worker with Pillow-exact preprocessing, `nitid_meta` decoding for detection and segmentation, and a Cache API keyed by SHA-256; parity fixtures in `studio/` compare it with the Python predictor.
 
 ## [0.9.6] - 2026-11-18
 
