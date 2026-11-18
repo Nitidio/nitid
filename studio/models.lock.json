@@ -17,7 +17,7 @@
       "sha256_status": "verified",
       "sha256_note": "Computed with sha256sum on the full release asset downloaded on 2026-11-18 (size matched the Content-Range total).",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017"
       ],
@@ -45,7 +45,7 @@
       "sha256_status": "verified",
       "sha256_note": "Computed with sha256sum on the full release asset downloaded on 2026-11-18 (size matched the Content-Range total).",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017"
       ],
@@ -72,7 +72,7 @@
       "sha256_status": "unverified",
       "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017"
       ],
@@ -99,7 +99,7 @@
       "sha256_status": "unverified",
       "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017"
       ],
@@ -126,7 +126,7 @@
       "sha256_status": "unverified",
       "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017"
       ],
@@ -153,7 +153,7 @@
       "sha256_status": "verified",
       "sha256_note": "Computed with sha256sum on the full release asset downloaded on 2026-11-18 (size matched the Content-Range total).",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017",
         "Objects365"
@@ -184,7 +184,7 @@
       "sha256_status": "unverified",
       "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017",
         "Objects365"
@@ -215,7 +215,7 @@
       "sha256_status": "unverified",
       "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017",
         "Objects365"
@@ -246,7 +246,7 @@
       "sha256_status": "unverified",
       "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
       "license": "Apache-2.0",
-      "license_source": "git clone (anonymous, depth 1) of Peterande/D-FINE @956d1709314c2c6a4df6f34de232054578a7449f: LICENSE (Apache License 2.0 text, 11357 bytes) and README badge; checked 2026-11-18",
+      "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
         "COCO train2017",
         "Objects365"
