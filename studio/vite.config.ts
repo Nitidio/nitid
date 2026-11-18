@@ -30,6 +30,10 @@ export default defineConfig(({ mode }) => {
         "/api": { target: "http://127.0.0.1:8000", changeOrigin: false },
       },
     },
+    // The inference worker (src/workers/inference.worker.ts) uses dynamic import()
+    // to load onnxruntime-web, which needs ES-module workers (the default "iife"
+    // format cannot code-split). Same-origin only: no CDN.
+    worker: { format: "es" },
     build: {
       outDir,
       emptyOutDir: true,
