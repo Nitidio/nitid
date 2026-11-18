@@ -31,7 +31,9 @@ def torch_devices() -> dict[str, Any]:
                 try:
                     name = str(torch.cuda.get_device_name(index))
                 except Exception:  # driver hiccup: keep the device, drop the name
-                    logger.warning("Could not read the name of CUDA device %d", index, exc_info=True)
+                    logger.warning(
+                        "Could not read the name of CUDA device %d", index, exc_info=True
+                    )
                     name = f"CUDA device {index}"
                 cuda.append({"index": index, "name": name})
     except Exception:
