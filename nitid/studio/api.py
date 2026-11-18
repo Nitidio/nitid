@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from nitid.studio.routes_models import build_models_router
 from nitid.studio.settings import API_PREFIX, API_VERSION
 
 
@@ -18,6 +19,7 @@ def build_v1_router() -> APIRouter:
     from nitid import __version__
 
     router = APIRouter(prefix=API_PREFIX)
+    router.include_router(build_models_router())  # /devices, /models, /jobs (WP-1.2)
 
     @router.get("/health")
     def health() -> dict[str, str]:
