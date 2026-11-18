@@ -22,7 +22,7 @@
 import { decodeOutputs } from "./decode";
 import { EngineError } from "./errors";
 import { outputNames, parseMeta } from "./meta";
-import { readEmbeddedMeta } from "./onnx-metadata";
+import { readEmbeddedMeta, stripValueInfo } from "./onnx-metadata";
 import { preprocessCanvas, preprocessRgba, type CanvasFactory, bitmapToRgba, type ResizeMode, validateDimensions } from "./preprocess";
 import type { DecodeOptions, Detection, NamedTensors, OnnxMeta, RgbaImage } from "./types";
 
@@ -77,6 +77,8 @@ export interface SessionInit {
 export interface InitInfo {
   backend: "wasm" | "webgpu";
   fallbackReason?: string;
+  /** Load-time workarounds that were needed (e.g. `"stripped-value-info"`). */
+  workarounds?: string[];
   numThreads: number;
   meta: OnnxMeta;
 }
@@ -147,6 +149,7 @@ export class EngineSession {
     const numThreads = chooseNumThreads(deps.env);
 
     let fallbackReason: string | undefined;
+    const workarounds: string[] = [];
     let wantWebGpu = requested === "webgpu" || requested === "auto";
     if (wantWebGpu && !(await safe(deps.env.hasWebGpu()))) {
       wantWebGpu = false;
@@ -160,10 +163,7 @@ export class EngineSession {
       try {
         ort = await deps.loadOrt("webgpu");
         configureEnv(ort, wasmBase, numThreads);
-        session = await ort.InferenceSession.create(bytes, {
-          executionProviders: ["webgpu", "wasm"],
-          graphOptimizationLevel: "all",
-        });
+        session = await createWithWorkarounds(ort, bytes, ["webgpu", "wasm"], workarounds);
       } catch (error) {
         fallbackReason = `WebGPU session could not be created: ${String(error)}`;
         provider = "wasm";
@@ -175,10 +175,7 @@ export class EngineSession {
       try {
         ort = await deps.loadOrt("wasm");
         configureEnv(ort, wasmBase, numThreads);
-        session = await ort.InferenceSession.create(bytes, {
-          executionProviders: ["wasm"],
-          graphOptimizationLevel: "all",
-        });
+        session = await createWithWorkarounds(ort, bytes, ["wasm"], workarounds);
       } catch (error) {
         throw new EngineError("backend_unavailable", `Could not start ONNX Runtime Web: ${String(error)}`, {
           cause: error,
@@ -196,7 +193,13 @@ export class EngineSession {
       );
     }
 
-    const info: InitInfo = { backend: provider, numThreads, meta, ...(fallbackReason ? { fallbackReason } : {}) };
+    const info: InitInfo = {
+      backend: provider,
+      numThreads,
+      meta,
+      ...(fallbackReason ? { fallbackReason } : {}),
+      ...(workarounds.length > 0 ? { workarounds } : {}),
+    };
     return new EngineSession(ort, session, info, deps.makeCanvas);
   }
 
@@ -272,6 +275,30 @@ export class EngineSession {
     this.disposed = true;
     await this.chain;
     await this.session.release().catch(() => undefined);
+  }
+}
+
+/**
+ * Creates the ORT session; if ORT rejects the graph with a shape-inference
+ * error caused by a wrong `value_info` entry, retries once without `value_info`
+ * (see `stripValueInfo`). Any other error is rethrown untouched.
+ */
+async function createWithWorkarounds(
+  ort: OrtModule,
+  bytes: Uint8Array,
+  executionProviders: string[],
+  workarounds: string[],
+): Promise<OrtSessionLike> {
+  const options = { executionProviders, graphOptimizationLevel: "all" };
+  try {
+    return await ort.InferenceSession.create(bytes, options);
+  } catch (error) {
+    if (!/ShapeInferenceError|inferred=\d+ declared=\d+/.test(String(error))) throw error;
+    const stripped = stripValueInfo(bytes);
+    if (!stripped) throw error;
+    const session = await ort.InferenceSession.create(stripped, options);
+    workarounds.push("stripped-value-info");
+    return session;
   }
 }
 

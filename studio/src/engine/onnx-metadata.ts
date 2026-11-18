@@ -111,3 +111,72 @@ export function readEmbeddedMeta(bytes: Uint8Array): OnnxMeta | null {
   const raw = readOnnxMetadataProps(bytes)[META_KEY];
   return raw === undefined ? null : parseMeta(raw);
 }
+
+const GRAPH_FIELD = 7; // ModelProto.graph
+const VALUE_INFO_FIELD = 13; // GraphProto.value_info
+
+function varintBytes(value: number): number[] {
+  const out: number[] = [];
+  let v = value;
+  while (v >= 128) {
+    out.push((v % 128) | 0x80);
+    v = Math.floor(v / 128);
+  }
+  out.push(v);
+  return out;
+}
+
+/**
+ * Returns a copy of the ONNX bytes without `graph.value_info`, or `null` when
+ * the graph has none.
+ *
+ * Why: `value_info` is optional, purely informative shape/type metadata. Some
+ * nitid exports carry a wrong entry (`_v_2148`: declared rank 0, real shape
+ * [4, 256]) that Python onnxruntime 1.28 accepts with a warning but
+ * onnxruntime-web 1.31.1 rejects at load time with
+ * `ShapeInferenceError ... inferred=2 declared=0` (reproduced in headless
+ * Chrome with the segment export). Removing the entries lets ORT infer shapes
+ * itself and does not change any computation. The session retries with these
+ * bytes only after a load failure of that kind.
+ */
+export function stripValueInfo(bytes: Uint8Array): Uint8Array | null {
+  const top: Cursor = { buf: bytes, pos: 0 };
+  while (top.pos < bytes.length) {
+    const fieldStart = top.pos;
+    const tag = readVarint(top);
+    const field = Math.floor(tag / 8);
+    const wireType = tag & 7;
+    if (field === GRAPH_FIELD && wireType === 2) {
+      const length = readVarint(top);
+      const bodyStart = top.pos;
+      const bodyEnd = bodyStart + length;
+      if (bodyEnd > bytes.length) throw truncated();
+      const graph = bytes.subarray(bodyStart, bodyEnd);
+      const kept: Uint8Array[] = [];
+      let removed = 0;
+      const inner: Cursor = { buf: graph, pos: 0 };
+      while (inner.pos < graph.length) {
+        const start = inner.pos;
+        const innerTag = readVarint(inner);
+        const innerField = Math.floor(innerTag / 8);
+        skip(inner, innerTag & 7);
+        if (innerField === VALUE_INFO_FIELD) removed++;
+        else kept.push(graph.subarray(start, inner.pos));
+      }
+      if (removed === 0) return null;
+      const newLength = kept.reduce((sum, part) => sum + part.length, 0);
+      const head = bytes.subarray(0, fieldStart);
+      const newTag = Uint8Array.from([...varintBytes(tag), ...varintBytes(newLength)]);
+      const tail = bytes.subarray(bodyEnd);
+      const out = new Uint8Array(head.length + newTag.length + newLength + tail.length);
+      let offset = 0;
+      for (const part of [head, newTag, ...kept, tail]) {
+        out.set(part, offset);
+        offset += part.length;
+      }
+      return out;
+    }
+    skip(top, wireType);
+  }
+  return null;
+}

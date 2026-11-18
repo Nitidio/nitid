@@ -139,6 +139,52 @@ describe("session: creation", () => {
     await expect(EngineSession.create(deps(ort), { modelBytes, meta })).rejects.toMatchObject({ code: "backend_unavailable" });
   });
 
+  describe("load-time workaround for wrong value_info (ShapeInferenceError)", () => {
+    // Minimal ONNX-shaped bytes: a graph (field 7) holding one value_info (field 13).
+    const withValueInfo = Uint8Array.from([0x3a, 0x04, 0x6a, 0x02, 0x0a, 0x00]);
+
+    it("retries once without value_info and reports the workaround", async () => {
+      const { ort, log } = fakeOrt();
+      const create = ort.InferenceSession.create;
+      let calls = 0;
+      ort.InferenceSession.create = async (bytes, opts) => {
+        calls++;
+        if (calls === 1) throw new Error("[ShapeInferenceError] Mismatch between number of inferred and declared dimensions. inferred=2 declared=0");
+        expect(Array.from(bytes)).toEqual([0x3a, 0x00]); // graph with value_info removed
+        return create(bytes, opts);
+      };
+      const session = await EngineSession.create(deps(ort), { modelBytes: withValueInfo.buffer as ArrayBuffer, meta });
+      expect(session.info.workarounds).toEqual(["stripped-value-info"]);
+      expect(log.created.length).toBe(1);
+    });
+
+    it("does not retry for other errors", async () => {
+      const { ort } = fakeOrt();
+      let calls = 0;
+      ort.InferenceSession.create = async () => {
+        calls++;
+        throw new Error("Out of memory");
+      };
+      await expect(EngineSession.create(deps(ort), { modelBytes: withValueInfo.buffer as ArrayBuffer, meta })).rejects.toMatchObject({
+        code: "backend_unavailable",
+      });
+      expect(calls).toBe(1);
+    });
+
+    it("gives up (original error) when there is no value_info to strip", async () => {
+      const { ort } = fakeOrt();
+      let calls = 0;
+      ort.InferenceSession.create = async () => {
+        calls++;
+        throw new Error("ShapeInferenceError: something else");
+      };
+      await expect(EngineSession.create(deps(ort), { modelBytes: Uint8Array.from([0x08, 0x08]).buffer as ArrayBuffer, meta })).rejects.toMatchObject({
+        code: "backend_unavailable",
+      });
+      expect(calls).toBe(1);
+    });
+  });
+
   describe("webgpu is optional", () => {
     it("is not even loaded unless requested", async () => {
       const { ort } = fakeOrt();

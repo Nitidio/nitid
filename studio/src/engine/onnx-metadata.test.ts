@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EngineError } from "./errors";
-import { META_KEY, readEmbeddedMeta, readOnnxMetadataProps } from "./onnx-metadata";
+import { META_KEY, readEmbeddedMeta, readOnnxMetadataProps, stripValueInfo } from "./onnx-metadata";
 import { loadFixture } from "./test-utils";
 
 // Tiny protobuf writer, enough to build a ModelProto-shaped buffer by hand.
@@ -73,5 +73,41 @@ describe("onnx-metadata: reading metadata_props without parsing the graph", () =
 
   it("an empty file has no metadata", () => {
     expect(readOnnxMetadataProps(new Uint8Array())).toEqual({});
+  });
+});
+
+describe("onnx-metadata: stripValueInfo (workaround for wrong value_info entries)", () => {
+  const node = lenField(1, enc.encode("node-bytes")); // GraphProto.node
+  const valueInfo = (name: string) => lenField(13, str(1, name)); // GraphProto.value_info
+  const modelWith = (graphParts: number[][]) =>
+    fakeModel([[0x08, 0x08], lenField(7, graphParts.flat()), entry(META_KEY, "{}"), str(2, "tail")]);
+
+  it("removes every value_info of the graph and keeps all other fields byte for byte", () => {
+    const input = modelWith([node, valueInfo("a"), str(2, "graph-name"), valueInfo("b")]);
+    const expected = modelWith([node, str(2, "graph-name")]);
+    expect(Array.from(stripValueInfo(input)!)).toEqual(Array.from(expected));
+  });
+
+  it("re-encodes the graph length (including a multi-byte length)", () => {
+    const big = lenField(1, new Uint8Array(300).fill(7));
+    const input = modelWith([big, valueInfo("a")]);
+    const expected = modelWith([big]);
+    expect(Array.from(stripValueInfo(input)!)).toEqual(Array.from(expected));
+  });
+
+  it("returns null when there is nothing to strip, or no graph", () => {
+    expect(stripValueInfo(modelWith([node]))).toBeNull();
+    expect(stripValueInfo(fakeModel([[0x08, 0x08]]))).toBeNull();
+    expect(stripValueInfo(new Uint8Array())).toBeNull();
+  });
+
+  it("does not touch the metadata_props after the graph", () => {
+    const stripped = stripValueInfo(modelWith([valueInfo("a")]))!;
+    expect(readOnnxMetadataProps(stripped)[META_KEY]).toBe("{}");
+  });
+
+  it("a truncated graph is invalid_model", () => {
+    const input = modelWith([node, valueInfo("a")]).slice(0, 12);
+    expect(() => stripValueInfo(input)).toThrowError(/truncated/);
   });
 });
