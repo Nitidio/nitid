@@ -72,3 +72,14 @@ Kinds: `meta`, `health`, `devices`, `models`, `job`, `run-params`, `run`, `error
 Additive, backwards-compatible changes (a new optional field, a new endpoint) stay in `v1`. Anything
 else (removing or renaming a field, tightening a type) needs `/api/v2` and a new ADR. For the meta,
 bump `schema_version` and keep reading version 1.
+
+## Raw (non-postprocessed) outputs
+
+An ONNX exported with `postprocess=False` exposes the raw decoder outputs. Its embedded meta describes
+them with the `raw_*` definitions: `pred_logits` (float32), `pred_boxes` (float32, normalised
+`cxcywh`, format tag `cxcywh_norm`) and, for `segment`, `pred_masks` (float32, stride 4). The
+postprocessed layout (`labels`, `boxes`, `scores`[, `masks`]) and the raw layout are the only two
+accepted; mixing them is invalid. The API always serves postprocessed ONNX files; the raw layout is
+described for completeness because the exporter embeds a meta in both cases.
+Found while integrating the `studio/onnx-meta` branch (the exporter produced raw layouts the first
+schema version rejected); see fixtures `meta.*-raw.valid.json` and `meta.invalid.raw-*.json`.

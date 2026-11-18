@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "task": "detect",
+  "model": "nitid1s",
+  "imgsz": 640,
+  "input": {
+    "name": "images",
+    "shape": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "dtype": "float32",
+    "range": "0-1",
+    "color": "RGB",
+    "resize": "squash"
+  },
+  "outputs": [
+    {
+      "name": "pred_logits",
+      "dtype": "float32"
+    },
+    {
+      "name": "pred_boxes",
+      "dtype": "float32",
+      "format": "cxcywh_norm"
+    }
+  ],
+  "names": {
+    "0": "person",
+    "1": "bicycle",
+    "2": "car"
+  },
+  "topk": 300,
+  "default_iou": 0.85,
+  "nitid_version": "0.9.6"
+}

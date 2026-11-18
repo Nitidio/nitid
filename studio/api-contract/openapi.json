@@ -1898,19 +1898,35 @@
             "then": {
               "properties": {
                 "outputs": {
-                  "prefixItems": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/OnnxMeta_labels"
+                      "prefixItems": [
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_labels"
+                        },
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_boxes"
+                        },
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_scores"
+                        }
+                      ],
+                      "minItems": 3,
+                      "maxItems": 3
                     },
                     {
-                      "$ref": "#/components/schemas/OnnxMeta_boxes"
-                    },
-                    {
-                      "$ref": "#/components/schemas/OnnxMeta_scores"
+                      "prefixItems": [
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_raw_logits"
+                        },
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_raw_boxes"
+                        }
+                      ],
+                      "minItems": 2,
+                      "maxItems": 2
                     }
-                  ],
-                  "minItems": 3,
-                  "maxItems": 3
+                  ]
                 }
               }
             }
@@ -1929,22 +1945,41 @@
             "then": {
               "properties": {
                 "outputs": {
-                  "prefixItems": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/OnnxMeta_labels"
+                      "prefixItems": [
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_labels"
+                        },
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_boxes"
+                        },
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_scores"
+                        },
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_masks"
+                        }
+                      ],
+                      "minItems": 4,
+                      "maxItems": 4
                     },
                     {
-                      "$ref": "#/components/schemas/OnnxMeta_boxes"
-                    },
-                    {
-                      "$ref": "#/components/schemas/OnnxMeta_scores"
-                    },
-                    {
-                      "$ref": "#/components/schemas/OnnxMeta_masks"
+                      "prefixItems": [
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_raw_logits"
+                        },
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_raw_boxes"
+                        },
+                        {
+                          "$ref": "#/components/schemas/OnnxMeta_raw_masks"
+                        }
+                      ],
+                      "minItems": 3,
+                      "maxItems": 3
                     }
-                  ],
-                  "minItems": 4,
-                  "maxItems": 4
+                  ]
                 }
               }
             }
@@ -2056,6 +2091,15 @@
           },
           {
             "$ref": "#/components/schemas/OnnxMeta_masks"
+          },
+          {
+            "$ref": "#/components/schemas/OnnxMeta_raw_logits"
+          },
+          {
+            "$ref": "#/components/schemas/OnnxMeta_raw_boxes"
+          },
+          {
+            "$ref": "#/components/schemas/OnnxMeta_raw_masks"
           }
         ]
       },
@@ -2116,6 +2160,62 @@
         "properties": {
           "name": {
             "const": "masks"
+          },
+          "dtype": {
+            "const": "float32"
+          },
+          "stride": {
+            "const": 4
+          }
+        },
+        "required": [
+          "name",
+          "dtype",
+          "stride"
+        ],
+        "additionalProperties": false
+      },
+      "OnnxMeta_raw_logits": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "const": "pred_logits"
+          },
+          "dtype": {
+            "const": "float32"
+          }
+        },
+        "required": [
+          "name",
+          "dtype"
+        ],
+        "additionalProperties": false
+      },
+      "OnnxMeta_raw_boxes": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "const": "pred_boxes"
+          },
+          "dtype": {
+            "const": "float32"
+          },
+          "format": {
+            "const": "cxcywh_norm"
+          }
+        },
+        "required": [
+          "name",
+          "dtype",
+          "format"
+        ],
+        "additionalProperties": false
+      },
+      "OnnxMeta_raw_masks": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "const": "pred_masks"
           },
           "dtype": {
             "const": "float32"

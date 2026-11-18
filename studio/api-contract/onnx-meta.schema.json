@@ -140,19 +140,35 @@
       "then": {
         "properties": {
           "outputs": {
-            "prefixItems": [
+            "oneOf": [
               {
-                "$ref": "#/$defs/labels"
+                "prefixItems": [
+                  {
+                    "$ref": "#/$defs/labels"
+                  },
+                  {
+                    "$ref": "#/$defs/boxes"
+                  },
+                  {
+                    "$ref": "#/$defs/scores"
+                  }
+                ],
+                "minItems": 3,
+                "maxItems": 3
               },
               {
-                "$ref": "#/$defs/boxes"
-              },
-              {
-                "$ref": "#/$defs/scores"
+                "prefixItems": [
+                  {
+                    "$ref": "#/$defs/raw_logits"
+                  },
+                  {
+                    "$ref": "#/$defs/raw_boxes"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
               }
-            ],
-            "minItems": 3,
-            "maxItems": 3
+            ]
           }
         }
       }
@@ -171,22 +187,41 @@
       "then": {
         "properties": {
           "outputs": {
-            "prefixItems": [
+            "oneOf": [
               {
-                "$ref": "#/$defs/labels"
+                "prefixItems": [
+                  {
+                    "$ref": "#/$defs/labels"
+                  },
+                  {
+                    "$ref": "#/$defs/boxes"
+                  },
+                  {
+                    "$ref": "#/$defs/scores"
+                  },
+                  {
+                    "$ref": "#/$defs/masks"
+                  }
+                ],
+                "minItems": 4,
+                "maxItems": 4
               },
               {
-                "$ref": "#/$defs/boxes"
-              },
-              {
-                "$ref": "#/$defs/scores"
-              },
-              {
-                "$ref": "#/$defs/masks"
+                "prefixItems": [
+                  {
+                    "$ref": "#/$defs/raw_logits"
+                  },
+                  {
+                    "$ref": "#/$defs/raw_boxes"
+                  },
+                  {
+                    "$ref": "#/$defs/raw_masks"
+                  }
+                ],
+                "minItems": 3,
+                "maxItems": 3
               }
-            ],
-            "minItems": 4,
-            "maxItems": 4
+            ]
           }
         }
       }
@@ -206,6 +241,15 @@
         },
         {
           "$ref": "#/$defs/masks"
+        },
+        {
+          "$ref": "#/$defs/raw_logits"
+        },
+        {
+          "$ref": "#/$defs/raw_boxes"
+        },
+        {
+          "$ref": "#/$defs/raw_masks"
         }
       ]
     },
@@ -266,6 +310,62 @@
       "properties": {
         "name": {
           "const": "masks"
+        },
+        "dtype": {
+          "const": "float32"
+        },
+        "stride": {
+          "const": 4
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "stride"
+      ],
+      "additionalProperties": false
+    },
+    "raw_logits": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "pred_logits"
+        },
+        "dtype": {
+          "const": "float32"
+        }
+      },
+      "required": [
+        "name",
+        "dtype"
+      ],
+      "additionalProperties": false
+    },
+    "raw_boxes": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "pred_boxes"
+        },
+        "dtype": {
+          "const": "float32"
+        },
+        "format": {
+          "const": "cxcywh_norm"
+        }
+      },
+      "required": [
+        "name",
+        "dtype",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "raw_masks": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "pred_masks"
         },
         "dtype": {
           "const": "float32"
