@@ -4,11 +4,11 @@ Nitid Studio is a local web app for working with nitid models from your
 browser. It runs on your own machine, in a single process started by
 `nitid studio`, and sends no telemetry.
 
-!!! note "Status: backend skeleton"
-    This release contains the server foundation only: settings, security
-    guards, static serving and `GET /api/v1/health`. Model management, jobs
-    (prediction, training, export) and the web UI itself arrive in later
-    changes. Until the UI is built into your installation, opening the URL
+!!! note "Status: backend in progress"
+    This release contains the server foundation (settings, security guards,
+    static serving, `GET /api/v1/health`) plus device discovery and model
+    listing/downloading. Prediction, training and export jobs and the web UI
+    itself arrive in later changes. Until the UI is built into your installation, opening the URL
     shows a short page that says so (HTTP 503); the API still works.
 
 ## Install
@@ -115,23 +115,113 @@ wheel (`package-data`). Rules:
 
 ## API (v1)
 
-Only one endpoint exists today.
+Only `GET /api/v1/health` is public. Every other endpoint needs the token. The
+examples below use `TOKEN` for the token printed at start (the part after `#t=`).
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
 # {"status":"ok","nitid_version":"0.9.6","api_version":"1"}
-```
 
-Authenticated calls look like:
-
-```bash
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/openapi.json
 ```
+
+Errors always use the contract envelope
+`{"error": {"code": "snake_case", "message": "..."}}`. The shape of every response is
+specified in `studio/api-contract/openapi.json`.
+
+### Devices and models
+
+#### `GET /api/v1/devices`
+
+Which hardware can run inference. PyTorch CPU is always listed. CUDA devices
+appear only if `torch.cuda.is_available()`. OpenVINO is looked up lazily: if it
+is not installed, or reports no device, you get `"available": false` and an empty
+list, never an error.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/devices
+# {"torch":{"cpu":true,"cuda":[{"index":0,"name":"NVIDIA GeForce RTX 4070"}]},
+#  "openvino":{"available":true,"devices":["CPU","GPU","NPU"]}}
+```
+
+#### `GET /api/v1/models`
+
+A flat list of `(id, task)` pairs from two sources:
+
+- **`registry`**: official pretrained weights, from `dfine/utils/downloads.py`.
+  Detection: `nitid1s`, `nitid1m`, `nitid1l`, `nitid1x`. Instance segmentation:
+  `nitid1n`, `nitid1s`, `nitid1m`, `nitid1l`, `nitid1x`. `downloaded` is `true`
+  when the checkpoint file already exists in the models directory. Listing never
+  downloads anything.
+- **`local`**: your own `*.pth` checkpoints, found directly inside the models
+  directory (`models=PATH`, not recursive). Each file is opened with
+  `torch.load(weights_only=True, mmap=True)`, which cannot run code from the file
+  and does not read the weights into memory; only the embedded `config`,
+  `names` and task are used. `size` is inferred from the architecture (`null` if
+  it matches no known size). Unreadable, corrupt, non-wrapped or semantic-task
+  files are skipped (and logged), as are files over 2 GiB
+  (`MAX_LOCAL_CHECKPOINT_BYTES`), more than 500 files
+  (`MAX_LOCAL_SCAN_FILES`), the official downloads themselves (already listed as
+  `registry`) and files named like an official id (for example `nitid1s.pth`),
+  because that id would be ambiguous.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models
+# [{"id":"nitid1s","task":"detect","size":"s","downloaded":true,"source":"registry"},
+#  ...,
+#  {"id":"my-detector","task":"detect","size":"s","downloaded":true,
+#   "source":"local","path":"/home/user/models/my-detector.pth"}]
+```
+
+!!! note "`nitid1n` for detection is not listed (decision D8)"
+    There are no official nano detection weights in the registry, and
+    `NITID("nitid1n", task="detect")` is refused by the library. The pair is hidden
+    by the constant `EXPOSE_NANO_DETECT = False` in `nitid/studio/registry.py`.
+    `nitid1n` for `segment` is available.
+
+#### `POST /api/v1/models/{id}/download?task=detect|segment`
+
+Starts downloading the official checkpoint in the background and returns
+`202` with a job id. Only canonical registry ids are accepted: no aliases, no
+URLs, no paths. The source URL and the file name come from the registry, never
+from the request. The file is written into the models directory through a staging
+folder and moved into place when complete, so a half-written file never shows as
+downloaded.
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8000/api/v1/models/nitid1s/download?task=detect"
+# {"job_id":"j_3f9c1a2b4d5e"}
+```
+
+| Status | `code` | When |
+|---|---|---|
+| 202 | | Download started. |
+| 404 | `not_found` | Unknown id, or no official weights for that task. |
+| 409 | `conflict` | The id is a local model, or this `(id, task)` is already downloading. |
+| 422 | `invalid_params` | `task` missing or not `detect`/`segment`. |
+
+#### `GET /api/v1/jobs/{job_id}`
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/jobs/j_3f9c1a2b4d5e
+# {"status":"running","progress":0.0}
+# {"status":"done","progress":1.0}
+# {"status":"failed","progress":0.0,"error":"Network error while downloading the checkpoint."}
+```
+
+`status` is `pending`, `running`, `done` or `failed`. The downloader has no
+progress hook, so `progress` jumps from `0` to `1` when the file is in place. The
+`error` text is deliberately generic (network, disk, checksum, ...): details
+such as paths or URLs are logged by the server, never sent to the client. Jobs
+live in memory, at most two run at once, and a finished job is forgotten one hour
+later (`JOB_TTL_SECONDS` in `nitid/studio/jobs.py`); asking for it afterwards
+returns 404. Jobs do not survive a restart. A downloaded checkpoint does.
 
 ## What is not here yet
 
 - The web UI (the `static/` directory is empty in a source checkout).
-- Model listing, download and management.
+- Model deletion and management beyond listing and downloading.
 - Jobs: prediction, training, export and their progress reporting.
 - Image upload endpoints and the limits above being enforced.
 
@@ -145,6 +235,10 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/openapi.json
 | `security.py` | Pure ASGI middleware: Host, Origin, token, headers. No FastAPI import. |
 | `static.py` | SPA serving, cache headers, 503 page. |
 | `api.py` | `build_v1_router()`; add new `/api/v1` routes here. |
+| `devices.py` | Tolerant hardware discovery (torch CPU/CUDA, OpenVINO). |
+| `registry.py` | Model catalogue: registry pairs, local `*.pth` scan, staged download, safe error text. |
+| `jobs.py` | Thread-safe in-memory job store with TTL and one active job per key. |
+| `routes_models.py` | `/devices`, `/models`, `/models/{id}/download`, `/jobs/{job_id}`. |
 | `app.py` | `create_app(settings, static_dir=..., extra_routers=...)`. |
 | `launcher.py` | Extra check, socket binding, uvicorn, `nitid studio` entry point. |
 
