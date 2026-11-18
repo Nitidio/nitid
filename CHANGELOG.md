@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Project metadata: the PyPI `Homepage` now points to <https://nitid.io> (documentation stays on GitHub Pages) and the tagline reads "Nitid Object detection that's actually open source" in the README, docs and MkDocs config.
+
 ## [0.9.5] - 2026-11-17
 
 nitid's public models now carry the project's name: use `nitid1n`, `nitid1s`,
