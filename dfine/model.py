@@ -584,6 +584,7 @@ class DFINE:
             self._get_deployed_model(device or self._device_str),
             self._cfg,
             device=device or self._device_str,
+            names=self._names,
         )
         return exporter.export(
             format=format,
