@@ -1,11 +1,11 @@
 # ADR-0005: Nitid Studio, a web app inside the nitid library
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-11-19, by the project owner; outcomes of the open decisions are in [Migrating to Nitid Studio](../studio-migration.md))
 - **Date**: 2026-11-18
 - **Deciders**: Jorge Abrines (Vaelsys)
 - **Related**: [ADR-0004](0004-public-model-naming.md), [`docs/roadmap.md`](../roadmap.md),
   [`THIRD_PARTY_NOTICES.md`](https://github.com/Nitidio/nitid/blob/main/THIRD_PARTY_NOTICES.md),
-  the API contract in [`studio/api-contract/`](../../studio/api-contract/README.md)
+  the API contract in [`studio/api-contract/`](https://github.com/Nitidio/nitid/blob/main/studio/api-contract/README.md)
 
 Reversibility legend used in the Decision section: **[R]** reversible at low cost (a later PR can change
 it without breaking users); **[S]** sticky (public API, package layout or licence posture; changing it
@@ -92,9 +92,9 @@ Facts that constrain the choice:
      `scores` float32 `[1, K]`; and, for segment only, `masks` float32 `[1, K, S/4, S/4]`.
    - Top-K is 300; the default NMS IoU is 0.85.
    - The ONNX file carries no class names. They travel in a JSON descriptor (`meta`), whose canonical
-     form is [`studio/api-contract/onnx-meta.schema.json`](../../studio/api-contract/onnx-meta.schema.json).
+     form is [`studio/api-contract/onnx-meta.schema.json`](https://github.com/Nitidio/nitid/blob/main/studio/api-contract/onnx-meta.schema.json).
      `sha256` in the descriptor is added only by the REST API, never embedded in the ONNX.
-   - The REST API is specified in [`studio/api-contract/openapi.json`](../../studio/api-contract/openapi.json)
+   - The REST API is specified in [`studio/api-contract/openapi.json`](https://github.com/Nitidio/nitid/blob/main/studio/api-contract/openapi.json)
      and checked by `tests/unit/studio/test_contract.py`. FastAPI will later generate the definitive
      document and CI will fail on divergence.
 

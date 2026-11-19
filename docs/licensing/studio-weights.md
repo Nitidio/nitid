@@ -1,11 +1,11 @@
 # Nitid Studio: licence audit of weights and dependencies
 
 Work package WP-0.2 (issue #37). Audit date: **2026-11-18**. Companion files:
-[`studio/models.lock.json`](../../studio/models.lock.json) (machine-readable pins),
-[`studio/models.lock.schema.json`](../../studio/models.lock.schema.json),
-[`tools/check_models_lock.py`](../../tools/check_models_lock.py),
-[`studio/scripts/check-licenses.mjs`](../../studio/scripts/check-licenses.mjs) and
-[`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md).
+[`studio/models.lock.json`](https://github.com/Nitidio/nitid/blob/main/studio/models.lock.json) (machine-readable pins),
+[`studio/models.lock.schema.json`](https://github.com/Nitidio/nitid/blob/main/studio/models.lock.schema.json),
+[`tools/check_models_lock.py`](https://github.com/Nitidio/nitid/blob/main/tools/check_models_lock.py),
+[`studio/scripts/check-licenses.mjs`](https://github.com/Nitidio/nitid/blob/main/studio/scripts/check-licenses.mjs) and
+[`THIRD_PARTY_NOTICES.md`](https://github.com/Nitidio/nitid/blob/main/THIRD_PARTY_NOTICES.md).
 
 This document records **facts and where they were read**. It is not legal advice; the decision
 to host anything is Jorge's. Marks: **[V]** verified in this audit from the source named in the

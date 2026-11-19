@@ -13,7 +13,7 @@ Numbers up to 0003 were used before the first public release and are retired.
 | ADR | Title | Status |
 | --- | ----- | ------ |
 | [0004](0004-public-model-naming.md) | Public model naming (`nitid<version><size>`) | Accepted |
-| [0005](0005-nitid-studio.md) | Nitid Studio, a web app inside the nitid library | Proposed |
+| [0005](0005-nitid-studio.md) | Nitid Studio, a web app inside the nitid library | Accepted |
 
 ## Convention
 
