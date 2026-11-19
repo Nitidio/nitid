@@ -1,4 +1,4 @@
-/* global document, sessionStorage, window */
+/* global document, window */
 // End-to-end drive of the built Studio UI against a real `nitid studio` process.
 //   node ui.mjs --url http://127.0.0.1:PORT/#t=TOKEN --image image.png --out result.json
 // Covers: tokenised URL, local-mode detection, model picker (local *.pth files), upload, run via

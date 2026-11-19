@@ -1,4 +1,4 @@
-/* global document, window, fetch, Image, Worker, Blob, URL, WebAssembly, FormData, EvalError, TypeError */
+/* global document, window, Image, Worker, getComputedStyle */
 // Security checks of a real `nitid studio` process in real Chrome.
 //   node security.mjs --url http://127.0.0.1:PORT/#t=TOKEN --image image.png --out result.json
 // Host guard (DNS rebinding emulated with a Chrome host-resolver rule), Origin guard (a hostile page

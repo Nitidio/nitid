@@ -18,6 +18,7 @@ from support import (
     StudioProcess,
     child_env,
     find_chrome,
+    harness_studio,
     real_studio,
 )
 
@@ -76,6 +77,47 @@ def studio(fixtures, built_ui):
     assert status == 0, f"nitid studio did not exit cleanly after Ctrl+C: {status}\n" + "\n".join(
         server.output[-20:]
     )
+
+
+@pytest.fixture(scope="session")
+def harness_static(fixtures, chrome, node, tmp_path_factory):
+    """The parity harness built with Vite (same ORT-web setup as the product) plus the test image."""
+    if shutil.which("pnpm") is None:
+        pytest.skip("pnpm not found (needed to build the parity harness)")
+    env = child_env()
+    if not (STUDIO_DIR / "node_modules").is_dir():
+        install = subprocess.run(
+            ["pnpm", "install", "--frozen-lockfile"],
+            cwd=STUDIO_DIR,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        if install.returncode != 0:
+            pytest.skip(f"pnpm install failed: {install.stderr[-400:]}")
+    out = tmp_path_factory.mktemp("harness-static")
+    env["HARNESS_OUT_DIR"] = str(out)
+    steps = [
+        ["node", "scripts/copy-ort.mjs"],
+        ["pnpm", "exec", "vite", "build", "--config", "e2e/harness/vite.config.ts"],
+    ]
+    for step in steps:
+        result = subprocess.run(
+            step, cwd=STUDIO_DIR, capture_output=True, text=True, env=env, check=False
+        )
+        if result.returncode != 0:
+            pytest.fail(f"{' '.join(step)} failed:\n{result.stdout[-800:]}\n{result.stderr[-800:]}")
+    shutil.copy(fixtures["image"], out / "image.png")
+    return out
+
+
+@pytest.fixture(scope="module")
+def harness(fixtures, harness_static):
+    """The real Studio app (middleware, headers, API) serving the parity harness."""
+    server = harness_studio(fixtures["detect"].parent, harness_static).start()
+    yield server
+    server.stop()
 
 
 @pytest.fixture(scope="session")
