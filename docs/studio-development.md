@@ -9,10 +9,9 @@ change the frontend. Facts that were not verified are marked `[NV]`.
 Nitid Studio has two ways of running a model: **Local**, where the Python server
 on `127.0.0.1` does the work with PyTorch or OpenVINO, and **Browser**, where
 ONNX Runtime Web runs the model in a Web Worker so the image and the computation
-never leave the page. This scaffold contains only the shell: start page with the
-two mode cards, an About page, the API client, backend detection and token
-handling. The workbench itself (and ONNX Runtime Web) arrive in later work
-packages; `/run/local` and `/run/browser` currently show a placeholder.
+never leave the page. It is **one app with two deployments** (see "Unified UI"):
+served by the Python server it offers server mode, in-browser mode and a
+comparison of the two; served as a static site it offers in-browser mode only.
 
 ## Requirements
 
@@ -67,11 +66,16 @@ studio/
       types.ts          hand-written API types (to be generated, see below)
       local.ts          typed wrappers for /devices, /models, /jobs, /runs
     exports/            result exports: PNG, JSON, CSV, YOLO TXT, crops, ZIP, PDF, <ExportMenu/> (see "Exports")
-    pages/              Home, About, RunLocal (/run/local), RunPlaceholder
+    config.ts           build-time hosted models base URL (STUDIO_MODELS_BASE_URL)
+    pages/              Home, About, RunLocal, RunBrowser, RunCompare, NotFound (see "Unified UI")
     local/              Local panel: components, hooks and pure logic (see "Local panel")
+    browser/            in-browser mode: panel, runner around the engine, model catalogue (see "Unified UI")
+    compare/            comparison view: panel, lanes, IoU agreement (see "Unified UI")
+    engine/, workers/   ONNX Runtime Web engine and its Web Worker (see studio-engine.md)
     test/setup.ts       Testing Library + jest-dom setup
+    test/engine-fakes.ts fake engine / createImageBitmap for component tests
     **/*.test.ts(x)     tests live next to the code they cover
-  api-contract/         NOT part of this scaffold: owned by another work package
+  api-contract/         the REST and ONNX-meta contract (owned by the API work package; do not edit from the UI)
 ```
 
 ## How it fits with the backend
@@ -96,11 +100,13 @@ The same frontend ships in two deployments:
   `GET /api/v1/health` (the probe is aborted after 2 s).
   If the answer is HTTP 200 with a JSON body
   `{"status":"ok","nitid_version":"...","api_version":1}`, the mode is
-  `local` and both cards are enabled.
+  `local` and every local entry is enabled.
 - **Hosted**: a static site with no backend. Any other outcome (404, an HTML
   fallback page, invalid JSON, wrong shape, network error, timeout) means
-  `hosted`: only the Browser card is enabled and nothing is logged to the
-  console.
+  `hosted`: only the in-browser mode is offered. The app itself logs nothing;
+  note that Chrome prints the failed `GET /api/v1/health` (a 404) in the console
+  on a static host that serves the default build. `build:hosted` never sends the
+  probe, so that line does not appear there.
 
 `vite build --mode hosted` (`pnpm run build:hosted`) goes one step further:
 `__STUDIO_MODE__` is `"hosted"` and `detectBackend()` returns immediately
@@ -110,7 +116,10 @@ simply never reached. Tree-shaking it away was not attempted.)
 
 If the server reports an `api_version` different from `EXPECTED_API_VERSION` in
 `src/api/types.ts`, the mode stays `local` and the home page shows a warning.
-The server sends `api_version` as the integer `1` (contract `Health.api_version`); the client normalises it to a string.
+The server sends `api_version` as the integer `1` (contract `Health.api_version`) and
+`HealthResponse.api_version` is a `number`. `parseHealth` still accepts a legacy digit-only string
+(`"1"`, from servers that predate the contract) and converts it; any other string, a non-integer or
+a negative number is "not a health body" and means hosted.
 
 The health probe is sent **without** the bearer token on purpose: it is only a
 liveness check.
@@ -156,16 +165,18 @@ The workbench for the **local** deployment. `App.tsx` lazy-loads `pages/RunLocal
 | `errors.ts` + `ErrorNotice.tsx` | Contract error envelope (`{"error":{"code","message"}}`) to message plus a hint per code. Rendered with `role="alert"`. |
 | `results-model.ts` | UI-facing results types (below). |
 
-### Extension points for the unified UI (issue #46)
+### Extension points used by the unified UI (issue #46)
 
 - **Results model**: `RunResults` / `ResultItem` / `ResultDetection` in `results-model.ts`
-  (camelCase, independent of the API). `fromRun(run, wallClockMs)` builds it from
-  `GET /runs/{id}`; the browser engine can build the same shape (`source: "browser"`) and reuse
-  `ResultsView`, whose only inputs are `results` and `loadImage(item)`.
+  (camelCase, independent of the API). `fromRun(run, wallClockMs)` builds it from `GET /runs/{id}`;
+  `browser/results.ts` builds the same shape from the engine (`source: "browser"`), so both use
+  `ResultsView` and `DetectionCanvas` unchanged. `RunResults.toExport(itemId)` returns the
+  `ExportResults` of one item through the shared mappers (`fromServerRun` / `fromEngineResult`).
 - **Exports**: `LocalPanel` and `ResultsView` accept `ExportMenu?: ComponentType<ExportMenuProps>`
-  and render it in the controls column. It receives `{ results, filter, selectedItemId }`, where
-  `filter` is the user's current threshold and hidden classes, so exports can honour "what I see".
-  Nothing is exported by this panel; `RunLocal` also takes the prop so a parent can wire it.
+  and render it in the controls column. It receives `{ results, filter, selectedItemId, image }`
+  (`filter` is the user's threshold and hidden classes, `image` the decoded original). The unified UI
+  passes `ResultsExportMenu` (`src/exports/ResultsExportMenu.tsx`), which applies the filter
+  ("export what I see") and renders `<ExportMenu/>`. `RunLocal` passes it by default.
 
 ### Behaviour worth knowing
 
@@ -204,6 +215,127 @@ and class filter, and exits non-zero on failure. It uses `playwright-core` found
 `PLAYWRIGHT_CORE_PATH` or the usual global locations and Chrome at `CHROME_PATH`
 (default `/usr/bin/google-chrome`). It is **not** part of `pnpm run check` (no new dependency).
 
+## Unified UI (issue #46)
+
+Scope v2, "one app, two deployments": a single bundle whose behaviour follows `detectBackend()`.
+
+| | Local deployment (served by `nitid studio`) | Hosted deployment (static site) |
+| --- | --- | --- |
+| Detected as | `GET /api/v1/health` answers | no answer, or `vite build --mode hosted` |
+| Navigation | Home, Local, Browser, Compare, About | Home, Browser, About |
+| `/run/local` (server mode) | yes: PyTorch / OpenVINO on this computer | explains how to start `nitid studio` |
+| `/run/browser` (in-browser mode) | yes: models of the server, via `/api/v1/onnx` | yes: models of the configured catalogue, else an empty state |
+| `/compare` | yes | explains that a server is needed |
+| Exports | in every results view | in every results view |
+
+While the probe runs (at most 2 s) only Home and About are shown. Any other path is a 404 page
+(the old `RunPlaceholder` pages were removed).
+
+### Routes and components
+
+| Route | Page (`src/pages/`, each lazy-loaded) | Main component |
+| --- | --- | --- |
+| `/` | `Home` | mode cards (a Compare card only with a server) |
+| `/run/local` | `RunLocal` | `local/LocalPanel` |
+| `/run/browser` | `RunBrowser` | `browser/BrowserPanel` |
+| `/compare` | `RunCompare` | `compare/ComparePanel` |
+| `/about`, `*` | `About`, `NotFound` | |
+
+| File | Role |
+| --- | --- |
+| `App.tsx` (`MainNav`) | Shell: skip link, header, navigation by deployment, routes. |
+| `browser/catalog.ts` | `BrowserModel`; `fromServerModels` (downloaded models of `GET /models`); hosted `models.json` parser and loader. |
+| `browser/use-browser-models.ts` | Chooses the source by deployment; hosted without a configured base URL is derived as `unconfigured` and requests nothing. |
+| `browser/runner.ts` | `BrowserRunner`: `load(model)` (meta, sha256, token, engine `init`), `runFiles(files)` one after another, `close()`. The engine is injected (`EngineLike`), so tests use a fake instead of a Worker. |
+| `browser/results.ts` | Engine output to `RunResults`; masks become outlines through `exports/contour`. |
+| `browser/BrowserPanel.tsx` | Model select, image dropzone, Run / Stop, download progress, errors with hints (`browser/errors.ts`), `ResultsView`. |
+| `compare/agreement.ts` | Pure `iou`, `matchDetections`, `summarizeAgreement` (unit-tested). |
+| `compare/lanes.ts` | `runLane`: one side (server run with polling, or browser load + run). Never throws except on abort; a failing side becomes an error outcome. |
+| `compare/ComparePanel.tsx` | Two side configurations, one image, side-by-side canvases, shared threshold, agreement summary. |
+| `exports/ResultsExportMenu.tsx` | Adapter from `RunResults` to `ExportMenu` (see above). |
+
+### In-browser mode
+
+1. **Model list.** Local deployment: `GET /models`, only entries with `downloaded: true` (the ONNX
+   endpoint needs the weights). Hosted: `models.json` under the configured base URL.
+2. **Run.** The first Run with a model loads it, later runs reuse it (changing the model loads the new one).
+   - Local: `GET /api/v1/onnx/{id}/meta?task=` returns the descriptor plus `sha256` (the ETag of the
+     binary). The worker then fetches `GET /api/v1/onnx/{id}?task=` with `Authorization: Bearer <token>`
+     (the token travels in the `init` message to the same-origin worker; engine `init` has a new
+     `headers` field for this). The sha256 is the cache key and the integrity check, so the second
+     visit is served from the Cache API without downloading the binary.
+   - Hosted: `init({ modelUrl, sha256 })` from the catalogue entry; no token. The descriptor is read from the
+     ONNX `nitid_meta` property.
+3. **Inference** runs in the Web Worker with `conf: 0.1` (the same floor as server mode), so the
+   confidence slider filters instantly. Each file is decoded with `createImageBitmap` and transferred
+   to the worker; a second decode feeds the canvas.
+4. **Stop** terminates the worker (the model is loaded again on the next run).
+5. Limits are the engine's: 20 megapixels, 512 MiB model, mask budget. Errors carry the engine code and a hint.
+   `createImageBitmap` applies EXIF orientation in current Chrome, Edge and Firefox; the server (Pillow) does
+   not necessarily, so a photo with an EXIF rotation can differ between sides `[NV: not tested]`.
+
+### Configuration of the hosted deployment
+
+There is no runtime configuration file (a failed fetch of an optional file would print a 404 in the console of
+every visitor, and CSP forbids inline config). One build-time constant:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `STUDIO_MODELS_BASE_URL` | empty = no models | Base of a folder (same origin, or another origin that allows CORS and the page CSP `connect-src`) that holds `models.json` and the ONNX files. |
+
+```bash
+STUDIO_MODELS_BASE_URL=/models/ pnpm run build:hosted      # catalogue at /models/models.json
+```
+
+`models.json` (version 1, validated by `parseHostedCatalog`; a malformed file is an error message, not a
+silent skip):
+
+```json
+{ "models": [ { "id": "nitid1s", "task": "detect", "url": "nitid1s-detect.onnx",
+                "sha256": "<64 lowercase hex>", "label": "Nitid 1 small" } ] }
+```
+
+`url` is resolved against the base; `sha256` and `label` are optional but `sha256` is strongly
+recommended (without it the engine tries a HEAD request for a strong ETag, else it does not cache). The ONNX
+files must carry the `nitid_meta` property (they do when exported by `nitid`). No model URL is hardcoded in
+the source (a test forbids `http(s)://` in code). With the default empty value `/run/browser` shows
+"No models are configured for this site" and sends no request.
+
+### Comparison view (`/compare`)
+
+Pick Side A and Side B (each: server or browser, a model, and a backend/device for the server), one image, Compare.
+The sides run **one after the other** (running both at once would make them compete for the same CPU and
+distort the timings), and a failing side does not hide the other. Each side shows its canvas, detection
+count at the shared threshold, inference time, pipeline time (preprocess + inference + postprocess),
+wall clock (server: upload, queue and inference; browser: decode and inference), and for the browser side
+the model load time. Both sides have an export menu.
+
+Agreement (`compare/agreement.ts`): a detection of A matches one of B when IoU >= 0.5 (inclusive) and the
+class id is equal; the matching is one-to-one and greedy by descending IoU (ties: lower index). The summary
+reports `matched`, `only in A`, `only in B`, `agreement = matched / (A + B - matched)` (1 when both are empty)
+and the mean IoU of the matches. Only detections visible at the shared threshold count. Class ids are compared,
+not names, so two models with different label sets will disagree on classes even when they find the same objects.
+Greedy matching is not optimal in contrived cases; it is meant for a visual check, not for evaluating accuracy.
+
+### Accessibility
+
+Native controls throughout (select, range, checkbox, file input, buttons); a skip link and a focusable
+`<main>`; one `h1` per page; canvases have a text alternative and the detections table carries the data;
+status and error text uses `role="status"` / `role="alert"`; the export menu is a disclosure button with
+`aria-expanded`. The smoke test checks the first two Tab stops and starts a comparison with the Enter key.
+`[NV]` no screen-reader or contrast audit of the new views was done beyond reusing the existing styles.
+
+### Unified smoke test
+
+`pnpm run build && pnpm run smoke:unified` (not part of `pnpm run check`, like `smoke:local`):
+headless Chrome against three throw-away Node servers (local with a mocked `/api/v1`, a static host without it,
+and a second build made with `STUDIO_MODELS_BASE_URL=/catalog/`), all sending the target CSP. The script writes a
+tiny ONNX file as protobuf (constant outputs; no `onnx` package), so **ONNX Runtime Web really runs** in
+the worker. Checks (24): navigation per deployment and Tab order; server run and JSON/PDF export; in-browser
+run with the bearer token, detections, canvas pixels, rescaled boxes, JSON download, slider; reload takes the
+model from the Cache API (one download); comparison with 100 % agreement and Enter-key start; hosted empty state;
+hosted catalogue run; no console or page errors. `SMOKE_HOSTED_DIR` reuses an existing hosted build.
+
 ## Security and CSP
 
 The app must work under this Content-Security-Policy:
@@ -237,12 +369,21 @@ The repository must stay small and reviewable:
   grows with every dependency. Large runtime assets (ONNX Runtime Web `.wasm`
   files, models) must be fetched or generated at build/runtime, not committed.
 
-Measured on this scaffold (Node 22.23, Vite 8.3.8):
+Measured with Node 22.23, Vite 8.3.8 (`pnpm run build`; sizes are minified / gzip):
 
-| Build | Output size |
-| --- | --- |
-| `pnpm run build` (to `nitid/studio/static`) | 266 127 bytes total (`index.html` 0.54 kB, CSS 2.31 kB, JS 263.26 kB, 83.80 kB gzip) |
-| `pnpm run build:hosted` (to `dist-hosted`) | 266 129 bytes total (same content) |
+| Chunk | Before #46 | After #46 |
+| --- | --- | --- |
+| Entry JS (`index-*.js`, loaded first) | 265.61 kB / 84.66 kB | 266.83 kB / 85.00 kB |
+| Entry CSS | 5.60 kB / 1.71 kB | 5.98 kB / 1.81 kB |
+| `RunLocal` + shared (`ResultsView`, `use-local-data`, `models`) | 24.07 kB / 8.28 kB | 6.64 + 4.86 + 2.86 + 15.91 = 30.3 kB |
+| `RunBrowser` (+ `runner` 6.80) | n/a | 5.36 kB / 2.30 kB (+ 6.80 kB / 2.93 kB) |
+| `RunCompare` | n/a | 10.39 kB / 4.04 kB |
+| Export code, loaded when exporting | n/a | `bundle` 6.94, `pdf` 5.72, `browser` (fflate) 8.76, `contour` 2.01 |
+| Worker (`inference.worker-*.js`) and ORT JS | 21.62 kB, 51.68 kB (+ 68.89 kB WebGPU build, only loaded on request) | same |
+
+The first load grew by 1.2 kB (0.3 kB gzip): the shell and navigation. Everything else is lazy: a visitor of
+the Home page downloads no workbench, no engine and no export code. The 15 MB ORT wasm is copied to `public/ort/`
+at build time and fetched only by the worker. The tracked files stay far below the 1 MB check (`pnpm run check:size`).
 
 ## Packaging
 
@@ -282,8 +423,8 @@ with TypeScript 7 (it prints "typescript-eslint does not support TS 7.0"). Move 
 ## Exports (`src/exports/`)
 
 Issue #45. A framework-light module that turns one inference result into files.
-The unified UI (issue #46) mounts `<ExportMenu/>`; everything else is plain
-functions. Facts verified by running the tests and tools named below are
+The unified UI (issue #46) mounts `<ExportMenu/>` through `ResultsExportMenu` in server mode, in-browser mode
+and the comparison view; everything else is plain functions. Facts verified by running the tests and tools named below are
 unmarked; open points are marked `[NV]`.
 
 ### One input type: `ExportResults`
@@ -508,13 +649,15 @@ checked formats, disabled states, error status).
 
 ## Testing
 
-`pnpm run test` runs Vitest with jsdom. Covered: backend detection (valid 200,
-200 with invalid JSON or wrong shape, 404, network failure, timeout, API version
-mismatch, hosted build skipping the probe), token extraction and cleanup, the
-API client (bearer header, error mapping), rendering of Home in local, hosted and
-detecting states, the full App with mocked `fetch`, the Local panel (pure logic: filtering,
-drawing geometry, polling state machine, device options; API client against mocked `fetch`;
-component tests of the whole panel with a mocked `LocalApi`), and the static policy checks
-(no `localStorage`, no external URLs, no inline scripts).
+`pnpm run test` runs Vitest with jsdom (449 tests at the time of writing). Covered: backend detection (valid
+200, legacy string `api_version`, invalid JSON or wrong shape, 404, network failure, timeout, version mismatch,
+hosted build skipping the probe), token extraction and cleanup, the API client, the shell (navigation per
+deployment, skip link, 404, empty state of the hosted site), the Local panel (pure logic, mocked `fetch`, component
+tests with a mocked `LocalApi`), the browser mode (catalogue parsing, runner with a fake engine, `BrowserPanel`
+with a mocked `fetch` and a fake engine: hosted and local flows, token and meta, reuse of a loaded model, errors
+with hints, Stop, masks), the comparison (pure IoU matching, lanes, panel with a mocked API and fake engine),
+the export adapter, and the static policy checks (no `localStorage`, no external URLs, no inline scripts). The
+engine tests are listed in [Studio engine](studio-engine.md). Browser-level checks: `smoke:local` and
+`smoke:unified` above.
 
 Run a single file: `pnpm exec vitest run src/token.test.ts`.

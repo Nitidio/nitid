@@ -1,4 +1,4 @@
-/* global document, window */
+/* global document */
 // Browser smoke test of the unified UI against a mocked API. No Python backend, no network.
 //
 //   pnpm run build && pnpm run smoke:unified
@@ -191,7 +191,7 @@ function startServer({ distDir, api }) {
       }
       if (path === "/runs" && req.method === "POST") {
         stats.runPosts += 1;
-        for await (const _ of req); // drain
+        await new Promise((done) => req.resume().on("end", done)); // drain the upload
         return json(res, 202, { id: "r_1" });
       }
       if (path === "/runs/r_1") return json(res, 200, RUN);

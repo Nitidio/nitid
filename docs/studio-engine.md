@@ -5,8 +5,9 @@ This document describes the engine in `studio/src/engine/` and
 with ONNX Runtime Web (ORT-web), inside a Web Worker. The image and the
 computation never leave the page. Facts that were not verified are marked `[NV]`.
 
-Scope: work package WP-2.3 (issue #44). The workbench UI that calls the engine
-belongs to another work package; nothing in `src/` imports the engine yet.
+Scope: work package WP-2.3 (issue #44). The unified UI (issue #46, see
+[Studio development](studio-development.md), "Unified UI") calls the engine through
+`src/browser/runner.ts`.
 
 ## Architecture
 
@@ -45,7 +46,8 @@ const { detections, timings } = await engine.run({ kind: "bitmap", bitmap }, { c
 await engine.dispose();
 ```
 
-`init` takes either `modelUrl` (same-origin, cached) or `modelBytes` (a file the
+`init` takes either `modelUrl` (cached; optional `headers` for the request, for example the bearer token of the
+local server, sent on the HEAD and the GET and never stored in the cache) or `modelBytes` (a file the
 user picked, transferred). `meta` is optional: if absent it is read from the
 `nitid_meta` entry embedded in the ONNX (see `dfine/export_meta.py`).
 
