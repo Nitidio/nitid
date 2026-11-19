@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import PlainTextResponse, Response
 
 from nitid.studio.api import build_v1_router
+from nitid.studio.onnx_service import OnnxService
 from nitid.studio.routes_models import error_response
 from nitid.studio.runs import RunService
 from nitid.studio.security import SecurityMiddleware
@@ -50,11 +51,14 @@ def create_app(
     static_dir: Path | None = None,
     extra_routers: Sequence[APIRouter] = (),
     run_service: RunService | None = None,
+    onnx_service: OnnxService | None = None,
 ) -> FastAPI:
     """Build the Studio app.
 
     ``extra_routers`` are included before the SPA catch-all route, which would
     otherwise shadow them (routes are matched in registration order).
+
+    ``onnx_service`` replaces the default on-demand ONNX exporter (used by tests).
 
     ``settings.port`` must be the real listening port (the Host guard compares
     against it); the launcher resolves ``port=0`` before calling this.
@@ -77,7 +81,7 @@ def create_app(
         openapi_url=f"{API_PREFIX}/openapi.json",  # under /api/v1, so it needs the token
     )
     app.state.settings = settings
-    app.include_router(build_v1_router(run_service=service))
+    app.include_router(build_v1_router(run_service=service, onnx_service=onnx_service))
     for router in extra_routers:
         app.include_router(router)
 

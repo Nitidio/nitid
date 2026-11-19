@@ -116,3 +116,26 @@ envelope. `Health.api_version` is the **integer** `1`.
 runtime and validates every response against the operation's schema in `openapi.json`
 (including that the status code is documented). It also asserts that every `/api/v1` route the
 app exposes exists in the contract.
+
+## Implementation notes: ONNX endpoints
+
+Implemented in `nitid/studio/routes_onnx.py` and `nitid/studio/onnx_service.py`; tested by
+`tests/integration/studio/test_onnx_api.py` (responses validated against `openapi.json` and
+`onnx-meta.schema.json`). Details and `curl` examples: [`docs/studio.md`](../../docs/studio.md).
+
+- Paths are `GET /onnx/{model}` and `GET /onnx/{model}/meta` with `task` (required) and `imgsz`
+  (optional) as query parameters, exactly as in `openapi.json`.
+- `imgsz` default (marked `[NV]` in the contract) is now defined by the implementation: the
+  checkpoint's own `eval_spatial_size` when it is a multiple of 32 in 32-4096, otherwise 640.
+- The binary has a strong `ETag` (`"<sha256>"`) and honours `If-None-Match` (including `*` and
+  `W/` forms). The meta response carries the same `ETag` header; its body is the embedded
+  `nitid_meta` plus `sha256`, and nothing else (the schema forbids extra properties, so there is
+  no `size` field; use the binary's `Content-Length`).
+- Beyond what the contract lists: `422 invalid_params` (bad `task`/`imgsz`) and
+  `500 internal_error` (failed export) can be returned by both operations, and `Cache-Control:
+  private, no-cache` is sent. A request for a model that is not downloaded is a `404 not_found`
+  whose message points to the download endpoint. Candidates for an additive contract update:
+  declare the 422 and 500 responses on both operations.
+- `Range` is not part of the contract. Byte-range requests happen to work (`206`) because the file
+  is served with Starlette's `FileResponse`; clients must not depend on it.
+- No endpoint to upload a user-provided ONNX is defined by the contract, so none exists.

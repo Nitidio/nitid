@@ -37,6 +37,40 @@ _POSTPROCESSED_OUTPUT_NAMES: dict[str, list[str]] = {
 }
 
 
+def drop_value_info(model: Any) -> int:
+    """Remove every ``value_info`` entry of an ONNX ``ModelProto`` (in place).
+
+    ``onnxsim`` rewrites the graph and keeps intermediate shape annotations that no
+    longer match it. In the segmentation graph the output of ``Gemm_1`` is declared
+    with rank 0 while its real shape is ``[4, 256]`` (``_v_2148``). Python
+    onnxruntime tolerates that with a warning ("Falling back to lenient merge") and
+    ``onnx.checker.check_model(full_check=True)`` rejects it, but onnxruntime-web
+    refuses to load the file (``ShapeInferenceError ... inferred=2 declared=0``).
+
+    ``value_info`` is optional documentation: it is not read to compute anything, and
+    every runtime re-infers shapes on load. Dropping it (in the main graph and in the
+    sub-graphs of ``If``/``Loop``/``Scan`` nodes) leaves the outputs unchanged and the
+    file smaller. Graph inputs, outputs and initializers are not touched.
+
+    Returns the number of entries removed.
+    """
+    import onnx
+
+    def clear(graph: Any) -> int:
+        removed = len(graph.value_info)
+        del graph.value_info[:]
+        for node in graph.node:
+            for attribute in node.attribute:
+                if attribute.type == onnx.AttributeProto.GRAPH:
+                    removed += clear(attribute.g)
+                elif attribute.type == onnx.AttributeProto.GRAPHS:
+                    for sub in attribute.graphs:
+                        removed += clear(sub)
+        return removed
+
+    return clear(model.graph)
+
+
 class DeployModel(torch.nn.Module):
     def __init__(self, model, postprocessor, *, semantic: bool = False) -> None:
         super().__init__()
@@ -199,6 +233,8 @@ class DFINEExporter:
                 model_onnx = onnx.load(str(temporary))
                 model_onnx, ok = onnxsim.simplify(model_onnx)
                 if ok:
+                    # onnxsim can leave stale ``value_info`` behind (see _drop_value_info).
+                    drop_value_info(model_onnx)
                     onnx.save(model_onnx, str(temporary))
             # Embed last: onnxsim rewrites the model and may drop metadata_props.
             if embed_meta:
