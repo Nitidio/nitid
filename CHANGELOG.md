@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Nitid Studio ONNX endpoints: `GET /api/v1/onnx/{model}` and `/onnx/{model}/meta` export on demand (cached, serialised, ETag = sha256, 304 on `If-None-Match`).
 - Nitid Studio unified UI for both deployments: server mode, in-browser mode with ONNX Runtime Web, server-vs-browser comparison with IoU agreement, and the export menu everywhere; the hosted catalogue is set with `STUDIO_MODELS_BASE_URL`.
 - Nitid Studio end-to-end suite (`pytest studio/e2e`, real server and real Chrome) with a server-vs-browser parity test, and an optional non-blocking `studio-e2e` CI job.
+- Nitid Studio draws the mask outlines of server segmentation runs and includes them as polygons in the YOLO TXT, JSON and annotated PNG exports (server results have no pixel masks, so CSV `mask_pixels` and crops are unchanged).
 
 ### Fixed
 

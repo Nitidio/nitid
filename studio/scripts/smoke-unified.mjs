@@ -165,7 +165,10 @@ const RUN = {
   }],
 };
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json", ".wasm": "application/wasm" };
-const CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:";
+// Keep in sync with CONTENT_SECURITY_POLICY in nitid/studio/security.py (the real server's policy).
+const CSP =
+  "default-src 'self'; worker-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'; " +
+  "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'";
 
 const stats = { onnxGets: 0, metaGets: 0, catalogOnnxGets: 0, unauthorized: 0, runPosts: 0 };
 
