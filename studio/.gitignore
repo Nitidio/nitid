@@ -2,6 +2,7 @@
 node_modules/
 dist/
 dist-hosted/
+dist-e2e-harness/
 .vite/
 coverage/
 *.tsbuildinfo
