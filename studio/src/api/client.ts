@@ -20,12 +20,20 @@ export type ApiErrorKind =
 export class ApiError extends Error {
   readonly kind: ApiErrorKind;
   readonly status: number | undefined;
+  /** snake_case code from the contract error envelope (`{"error":{"code",...}}`), when present. */
+  readonly code: string | undefined;
 
-  constructor(kind: ApiErrorKind, message: string, status?: number, options?: ErrorOptions) {
+  constructor(
+    kind: ApiErrorKind,
+    message: string,
+    status?: number,
+    options?: ErrorOptions & { code?: string },
+  ) {
     super(message, options);
     this.name = "ApiError";
     this.kind = kind;
     this.status = status;
+    this.code = options?.code;
   }
 }
 
@@ -44,30 +52,44 @@ export interface RequestOptions {
   json?: unknown;
   formData?: FormData;
   signal?: AbortSignal;
+  /** Overrides the client timeout for this call (uploads need more than a health probe). */
+  timeoutMs?: number;
+  /** "blob" returns the body as a `Blob` (images) instead of parsing JSON. */
+  responseType?: "json" | "blob";
 }
 
 export interface ApiClient {
   request<T>(path: string, options?: RequestOptions): Promise<T>;
 }
 
-function errorMessage(status: number, body: unknown): string {
+/** Read the contract envelope `{"error":{"code","message"}}`, falling back to `detail`/`message`. */
+export function parseErrorBody(status: number, body: unknown): { code?: string; message: string } {
   if (body && typeof body === "object") {
-    const { detail, message } = body as ApiErrorBody;
-    if (typeof detail === "string" && detail) return detail;
-    if (typeof message === "string" && message) return message;
+    const { error, detail, message } = body as ApiErrorBody;
+    if (error && typeof error === "object") {
+      const code = typeof error.code === "string" && error.code ? error.code : undefined;
+      if (typeof error.message === "string" && error.message) {
+        return { ...(code ? { code } : {}), message: error.message };
+      }
+      if (code) return { code, message: `Request failed with status ${status}` };
+    }
+    if (typeof detail === "string" && detail) return { message: detail };
+    if (typeof message === "string" && message) return { message };
   }
-  return `Request failed with status ${status}`;
+  return { message: `Request failed with status ${status}` };
 }
 
 /** Same-origin JSON client that adds the bearer token and maps failures to `ApiError`. */
 export function createApiClient(options: ClientOptions = {}): ApiClient {
   const baseUrl = options.baseUrl ?? "";
   const tokenSource = options.getToken ?? getToken;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const defaultTimeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   async function request<T>(path: string, req: RequestOptions = {}): Promise<T> {
     const doFetch = options.fetchImpl ?? fetch;
-    const headers = new Headers({ Accept: "application/json" });
+    const timeoutMs = req.timeoutMs ?? defaultTimeoutMs;
+    const blobResponse = req.responseType === "blob";
+    const headers = new Headers({ Accept: blobResponse ? "image/*" : "application/json" });
     const token = tokenSource();
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
@@ -108,6 +130,10 @@ export function createApiClient(options: ClientOptions = {}): ApiClient {
       req.signal?.removeEventListener("abort", onCallerAbort);
     }
 
+    if (blobResponse && response.ok) {
+      return (await response.blob()) as T;
+    }
+
     let parsed: unknown;
     let parseFailed = false;
     const text = await response.text();
@@ -122,7 +148,8 @@ export function createApiClient(options: ClientOptions = {}): ApiClient {
     if (!response.ok) {
       const kind: ApiErrorKind =
         response.status === 401 || response.status === 403 ? "unauthorized" : "http";
-      throw new ApiError(kind, errorMessage(response.status, parsed), response.status);
+      const { code, message } = parseErrorBody(response.status, parsed);
+      throw new ApiError(kind, message, response.status, code ? { code } : undefined);
     }
     if (parseFailed) {
       throw new ApiError("invalid-response", "Server returned invalid JSON", response.status);
