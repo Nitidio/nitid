@@ -249,6 +249,37 @@ def scan_local_models(models_dir: Path) -> list[LocalModel]:
     return found
 
 
+class ModelNotAvailable(LookupError):
+    """The model is unknown or its checkpoint is not on disk (HTTP 404 ``not_found``)."""
+
+
+def locate_checkpoint(models_dir: Path, model_id: str, task: str) -> Path:
+    """Path of the checkpoint for ``(model_id, task)``.
+
+    Raises :class:`ModelNotAvailable` with a client-safe message (no file system paths)
+    when the id is unknown, has no weights for ``task``, or is not downloaded yet.
+    """
+    entry = find_registry_entry(model_id, task)
+    if entry is not None:
+        path = weights_path(models_dir, entry)
+        if path is None or not path.is_file():
+            raise ModelNotAvailable(
+                f"Model {_quote(model_id)} ({task}) is not downloaded; "
+                f"POST /api/v1/models/{model_id}/download?task={task} first."
+            )
+        return path
+    for local in scan_local_models(models_dir):
+        if local.id == model_id and local.task == task:
+            return local.path
+    if model_id in registry_ids():
+        raise ModelNotAvailable(f"No official weights for {_quote(model_id)} with task {task!r}.")
+    raise ModelNotAvailable(f"Model {_quote(model_id)} ({task}) does not exist.")
+
+
+def _quote(value: str, limit: int = 64) -> str:
+    return repr(value if len(value) <= limit else value[:limit] + "...")
+
+
 def local_model_ids(models_dir: Path) -> frozenset[str]:
     """Stems of ``*.pth`` files in ``models_dir``, without opening any of them."""
     if not models_dir.is_dir():
