@@ -175,11 +175,10 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/models
 #   "source":"local","path":"/home/user/models/my-detector.pth"}]
 ```
 
-!!! note "`nitid1n` for detection is not listed (decision D8)"
-    There are no official nano detection weights in the registry, and
-    `NITID("nitid1n", task="detect")` is refused by the library. The pair is hidden
-    by the constant `EXPOSE_NANO_DETECT = False` in `nitid/studio/registry.py`.
-    `nitid1n` for `segment` is available.
+!!! note "`nitid1n` for detection has COCO weights only (decision D8)"
+    `nitid1n` for `detect` is registered (`dfine_n_coco.pth`, SHA-256 verified) and listed
+    like every other size, but it has no Objects365 pre-trained variant, unlike
+    `nitid1s/m/l/x`. The download prints this notice.
 
 #### `POST /api/v1/models/{id}/download?task=detect|segment`
 

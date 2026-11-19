@@ -45,10 +45,16 @@ def pairs():
 
 
 def test_detect_pairs_match_downloads_registry():
-    # dfine/utils/downloads.py: MODEL_REGISTRY has dfine_{s,m,l,x} only.
-    assert sorted(downloads.MODEL_REGISTRY) == ["dfine_l", "dfine_m", "dfine_s", "dfine_x"]
+    # dfine/utils/downloads.py: MODEL_REGISTRY has dfine_{n,s,m,l,x} (decision D8).
+    assert sorted(downloads.MODEL_REGISTRY) == [
+        "dfine_l",
+        "dfine_m",
+        "dfine_n",
+        "dfine_s",
+        "dfine_x",
+    ]
     detect = [i for i, t in pairs() if t == "detect"]
-    assert detect == ["nitid1s", "nitid1m", "nitid1l", "nitid1x"]
+    assert detect == ["nitid1n", "nitid1s", "nitid1m", "nitid1l", "nitid1x"]
 
 
 def test_segment_pairs_match_downloads_registry():
@@ -61,21 +67,12 @@ def test_semantic_is_not_exposed():
     assert {t for _, t in pairs()} == {"detect", "segment"}
 
 
-def test_d8_nano_detect_is_hidden_by_default():
-    assert registry.EXPOSE_NANO_DETECT is False
-    assert ("nitid1n", "detect") not in pairs()
-    assert registry.find_registry_entry("nitid1n", "detect") is None
-    # but the id itself is still a registry id because of segment
-    assert "nitid1n" in registry.registry_ids()
-
-
-def test_d8_flag_can_be_flipped(monkeypatch):
-    monkeypatch.setattr(registry, "EXPOSE_NANO_DETECT", True)
+def test_d8_nano_detect_is_listed_and_has_a_checkpoint_path():
     assert ("nitid1n", "detect") in pairs()
     entry = registry.find_registry_entry("nitid1n", "detect")
     assert entry is not None and entry.size == "n"
-    # No official asset exists for it, so it can be listed but is never "downloaded".
-    assert registry.weights_path(Path("/models"), entry) is None
+    path = registry.weights_path(Path("/models"), entry)
+    assert path == Path("/models/dfine_n_coco_wrapped.pth")
     assert registry.is_downloaded(Path("/models"), entry) is False
 
 
@@ -123,7 +120,7 @@ def test_listing_never_downloads(tmp_path, monkeypatch):
 def test_missing_models_dir_lists_registry_only(tmp_path):
     models = registry.list_models(tmp_path / "nope")
     assert {m["source"] for m in models} == {"registry"}
-    assert len(models) == 9
+    assert len(models) == 10
 
 
 # ------------------------------------------------------------------ local scan
@@ -335,8 +332,8 @@ def test_failed_download_cleans_staging_and_leaves_no_checkpoint(tmp_path, monke
 
 
 def test_download_without_registered_asset_is_a_value_error(tmp_path, monkeypatch):
-    monkeypatch.setattr(registry, "EXPOSE_NANO_DETECT", True)
-    entry = registry.find_registry_entry("nitid1n", "detect")
+    entry = registry.find_registry_entry("nitid1n", "segment")
+    monkeypatch.setattr(registry, "weights_path", lambda models_dir, e: None)
     with pytest.raises(ValueError):
         registry.download_registry_model(entry, tmp_path, lambda p: None)
 

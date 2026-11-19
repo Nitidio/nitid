@@ -179,7 +179,7 @@ Usage:
   nitid download [model=MODEL] [key=value ...]
 
 Options:
-  model=NAME          nitid1n (segmentation only), nitid1s, nitid1m, nitid1l, or nitid1x
+  model=NAME          nitid1n, nitid1s, nitid1m, nitid1l, or nitid1x
                       (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)

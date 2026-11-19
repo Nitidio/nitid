@@ -139,7 +139,6 @@ def test_every_spelling_of_a_size_resolves_to_the_same_backend(size: str) -> Non
     from dfine.nitid import resolve_nitid_backend_model
 
     spellings = [f"nitid1{size}", f"nitid1-{size}", f"model1{size}", f"d-fine-{size}"]
-    # ``detect`` has no official N checkpoint; ``segment`` covers every size.
     backends = {resolve_nitid_backend_model(name, task="segment") for name in spellings}
 
     assert backends == {f"dfine_{size}"}
@@ -185,12 +184,20 @@ def test_nitid_import_package_exposes_public_api() -> None:
 
 
 @pytest.mark.parametrize("name", ["nitid1n", "model1n", "d-fine-n"])
-def test_nitid_detect_n_rejected_until_detection_weights_exist(name: str) -> None:
+@pytest.mark.filterwarnings("ignore:.*legacy model name:DeprecationWarning")
+def test_nitid_detect_n_resolves_to_the_registered_coco_weights(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
     from dfine import NITID
 
-    # The message always uses the canonical name, whatever spelling was given.
-    with pytest.raises(ValueError, match="nitid1n.*detect"):
-        NITID(name, task="detect", device="cpu", verbose=False)
+    download_calls = _patch_checkpoint_loading(monkeypatch)
+
+    model = NITID(name, task="detect", device="cpu", verbose=False)
+
+    # Decision D8: nitid1n detection is registered (COCO weights only).
+    assert model.nitid_model == "nitid1n"
+    assert download_calls[0][0] == "dfine_n"
+    assert download_calls[0][1] == "detect"
 
 
 @pytest.mark.parametrize("size", ["n", "s", "m", "l", "x"])
@@ -259,14 +266,13 @@ def test_current_model_names_do_not_warn(
     assert not [w for w in recwarn if "legacy model name" in str(w.message)]
 
 
-def test_legacy_name_for_unavailable_model_raises_without_warning(
+def test_legacy_name_for_nano_detect_warns_once(
     monkeypatch: pytest.MonkeyPatch, recwarn: pytest.WarningsRecorder
 ) -> None:
     from dfine import NITID
 
     _patch_checkpoint_loading(monkeypatch)
 
-    with pytest.raises(ValueError, match="nitid1n.*detect"):
-        NITID("model1n", task="detect", device="cpu", verbose=False)
+    NITID("model1n", task="detect", device="cpu", verbose=False)
 
-    assert not [w for w in recwarn if "legacy model name" in str(w.message)]
+    assert len([w for w in recwarn if "legacy model name" in str(w.message)]) == 1

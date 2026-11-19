@@ -373,6 +373,7 @@ def captured_download(monkeypatch, tmp_path):
         (["model=model1x", "task=segment"], "dfine_x", "segment"),
         (["model=d-fine-m"], "dfine_m", "detect"),
         (["model=nitid1n", "task=segment"], "dfine_n", "segment"),
+        (["model=nitid1n"], "dfine_n", "detect"),
         (["model=dfine_m"], "dfine_m", "detect"),
     ],
 )
@@ -383,10 +384,3 @@ def test_download_cli_maps_public_model_names(captured_download, capsys, args, m
     assert captured_download[0]["model"] == model
     assert captured_download[0]["task"] == task
     assert "Downloaded wrapped checkpoint" in capsys.readouterr().out
-
-
-def test_download_cli_rejects_nitid1n_detection(captured_download):
-    with pytest.raises(ValueError, match="nitid1n"):
-        main(["nitid", "download", "model=nitid1n"])
-
-    assert captured_download == []

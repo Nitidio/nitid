@@ -317,8 +317,8 @@ def test_resolve_model_unknown_and_wrong_task(tmp_path, monkeypatch):
     with pytest.raises(ParamsError, match="no weights for task"):
         runs.resolve_model(tmp_path, "mine", "detect")
     assert runs.resolve_model(tmp_path, "mine", "segment").path == local.path
-    # nano detection has no official weights (decision D8)
-    with pytest.raises(ParamsError):
+    # nano detection is registered since decision D8: known, but not downloaded yet
+    with pytest.raises(runs.ModelNotDownloaded):
         runs.resolve_model(tmp_path, "nitid1n", "detect")
 
 

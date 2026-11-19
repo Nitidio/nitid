@@ -189,16 +189,15 @@ def test_models_registry_only(client):
     validate(body, "ModelList")
     pairs = {(m["id"], m["task"]) for m in body}
     assert {m["source"] for m in body} == {"registry"}
-    assert len(pairs) == len(body) == 9
+    assert len(pairs) == len(body) == 10
     assert all(m["downloaded"] is False for m in body)
 
 
-def test_nano_detect_is_not_exposed(client):
+def test_nano_detect_is_exposed(client):
     body = client.get("/api/v1/models", headers=AUTH).json()
-    assert {"id": "nitid1n", "task": "segment"} in [
-        {"id": m["id"], "task": m["task"]} for m in body
-    ]
-    assert not any(m["id"] == "nitid1n" and m["task"] == "detect" for m in body)
+    listed = [{"id": m["id"], "task": m["task"]} for m in body]
+    assert {"id": "nitid1n", "task": "segment"} in listed
+    assert {"id": "nitid1n", "task": "detect"} in listed
 
 
 def test_models_include_local_checkpoints_and_skip_broken_ones(client, models_dir):
@@ -222,7 +221,7 @@ def test_models_reports_downloaded_registry_weights(client, models_dir):
     by_pair = {(m["id"], m["task"]): m for m in body}
     assert by_pair[("nitid1x", "detect")]["downloaded"] is True
     assert by_pair[("nitid1x", "segment")]["downloaded"] is False
-    assert len(body) == 9  # the downloaded official file is not listed a second time as local
+    assert len(body) == 10  # the downloaded official file is not listed a second time as local
 
 
 # ------------------------------------------------------------------ download + jobs
@@ -285,10 +284,9 @@ def test_urls_and_paths_never_reach_the_downloader(client, fake_download, model_
     assert fake_download == []
 
 
-def test_nano_detect_download_is_404(client, fake_download):
+def test_nano_detect_download_is_accepted(client, fake_download):
     response = client.post("/api/v1/models/nitid1n/download?task=detect", headers=AUTH)
-    assert response.status_code == 404
-    assert fake_download == []
+    assert response.status_code == 202
     assert (
         client.post("/api/v1/models/nitid1n/download?task=segment", headers=AUTH).status_code == 202
     )

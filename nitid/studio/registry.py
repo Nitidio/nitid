@@ -14,8 +14,8 @@ decided by whether the checkpoint file exists in ``models_dir``, and local files
 are inspected through ``torch.load(weights_only=True, mmap=True)``, which reads
 the pickled metadata but memory-maps (does not read) the tensors.
 
-Decision D8 (reversible): ``nitid1n`` for ``detect`` is not exposed, see
-:data:`EXPOSE_NANO_DETECT`.
+Decision D8 (2026-11-19): ``nitid1n`` for ``detect`` is registered with a "COCO only"
+notice (``dfine_n_coco.pth``), so it is listed like every other size.
 """
 
 from __future__ import annotations
@@ -36,13 +36,6 @@ logger = logging.getLogger(__name__)
 #: Tasks the Studio API exposes (``Task`` in the contract). ``semantic`` exists in
 #: ``dfine`` but is not part of API v1.
 STUDIO_TASKS: tuple[str, ...] = ("detect", "segment")
-
-#: Decision D8. No official Objects365->COCO nano *detection* weights are registered in
-#: ``dfine/utils/downloads.py`` (``MODEL_REGISTRY`` has s/m/l/x only), and
-#: ``dfine.nitid.resolve_nitid_backend_model`` refuses ``nitid1n`` + ``detect``. Set this to
-#: ``True`` to list the pair anyway (e.g. once ``dfine_n_coco.pth`` is registered);
-#: downloading it still fails until the registry has an asset for it.
-EXPOSE_NANO_DETECT = False
 
 #: Local checkpoints larger than this are not inspected (and are not listed).
 MAX_LOCAL_CHECKPOINT_BYTES = 2 * 1024**3
@@ -82,8 +75,6 @@ def _registry_sizes(task: str) -> list[str]:
 
     source = MODEL_REGISTRY if task == "detect" else SEGMENT_MODEL_REGISTRY
     sizes = {name.removeprefix("dfine_") for name in source}
-    if task == "detect" and EXPOSE_NANO_DETECT:
-        sizes.add("n")
     return [size for size in _SIZE_ORDER if size in sizes]
 
 

@@ -28,7 +28,7 @@
       ],
       "hostable": true,
       "hostable_reason": "Passes the gate: Apache-2.0 allowlisted, pinned release tag, sha256 verified, LICENSE carried. A legal decision by the owner is still required.",
-      "notes": "Listed in the upstream README, but dfine/utils/downloads.py does not register a detection checkpoint for nitid1n (ADR-0004), so nitid never downloads it today."
+      "notes": "Registered in dfine/utils/downloads.py since decision D8 (2026-11-19): nitid1n detection downloads this COCO-only checkpoint (no Objects365 variant) and verifies the SHA-256 above."
     },
     {
       "id": "dfine-s-coco",
