@@ -155,11 +155,13 @@ const json = (res, status, body, headers = {}) => {
 // What the browser's squash resize + box rescale gives for a 200x100 image.
 const scaled = ([x1, y1, x2, y2]) => ({ x1: (x1 * 200) / S, y1: (y1 * 100) / S, x2: (x2 * 200) / S, y2: (y2 * 100) / S });
 const det = (cls, conf, b) => ({ box: scaled(b), confidence: conf, class_id: cls, name: NAMES[cls], has_mask: false });
+// Server segmentation result: the person carries an outline (triangle inside its 25,12.5-75,62.5 box).
+const OUTLINE = { x: [25, 60, 25], y: [12.5, 12.5, 62.5] };
 const RUN = {
-  id: "r_1", model: "nitid1s", task: "detect", backend: "torch", device: "cpu", status: "done", error_msg: null, item_count: 1,
+  id: "r_1", model: "nitid1s", task: "segment", backend: "torch", device: "cpu", status: "done", error_msg: null, item_count: 1,
   items: [{
     id: 0, name: "white.png", width: 200, height: 100, speed: { preprocess: 3.1, inference: 28.4, postprocess: 1.2 },
-    detections: [det(0, 0.91, BOXES_IN.slice(0, 4)), det(2, 0.61, BOXES_IN.slice(4))],
+    detections: [{ ...det(0, 0.91, BOXES_IN.slice(0, 4)), has_mask: true, segments: OUTLINE }, det(2, 0.61, BOXES_IN.slice(4))],
   }],
 };
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json", ".wasm": "application/wasm" };
@@ -282,10 +284,28 @@ try {
   await page.getByRole("button", { name: "Run" }).click();
   await page.getByRole("heading", { name: "Results" }).waitFor({ timeout: 15000 });
   check("server mode: 2 detections drawn", (await rows(page)) === 2);
+  await page.waitForFunction(() => {
+    const c = document.querySelector("canvas.detection-canvas");
+    const d = c.getContext("2d").getImageData(90, 80, 1, 1).data;
+    return d[0] === 255 && d[1] === 255 && d[2] === 255;
+  });
+  const serverPx = await page.locator("canvas.detection-canvas").evaluate((c) => {
+    const px = (x, y) => Array.from(c.getContext("2d").getImageData(x, y, 1, 1).data);
+    return { inTriangle: px(32, 20), outTriangle: px(70, 55) };
+  });
+  const tinted = (p) => p[0] < 250 || p[1] < 250 || p[2] < 250;
+  check("server mode: outline interior is tinted", tinted(serverPx.inTriangle), JSON.stringify(serverPx.inTriangle));
+  check("server mode: box area outside the outline is untinted", !tinted(serverPx.outTriangle), JSON.stringify(serverPx.outTriangle));
+  check("server mode: no stale 'outlines not provided' note", (await page.getByText(/Mask outlines are not provided/).count()) === 0);
   await page.getByRole("button", { name: "Export" }).click();
   const [jsonServer] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download JSON" }).click()]);
   const serverDoc = JSON.parse(readFileSync(await jsonServer.path(), "utf8"));
   check("server mode: JSON export", serverDoc.source === "server" && serverDoc.detection_count === 2 && serverDoc.runtime.backend === "torch", jsonServer.suggestedFilename());
+  check("server mode: JSON carries the outline, no pixel count", Array.isArray(serverDoc.detections[0].mask?.polygon) && serverDoc.detections[0].mask.polygon.length === 3 && !("pixels" in serverDoc.detections[0].mask) && serverDoc.detections[1].mask === undefined, JSON.stringify(serverDoc.detections[0].mask));
+  const [yoloServer] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download YOLO TXT" }).click()]);
+  // Two files (labels + classes.txt) arrive as a ZIP; read the labels with the system unzip.
+  const yoloLines = execFileSync("unzip", ["-p", await yoloServer.path(), "white.txt"], { encoding: "utf8" }).trim().split("\n");
+  check("server mode: YOLO TXT has a polygon line for the outline and a box line for the rest", yoloLines.length === 2 && yoloLines[0].split(" ").length === 7 && yoloLines[1].split(" ").length === 5, yoloLines.join(" | "));
   check("server mode: PDF export is enabled (image loaded)", await page.getByRole("button", { name: "Download PDF report" }).isEnabled());
 
   /* ---- 2. in-browser mode, real ONNX Runtime Web ---- */

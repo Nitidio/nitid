@@ -77,14 +77,16 @@ const json = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 const detection = (cls, name, conf, box) => ({ box, confidence: conf, class_id: cls, name, has_mask: false });
+// Triangle (20,10) (60,10) (20,90): (30,20) is inside it; (70,80) is inside the box but outside it; (50,50) is outside it too.
+const withOutline = (d, segments) => ({ ...d, has_mask: true, segments });
 const RUN = {
-  id: "r_1", model: "nitid1s", task: "detect", backend: "torch", device: "cpu", status: "done",
+  id: "r_1", model: "nitid1s", task: "segment", backend: "torch", device: "cpu", status: "done",
   error_msg: null, item_count: 1,
   items: [{
     id: 0, name: "white.png", width: 200, height: 100,
     speed: { preprocess: 3.1, inference: 28.4, postprocess: 1.2 },
     detections: [
-      detection(0, "person", 0.91, { x1: 20, y1: 10, x2: 80, y2: 90 }),
+      withOutline(detection(0, "person", 0.91, { x1: 20, y1: 10, x2: 80, y2: 90 }), { x: [20, 60, 20], y: [10, 10, 90] }),
       detection(2, "car", 0.4, { x1: 100, y1: 20, x2: 190, y2: 80 }),
     ],
   }],
@@ -168,7 +170,7 @@ try {
     canvas.evaluate((c) => {
       const ctx = c.getContext("2d");
       const px = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
-      return { inside: px(50, 50), edge: px(20, 50) };
+      return { inside: px(50, 50), edge: px(20, 50), inTriangle: px(30, 20), outTriangle: px(70, 80) };
     });
   await page.waitForFunction(() => {
     const c = document.querySelector("canvas.detection-canvas");
@@ -178,6 +180,13 @@ try {
   const px = await sample();
   check("original image drawn", px.inside[0] === 255 && px.inside[3] === 255, JSON.stringify(px.inside));
   check("box edge is coloured (not white)", px.edge[0] < 200 || px.edge[1] < 200 || px.edge[2] < 200, JSON.stringify(px.edge));
+
+  // The server outline is drawn: tinted inside the polygon, still white inside the box but outside it.
+  const tinted = (p) => p[0] < 250 || p[1] < 250 || p[2] < 250;
+  check("segment outline: polygon interior is tinted", tinted(px.inTriangle), JSON.stringify(px.inTriangle));
+  check("segment outline: box area outside the polygon stays untinted", !tinted(px.outTriangle), JSON.stringify(px.outTriangle));
+  check("stale 'outlines not provided' note is gone", (await page.getByText(/Mask outlines are not provided/).count()) === 0);
+  check("mask column is shown", await page.getByRole("columnheader", { name: "Mask" }).isVisible());
 
   const rows = () => page.locator("table.detections tbody tr").count();
   check("two rows at 25%", (await rows()) === 2);
