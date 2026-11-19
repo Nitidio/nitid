@@ -208,3 +208,47 @@ def test_topk_is_the_effective_row_count_for_small_models(tmp_path):
     assert meta["topk"] == 20 and meta["names"] == {"0": "class_0", "1": "class_1"}
     values = _assert_meta_matches_runtime(out, meta, 64)
     assert values["labels"].shape == (1, 20)
+
+
+@pytest.mark.parametrize("task", ["detect", "segment"])
+def test_simplified_export_has_no_stale_value_info(
+    tiny_checkpoint, tiny_segment_checkpoint, tmp_path, task
+):
+    """onnxsim leaves a rank-0 ``value_info`` for a [4, 256] tensor in the segment graph.
+
+    onnxruntime-web 1.31.1 refuses such a file, so the exporter drops ``value_info`` and
+    the full ONNX checker must pass. Outputs must match an export that kept it.
+    """
+    pytest.importorskip("onnxsim")
+    ort = pytest.importorskip("onnxruntime")
+    import onnx
+
+    import dfine.exporter as exporter_module
+
+    checkpoint = tiny_checkpoint if task == "detect" else tiny_segment_checkpoint
+    model = DFINE(checkpoint, task=task, device="cpu", verbose=False)
+    fixed = model.export(
+        format="onnx", imgsz=640, simplify=True, output=tmp_path / "fixed.onnx", verbose=False
+    )
+    proto = onnx.load(str(fixed))
+    assert len(proto.graph.value_info) == 0
+    onnx.checker.check_model(proto, full_check=True)
+    assert read_onnx_meta(proto) is not None  # the meta survives
+
+    original = exporter_module.drop_value_info
+    exporter_module.drop_value_info = lambda _model: 0
+    try:
+        legacy = model.export(
+            format="onnx", imgsz=640, simplify=True, output=tmp_path / "legacy.onnx", verbose=False
+        )
+    finally:
+        exporter_module.drop_value_info = original
+    assert len(onnx.load(str(legacy)).graph.value_info) > 0
+
+    image = np.random.default_rng(0).random((1, 3, 640, 640), dtype=np.float32)
+    providers = ["CPUExecutionProvider"]
+    new = ort.InferenceSession(str(fixed), providers=providers).run(None, {"images": image})
+    old = ort.InferenceSession(str(legacy), providers=providers).run(None, {"images": image})
+    assert len(new) == len(old)
+    for a, b in zip(new, old):
+        np.testing.assert_allclose(a, b, rtol=0, atol=1e-6)
