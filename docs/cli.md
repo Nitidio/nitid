@@ -368,8 +368,10 @@ pip install "nitid[studio]"
 uv run nitid studio
 ```
 
-The command prints the access URL, which carries a random per-start token in
-the URL fragment, and opens it in your browser:
+Once the server is listening, the command prints the access URL, which carries
+a random per-start token in the URL fragment, and opens it in your browser. The
+URL is never printed before the server accepts connections, so if start-up
+fails you only see the error:
 
 ```text
 Open: http://127.0.0.1:8000/#t=<token>
@@ -390,8 +392,18 @@ uv run nitid studio host=0.0.0.0 token=a-long-secret-value open=false
 python -m nitid.studio port=0
 ```
 
-Without the extra, the command prints `pip install "nitid[studio]"` and exits
-with a non-zero code. `--report` is not supported for `studio`. See the
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| `0` | Normal stop, including Ctrl+C (SIGINT) after the graceful shutdown, and `--help`. |
+| `1` | The address could not be bound. |
+| `2` | Invalid arguments. |
+| `3` | The `studio` extra is not installed (the command prints `pip install "nitid[studio]"`). |
+
+Ctrl+C used to end the process with the signal status (`-2` for a parent
+process, `130` in a shell); it now exits with `0`. `SIGTERM` still ends the
+process with the signal status. `--report` is not supported for `studio`. See the
 [Nitid Studio guide](studio.md) for security notes and current limits.
 
 ## Using the development Docker container

@@ -2,6 +2,7 @@
 
 import importlib
 import socket
+import time
 import subprocess
 import sys
 from pathlib import Path
@@ -249,3 +250,126 @@ def test_run_reports_port_in_use_without_traceback(capsys, tmp_path):
         assert "cannot listen" in capsys.readouterr().err
     finally:
         first.close()
+
+
+# --- announcement after start-up and clean Ctrl+C ----------------------------------------------
+
+
+class FakeServer:
+    """Stands in for ``uvicorn.Server``: ``run`` flips ``started`` the way uvicorn does."""
+
+    def __init__(self, *, start=True, interrupt=False):
+        self.started = False
+        self.should_exit = False
+        self._start = start
+        self._interrupt = interrupt
+        self.announced_before_start = None
+        self.seen_output = None
+
+    def run(self, sockets=None):
+        # Give a watcher thread the chance to (wrongly) print before we are "listening".
+        time.sleep(0.2)
+        self.seen_output = self.capture()
+        if self._start:
+            self.started = True
+            time.sleep(0.3)  # let the announcer thread run
+        else:
+            self.should_exit = True
+        if self._interrupt:
+            raise KeyboardInterrupt
+
+    capture = staticmethod(lambda: None)
+
+
+def _patch_server(monkeypatch, fake, capsys):
+    pytest.importorskip("fastapi")
+    fake.capture = lambda: capsys.readouterr().out
+    monkeypatch.setattr(launcher, "make_server", lambda app, **kw: fake)
+    opened = []
+    monkeypatch.setattr(launcher.webbrowser, "open", lambda url: opened.append(url))
+    return opened
+
+
+def test_url_is_printed_only_after_the_server_is_listening(monkeypatch, capsys, tmp_path):
+    fake = FakeServer()
+    opened = _patch_server(monkeypatch, fake, capsys)
+    settings = StudioSettings(port=0, token="token-123456", models_dir=tmp_path, open_browser=True)
+
+    assert launcher.run(settings) == launcher.EXIT_OK
+
+    assert "Open:" not in fake.seen_output  # nothing announced while still starting
+    after = capsys.readouterr().out
+    assert "Open: http://127.0.0.1:" in after and "Press Ctrl+C to stop." in after
+    assert len(opened) == 1 and opened[0].startswith("http://127.0.0.1:")
+
+
+def test_nothing_is_announced_and_no_browser_opens_if_the_server_never_starts(
+    monkeypatch, capsys, tmp_path
+):
+    fake = FakeServer(start=False)
+    opened = _patch_server(monkeypatch, fake, capsys)
+    settings = StudioSettings(port=0, token="token-123456", models_dir=tmp_path, open_browser=True)
+
+    launcher.run(settings)
+    time.sleep(0.2)
+
+    assert "Open:" not in fake.seen_output + capsys.readouterr().out
+    assert opened == []
+
+
+def test_browser_is_not_opened_when_open_is_false(monkeypatch, capsys, tmp_path):
+    fake = FakeServer()
+    opened = _patch_server(monkeypatch, fake, capsys)
+    settings = StudioSettings(port=0, token="token-123456", models_dir=tmp_path, open_browser=False)
+
+    launcher.run(settings)
+
+    assert "Open:" in capsys.readouterr().out
+    assert opened == []
+
+
+def test_keyboard_interrupt_after_graceful_shutdown_is_a_clean_exit(monkeypatch, capsys, tmp_path):
+    fake = FakeServer(interrupt=True)
+    _patch_server(monkeypatch, fake, capsys)
+    settings = StudioSettings(port=0, token="token-123456", models_dir=tmp_path, open_browser=False)
+
+    assert launcher.run(settings) == launcher.EXIT_OK == 0
+
+
+def test_announce_when_ready_returns_false_on_timeout(tmp_path):
+    server = FakeServer()
+    settings = StudioSettings(port=0, token="token-123456", models_dir=tmp_path)
+    assert launcher._announce_when_ready(server, settings, "http://x", timeout=0.05) is False
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGINT delivery differs on Windows")
+def test_real_process_exits_zero_on_sigint(tmp_path):
+    pytest.importorskip("fastapi")
+    pytest.importorskip("uvicorn")
+    import os
+    import signal
+
+    process = subprocess.Popen(
+        [sys.executable, "-m", "nitid.studio", "port=0", "--no-browser", f"models={tmp_path}"],
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        deadline = time.monotonic() + 120
+        seen = ""
+        while "Press Ctrl+C" not in seen:
+            assert time.monotonic() < deadline, f"no start-up line; got {seen!r}"
+            line = process.stdout.readline()
+            assert line != "" or process.poll() is None, process.stderr.read()
+            seen += line
+        assert "Open: http://127.0.0.1:" in seen
+        process.send_signal(signal.SIGINT)
+        assert process.wait(timeout=30) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate()

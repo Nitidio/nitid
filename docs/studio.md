@@ -32,8 +32,9 @@ nitid studio
 python -m nitid.studio
 ```
 
-Studio prints a URL such as `http://127.0.0.1:8000/#t=<token>` and opens it in
-your browser. The token is in the URL *fragment* (after `#`), which browsers
+Once the server is listening, Studio prints a URL such as
+`http://127.0.0.1:8000/#t=<token>` and opens it in your browser (never before:
+if the port is taken you only see the error). The token is in the URL *fragment* (after `#`), which browsers
 never send to a server, so it does not appear in server logs.
 
 | Option | Default | Meaning |
@@ -45,7 +46,7 @@ never send to a server, so it does not appear in server logs.
 | `--no-browser` | | Same as `open=false`. |
 | `token=TOKEN` | random | Access token (at least 8 characters, no whitespace). |
 
-Exit codes: `0` normal stop, `1` the address could not be bound, `2` invalid
+Exit codes: `0` normal stop (Ctrl+C included), `1` the address could not be bound, `2` invalid
 arguments, `3` the `studio` extra is missing.
 
 ## Security model
