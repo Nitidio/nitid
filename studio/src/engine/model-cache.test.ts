@@ -67,6 +67,26 @@ describe("model-cache: sha256 helpers", () => {
   });
 });
 
+describe("model-cache: request headers", () => {
+  it("sends the headers on the HEAD and the GET, and not when none are given", async () => {
+    const seen: Array<{ method: string; auth: string | null }> = [];
+    const fn = (async (_url: RequestInfo | URL, options?: RequestInit) => {
+      seen.push({ method: options?.method ?? "GET", auth: new Headers(options?.headers).get("authorization") });
+      return options?.method === "HEAD"
+        ? new Response(null, { status: 200, headers: { etag: `"${await hashOf("m")}"` } })
+        : new Response(bytesOf("m"), { status: 200 });
+    }) as typeof fetch;
+    await loadModelBytes({ url: "/m", headers: { Authorization: "Bearer t" }, fetchFn: fn, caches: new FakeStorage(), origin: ORIGIN });
+    expect(seen).toEqual([
+      { method: "HEAD", auth: "Bearer t" },
+      { method: "GET", auth: "Bearer t" },
+    ]);
+    seen.length = 0;
+    await loadModelBytes({ url: "/m", fetchFn: fn, caches: null, origin: ORIGIN });
+    expect(seen).toEqual([{ method: "GET", auth: null }]);
+  });
+});
+
 describe("model-cache: loadModelBytes", () => {
   it("downloads, verifies the known sha256, caches under it, then serves from cache", async () => {
     const hash = await hashOf("model-bytes");

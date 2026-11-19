@@ -35,6 +35,11 @@ export interface LoadModelOptions {
   url: string;
   /** Known sha256 (from the meta), lowercase hex. */
   sha256?: string;
+  /**
+   * Extra request headers for the HEAD and GET (for example `Authorization: Bearer ...` for the
+   * local server's `/api/v1/onnx/{model}`). Never stored in the cache.
+   */
+  headers?: Readonly<Record<string, string>>;
   fetchFn?: typeof fetch;
   caches?: CacheStorageLike | null;
   cacheName?: string;
@@ -101,7 +106,7 @@ export async function loadModelBytes(options: LoadModelOptions): Promise<LoadedM
   let key = options.sha256;
   if (!key && cache) {
     try {
-      const head = await fetchFn(options.url, { method: "HEAD" });
+      const head = await fetchFn(options.url, { method: "HEAD", ...withHeaders(options.headers) });
       if (head.ok) key = sha256FromEtag(head.headers.get("etag")) ?? undefined;
     } catch {
       // HEAD unsupported or network error: fall through to the plain download.
@@ -125,7 +130,7 @@ export async function loadModelBytes(options: LoadModelOptions): Promise<LoadedM
   // 3. Download with a size cap.
   let response: Response;
   try {
-    response = await fetchFn(options.url);
+    response = await fetchFn(options.url, withHeaders(options.headers));
   } catch (error) {
     throw new EngineError("model_fetch_failed", `Could not download the model: ${String(error)}`, { cause: error });
   }
@@ -162,6 +167,10 @@ export async function loadModelBytes(options: LoadModelOptions): Promise<LoadedM
     }
   }
   return { bytes, source: "network", sha256: expected ?? digest, cached };
+}
+
+function withHeaders(headers: Readonly<Record<string, string>> | undefined): RequestInit {
+  return headers && Object.keys(headers).length > 0 ? { headers: { ...headers } } : {};
 }
 
 function tooLarge(size: number, limit: number): EngineError {

@@ -25,6 +25,7 @@ export interface HandlerDeps {
   loadModel(args: {
     url: string;
     sha256?: string;
+    headers?: Record<string, string>;
     onProgress: (loaded: number, total: number | undefined) => void;
   }): Promise<LoadedModel>;
   createSession(init: SessionInit): Promise<SessionPort>;
@@ -88,6 +89,7 @@ export class InferenceHandler {
       const loaded = await this.deps.loadModel({
         url: request.modelUrl!,
         ...(request.sha256 !== undefined ? { sha256: request.sha256 } : {}),
+        ...(request.headers !== undefined ? { headers: request.headers } : {}),
         onProgress: (loadedBytes, total) =>
           this.deps.post({ id: request.id, type: "progress", loaded: loadedBytes, total }),
       });

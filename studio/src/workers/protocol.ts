@@ -16,6 +16,8 @@ export interface InitRequest {
   modelUrl?: string;
   /** ...or use these bytes (a file the user picked). Transferred. */
   modelBytes?: ArrayBuffer;
+  /** Request headers for `modelUrl` (the bearer token of the local server). Not used with `modelBytes`. */
+  headers?: Record<string, string>;
   /** Known sha256 of the file (from the meta); cache key and integrity check. */
   sha256?: string;
   /** Meta from the REST API; otherwise read from the ONNX `metadata_props`. */

@@ -66,6 +66,12 @@ describe("inference handler", () => {
     expect(deps.createSession).toHaveBeenCalledWith({ modelBytes: expect.any(ArrayBuffer), backend: "auto", wasmBase: "/ort/" });
   });
 
+  it("forwards request headers (the bearer token) to the loader", async () => {
+    const { handler, deps } = setup();
+    await handler.handle({ id: 1, type: "init", modelUrl: "/api/v1/onnx/m", headers: { Authorization: "Bearer t" } });
+    expect(deps.loadModel).toHaveBeenCalledWith(expect.objectContaining({ headers: { Authorization: "Bearer t" } }));
+  });
+
   it("init from bytes (a user file) skips the loader and passes the meta through", async () => {
     const { handler, deps, posted } = setup();
     await handler.handle({ id: 1, type: "init", modelBytes: new ArrayBuffer(4), meta: fixture.meta });
