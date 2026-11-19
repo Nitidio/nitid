@@ -178,3 +178,42 @@ dd {
     transition: none !important;
   }
 }
+
+.export-menu {
+  display: inline-block;
+}
+
+.export-panel {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.export-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.export-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+}
+
+.export-name {
+  flex: 1;
+}
+
+.export-name small {
+  display: block;
+  color: var(--muted);
+}
+
+.export-status {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
