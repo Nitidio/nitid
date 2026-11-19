@@ -292,9 +292,13 @@ def test_security_headers_values_match_the_plan():
     assert SECURITY_HEADERS["Cross-Origin-Embedder-Policy"] == "require-corp"
     assert SECURITY_HEADERS["Cross-Origin-Resource-Policy"] == "same-origin"
     assert SECURITY_HEADERS["Referrer-Policy"] == "no-referrer"
+    # Clickjacking: the Studio holds a bearer token and must never be framed by another site.
+    assert SECURITY_HEADERS["X-Frame-Options"] == "DENY"
+    assert "frame-ancestors 'none'" in CONTENT_SECURITY_POLICY
     assert CONTENT_SECURITY_POLICY == (
         "default-src 'self'; worker-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
+        "frame-ancestors 'none'"
     )
 
 

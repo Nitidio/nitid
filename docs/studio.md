@@ -69,7 +69,8 @@ that user from *other web pages* in their browser and from the local network.
 - **No CORS.** No `Access-Control-*` headers are ever sent; the UI is served
   from the same origin as the API.
 - **Browser hardening headers on every response:** `X-Content-Type-Options:
-  nosniff`, `Cross-Origin-Opener-Policy: same-origin`,
+  nosniff`, `X-Frame-Options: DENY` (with CSP `frame-ancestors 'none'`, so no other site can
+  frame the Studio and trick you into clicking it), `Cross-Origin-Opener-Policy: same-origin`,
   `Cross-Origin-Embedder-Policy: require-corp`,
   `Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: no-referrer`,
   and a Content-Security-Policy that only allows same-origin resources plus

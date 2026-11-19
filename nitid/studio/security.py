@@ -34,11 +34,13 @@ LOOPBACK_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "[::1]"})
 
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; worker-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'; "
-    "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
+    "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
+    "frame-ancestors 'none'"
 )
 
 SECURITY_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Embedder-Policy": "require-corp",
     "Cross-Origin-Resource-Policy": "same-origin",

@@ -20,9 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Nitid Studio runs API (`POST/GET/DELETE /api/v1/runs`, per-item JSON and image, CSV and ZIP export, one inference at a time, lazy model loading); `/health` reports `api_version` as an integer, 401/403 use the error envelope, `nitid studio` prints the URL only once the server is listening, and Ctrl+C exits with code 0.
 - Nitid Studio ONNX endpoints: `GET /api/v1/onnx/{model}` and `/onnx/{model}/meta` export on demand (cached, serialised, ETag = sha256, 304 on `If-None-Match`).
 - Nitid Studio unified UI for both deployments: server mode, in-browser mode with ONNX Runtime Web, server-vs-browser comparison with IoU agreement, and the export menu everywhere; the hosted catalogue is set with `STUDIO_MODELS_BASE_URL`.
+- Nitid Studio end-to-end suite (`pytest studio/e2e`, real server and real Chrome) with a server-vs-browser parity test, and an optional non-blocking `studio-e2e` CI job.
 
 ### Fixed
 
+- Nitid Studio sends `X-Frame-Options: DENY` and CSP `frame-ancestors 'none'` so it cannot be framed by another site, and no longer logs a favicon 404 on every page load.
 - ONNX export with `simplify=True` no longer leaves a stale `graph.value_info`, which made instance-segmentation models fail the full ONNX check and load in onnxruntime-web; outputs are bit-identical.
 
 ## [0.9.6] - 2026-11-18
