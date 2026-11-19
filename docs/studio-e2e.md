@@ -139,9 +139,9 @@ all queries of a class the same score.
    `X-Frame-Options`: a page on another origin can embed the UI in an `<iframe>` (observed, status 200).
    Whether a framed copy could reach the token was not checked `[NV]` (it is not in the URL and
    `sessionStorage` is per origin); the clear risk is clickjacking. Adding `frame-ancestors 'none'` would close it.
-5. **Stale copy**: after a segment run the UI says "Mask outlines are not provided by the server API yet",
-   although `/runs` now returns `segments` for every masked detection (the text is shown today, recorded in
-   the UI test data as `staleMaskNote`).
+5. **Stale copy (fixed)**: the UI used to say "Mask outlines are not provided by the server API yet" after a
+   segment run, although `/runs` returns `segments`. The note is removed and the outlines are drawn; the UI
+   test data key `staleMaskNote` should now be `false`.
 6. **No `imgsz` control**: the UI sends no `imgsz`, so the server uses 640. A checkpoint trained at another
    size (the unit-test models are 64 px) must be run through the API with `imgsz`. Not a bug for the
    official 640 px models; noted because it is why the e2e models are anchored at 640.

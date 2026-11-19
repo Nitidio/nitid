@@ -189,9 +189,11 @@ The workbench for the **local** deployment. `App.tsx` lazy-loads `pages/RunLocal
 - Only the pure `done` payload is shown: there is no cancel endpoint, so "Stop waiting" only stops
   polling; the server may finish the run anyway. Old runs (`GET /runs`, `DELETE /runs/{id}`) are
   not used yet.
-- **Masks**: contract v1 only reports `has_mask`; no endpoint serves mask pixels or polygons, so
-  segmentation results show boxes with a tinted fill and a note. `ResultDetection.mask` (polygons)
-  and the drawing code exist, ready for when the API provides them. [NV: contract gap]
+- **Masks**: for `task=segment` the server sends `has_mask: true` plus an optional `segments`
+  outline `{x: number[], y: number[]}` (original-image pixels, one outline per detection: the
+  server keeps the largest contour). There is still no endpoint for mask pixels. See "Server
+  outlines" below. A server that predates `segments` still works: such instances get the old
+  tinted-box fill.
 
 ### Running against a real `nitid studio`
 
@@ -435,7 +437,7 @@ knows where the numbers came from.
 | Producer | Mapper | Notes |
 | --- | --- | --- |
 | Browser engine (`RunResult` of `src/engine`) | `fromEngineResult(result, { imageName, model, task, backend })` | Masks are present (`DetectionMask`, cropped to the box). `device` is `null`. |
-| REST server (`GET /runs/{id}`, one `RunItem`) | `fromServerRun(run, itemId)` | The contract reports `has_mask` but **no mask pixels** (no mask endpoint in `api-contract/openapi.json`), so server results carry `hasMask: true` and no `mask`: PNG draws boxes only and YOLO TXT falls back to box lines. `device` is the server's device name. |
+| REST server (`GET /runs/{id}`, one `RunItem`) | `fromServerRun(run, itemId)` | The contract reports `has_mask` and an optional `segments` outline but **no mask pixels**, so server results carry `hasMask: true` and `polygon` (never `mask`): PNG, JSON and YOLO TXT use the outline; CSV `mask_pixels` stays empty and crops are plain boxes. Without `segments` everything falls back to boxes. `device` is the server's device name. |
 
 ```ts
 interface ExportResults {
@@ -452,6 +454,7 @@ interface ExportResults {
     classId: number;  name: string;   // any Unicode
     hasMask: boolean;
     mask?: { x; y; width; height; data: Uint8Array };  // 0/1, row-major, top-left at (x, y)
+    polygon?: Array<[number, number]>;  // server outline (no pixels), pixels of the ORIGINAL image
   }>;
 }
 ```
@@ -504,9 +507,11 @@ results (YOLO TXT + `classes.txt`, crops) are delivered by `ExportMenu` as a ZIP
 
 - Keys are snake_case like the REST API. `timings_ms` is `null` when unknown.
 - Pixels are rounded to 2 decimals, confidence to 6, timings to 3.
-- `mask` exists only when mask pixels are available. `polygon` is the contour
-  below, in ORIGINAL image pixels (`[]` for an empty mask); `pixels` is the
-  number of set mask pixels.
+- `mask` exists when mask pixels or a server outline are available. `polygon` is the contour
+  below (browser) or the server `segments` outline as delivered (server), in ORIGINAL image
+  pixels (`[]` for an empty mask); `pixels` is the number of set mask pixels and is **absent**
+  for server results, which have no pixel mask (an area from the polygon would be a different
+  number, so it is not invented).
 - Adding a key is not a breaking change; removing or renaming one bumps `version`.
 
 ### CSV
@@ -530,8 +535,9 @@ One line per detection, class id first, coordinates normalised by the ORIGINAL
 image size, clamped to 0..1, six decimals:
 
 - box: `<class> <cx> <cy> <w> <h>`
-- polygon (detections with mask pixels): `<class> <x1> <y1> ... <xn> <yn>`,
-  `n >= 3` (the Ultralytics segmentation format)
+- polygon (detections with mask pixels or a server outline): `<class> <x1> <y1> ... <xn> <yn>`,
+  `n >= 3` (the Ultralytics segmentation format). A server outline is written as delivered
+  (no extra simplification), clamped to the image.
 
 No detections give an empty file, the YOLO convention for a negative sample.
 `classes.txt` lists names by class id (ids that never occur are `class_<id>`).
@@ -558,7 +564,32 @@ throws a `SyntaxError` naming the line; the tests round-trip through it.
 
 Cost is linear in the mask size. Limitation: instances with several separate
 parts lose all but the largest part in YOLO TXT and in JSON `mask.polygon`
-(the PNG overlay draws every mask pixel).
+(the PNG overlay draws every mask pixel). Server outlines are already a single polygon.
+
+### Server outlines (`segments`)
+
+Data flow: `Detection.segments` (`src/api/types.ts`) goes through `segmentsToRing`
+(`src/api/segments.ts`) into two places: `fromRun` (`ResultDetection.mask.polygons`, drawn by
+`draw.ts`) and `fromServerRun` (`ExportDetection.polygon`, used by PNG, JSON and YOLO).
+`segmentsToRing` never throws: it ignores the surplus of the longer of `x` / `y`, drops
+non-finite vertices, removes a repeated closing vertex, and returns `null` below 3 vertices
+(then the detection is treated as a flag-only mask and falls back to the tinted box / box line).
+
+- **Drawing**: translucent fill (alpha 0.35) plus a 1.5 px stroke at full opacity in the class
+  colour, under the box and label. The same filter as the boxes applies, because only the
+  detections that pass the class filter and the confidence slider reach `drawDetections`.
+  The "Show masks" checkbox hides the polygons.
+- **Several outlines**: the contract carries exactly **one** outline per detection (the largest
+  contour; `nitid/studio/runs.py` takes `Masks.xy[i]`). The UI model (`DetectionMask.polygons`)
+  is a list and the canvas draws every entry, so a future API with several outlines needs no
+  drawing change. The export model keeps **one** `polygon`, like the browser path keeps the
+  largest component: YOLO TXT has one line per detection (one line per outline would turn one
+  instance into several on re-import), JSON has one `mask.polygon`. If the API ever sends
+  several outlines, `fromServerRun` must pick the largest by area; today there is nothing to pick.
+- **Not available for server results**: pixel masks. CSV `mask_pixels` is empty, crops are box
+  crops without alpha, and JSON `mask.pixels` is absent.
+- **Compare view**: agreement between server and browser is box IoU only; outlines are not
+  compared (the browser model in the comparison is usually a detector).
 
 ### Annotated PNG and crops
 
