@@ -140,6 +140,54 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Real server + built UI + real Chrome (see docs/studio-e2e.md). Optional: it is not in any
+  # `needs:` and may fail without blocking a merge; make it required once it has proven stable.
+  studio-e2e:
+    name: Studio end to end (Chrome)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm (version pinned in package.json)
+        run: corepack enable
+
+      - name: Install Python dependencies
+        run: uv sync --extra dev --extra train --extra studio
+
+      - name: Install the frontend dependencies
+        working-directory: studio
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the UI into nitid/studio/static
+        run: uv run python scripts/build_studio.py
+
+      # playwright-core only drives the Chrome that the runner already has; no browser download.
+      - name: Install playwright-core (outside the repository)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" --no-audit --no-fund playwright-core
+          echo "PLAYWRIGHT_CORE_PATH=$RUNNER_TEMP/pw/node_modules/playwright-core" >> "$GITHUB_ENV"
+          echo "CHROME_PATH=$(command -v google-chrome)" >> "$GITHUB_ENV"
+
+      - name: Run the end-to-end tests
+        run: uv run pytest studio/e2e -s -rs --no-header -p no:cacheprovider
+
   package:
     name: Installed wheel acceptance
     needs: studio-ui
