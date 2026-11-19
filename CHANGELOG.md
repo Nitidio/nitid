@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Licensing for Studio weights: `studio/models.lock.json` pins revision, SHA-256 and SPDX licence per model, `tools/check_models_lock.py` validates it, and `THIRD_PARTY_NOTICES.md` plus `docs/licensing/studio-weights.md` document redistribution terms.
 - Nitid Studio in-browser engine: ONNX Runtime Web in a Web Worker with Pillow-exact preprocessing, `nitid_meta` decoding for detection and segmentation, and a Cache API keyed by SHA-256; parity fixtures in `studio/` compare it with the Python predictor.
 - Nitid Studio result exports: annotated PNG, JSON, CSV, YOLO TXT (with mask polygons), crops, ZIP bundle and a PDF report, plus an `ExportMenu` component; adds the lazy-loaded `fflate` dependency.
+- Nitid Studio Local panel (`/run/local`): model download, backend/device picker, multi-image upload, run polling, canvas results with confidence and class filters, and an `ExportMenu` slot for the unified UI.
 
 ## [0.9.6] - 2026-11-18
 
