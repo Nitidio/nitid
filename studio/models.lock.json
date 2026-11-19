@@ -68,9 +68,9 @@
       "revision_kind": "release-tag",
       "url": "https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_coco.pth",
       "size_bytes": 79108938,
-      "sha256": null,
-      "sha256_status": "unverified",
-      "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
+      "sha256": "b44a7586bf490858c7b8bce9e44bd025cb88724df9a07a8deb3ae1c12e608195",
+      "sha256_status": "verified",
+      "sha256_note": "Computed 2026-11-19 with tools/hash_models_lock.py on the full release asset (size matched size_bytes).",
       "license": "Apache-2.0",
       "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
@@ -81,8 +81,8 @@
       "notice_files": [
         "LICENSE"
       ],
-      "hostable": false,
-      "hostable_reason": "Blocked: sha256 not verified (asset larger than the 50 MB download limit used in this audit)."
+      "hostable": true,
+      "hostable_reason": "Passes the gate: Apache-2.0 allowlisted, pinned release tag, sha256 verified, LICENSE carried. A legal decision by the owner is still required."
     },
     {
       "id": "dfine-l-coco",
@@ -95,9 +95,9 @@
       "revision_kind": "release-tag",
       "url": "https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_coco.pth",
       "size_bytes": 126059754,
-      "sha256": null,
-      "sha256_status": "unverified",
-      "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
+      "sha256": "f1d76b20c06610e03fa833ac9524337635e5e74204f22f4f8721174f19303d78",
+      "sha256_status": "verified",
+      "sha256_note": "Computed 2026-11-19 with tools/hash_models_lock.py on the full release asset (size matched size_bytes).",
       "license": "Apache-2.0",
       "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
@@ -108,8 +108,8 @@
       "notice_files": [
         "LICENSE"
       ],
-      "hostable": false,
-      "hostable_reason": "Blocked: sha256 not verified (asset larger than the 50 MB download limit used in this audit)."
+      "hostable": true,
+      "hostable_reason": "Passes the gate: Apache-2.0 allowlisted, pinned release tag, sha256 verified, LICENSE carried. A legal decision by the owner is still required."
     },
     {
       "id": "dfine-x-coco",
@@ -122,9 +122,9 @@
       "revision_kind": "release-tag",
       "url": "https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_coco.pth",
       "size_bytes": 252128986,
-      "sha256": null,
-      "sha256_status": "unverified",
-      "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
+      "sha256": "9a82252f2d0426b2c24e99905c36c33a4ea850f247c247bda76fb5f76daea123",
+      "sha256_status": "verified",
+      "sha256_note": "Computed 2026-11-19 with tools/hash_models_lock.py on the full release asset (size matched size_bytes).",
       "license": "Apache-2.0",
       "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
@@ -135,8 +135,8 @@
       "notice_files": [
         "LICENSE"
       ],
-      "hostable": false,
-      "hostable_reason": "Blocked: sha256 not verified (asset larger than the 50 MB download limit used in this audit)."
+      "hostable": true,
+      "hostable_reason": "Passes the gate: Apache-2.0 allowlisted, pinned release tag, sha256 verified, LICENSE carried. A legal decision by the owner is still required."
     },
     {
       "id": "dfine-s-obj2coco",
@@ -180,9 +180,9 @@
       "revision_kind": "release-tag",
       "url": "https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth",
       "size_bytes": 79117378,
-      "sha256": null,
-      "sha256_status": "unverified",
-      "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
+      "sha256": "183caeb10b3266b62b9bc36917f8b7c0b10c14d3ed2dc4c9ce776ea14e3ec1d8",
+      "sha256_status": "verified",
+      "sha256_note": "Computed 2026-11-19 with tools/hash_models_lock.py on the full release asset (size matched size_bytes).",
       "license": "Apache-2.0",
       "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
@@ -197,7 +197,7 @@
         "LICENSE"
       ],
       "hostable": false,
-      "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance). sha256 also unverified.",
+      "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance).",
       "notes": "This is the default weights variant for nitid1s/m/l/x detection (DEFAULT_WEIGHTS in dfine/utils/downloads.py)."
     },
     {
@@ -211,9 +211,9 @@
       "revision_kind": "release-tag",
       "url": "https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth",
       "size_bytes": 126083766,
-      "sha256": null,
-      "sha256_status": "unverified",
-      "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
+      "sha256": "c913aef6dc89c327c1a8b9e4ee5cf93eeeb3a1692ffe8ab40f1aa576ee6c3611",
+      "sha256_status": "verified",
+      "sha256_note": "Computed 2026-11-19 with tools/hash_models_lock.py on the full release asset (size matched size_bytes).",
       "license": "Apache-2.0",
       "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
@@ -228,7 +228,7 @@
         "LICENSE"
       ],
       "hostable": false,
-      "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance). sha256 also unverified.",
+      "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance).",
       "notes": "This is the default weights variant for nitid1s/m/l/x detection (DEFAULT_WEIGHTS in dfine/utils/downloads.py)."
     },
     {
@@ -242,9 +242,9 @@
       "revision_kind": "release-tag",
       "url": "https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth",
       "size_bytes": 252140594,
-      "sha256": null,
-      "sha256_status": "unverified",
-      "sha256_note": "Not computed: asset exceeds the 50 MB limit set for this audit. Compute it before any hosting.",
+      "sha256": "39361855c21f8c4757a9bb777a7ff134ae8aa110d0db67a374f081e44c2ce04b",
+      "sha256_status": "verified",
+      "sha256_note": "Computed 2026-11-19 with tools/hash_models_lock.py on the full release asset (size matched size_bytes).",
       "license": "Apache-2.0",
       "license_source": "Apache License 2.0 text (sha256 prefix c71d239df91726fc, 11357 bytes) in LICENSE of the weights host Peterande/storage at master 7f91133e7a5d5713c64e6de0892b3599b4f5646f and of Peterande/D-FINE at 956d1709314c2c6a4df6f34de232054578a7449f; README badge says Apache 2.0; read via anonymous git clone on 2026-11-18",
       "training_data": [
@@ -259,7 +259,7 @@
         "LICENSE"
       ],
       "hostable": false,
-      "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance). sha256 also unverified.",
+      "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance).",
       "notes": "This is the default weights variant for nitid1s/m/l/x detection (DEFAULT_WEIGHTS in dfine/utils/downloads.py)."
     }
   ]

@@ -20,7 +20,8 @@ that were not attached to the session. What worked, and what each fact below rel
   proxy): `LICENSE` files, README licence statements, commit ids.
 - `git ls-remote` on `Peterande/storage` for the release tag.
 - `curl` against the release asset URLs: sizes (HTTP `Content-Range`), and the full download of
-  the three assets under 50 MB to compute SHA-256 in `/tmp` (not committed).
+  the three assets under 50 MB to compute SHA-256 in `/tmp` (not committed). The larger assets
+  were hashed later with `tools/hash_models_lock.py` (see below).
 - Package metadata and `LICENSE` files of the installed frontend dependencies (`pnpm install
   --frozen-lockfile` in `studio/`).
 
@@ -64,10 +65,10 @@ state the caveat. The default `obj2coco` choice is unchanged; `obj2coco` entries
 | --- | --- | --- | --- | --- | --- |
 | `nitid1n` detect, `dfine_n_coco.pth` (not registered in nitid today) | `Peterande/D-FINE` | Apache-2.0 | `LICENSE` at D-FINE `956d170`; asset `https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth` (15 489 558 B) | **[V]** licence, size, SHA-256 | Passes the gate (`hostable: true`). Needs the checklist below. |
 | `nitid1s` detect, `dfine_s_coco.pth` | idem | Apache-2.0 | asset `.../dfine_s_coco.pth` (41 841 422 B) | **[V]** licence, size, SHA-256 | Passes the gate (`hostable: true`). |
-| `nitid1m/l/x` detect, `coco` variant | idem | Apache-2.0 | assets `dfine_{m,l,x}_coco.pth` (79 108 938 / 126 059 754 / 252 128 986 B) | **[V]** licence, size; **[NV]** SHA-256 (over the 50 MB limit) | No until the SHA-256 is computed and pinned. |
+| `nitid1m/l/x` detect, `coco` variant | idem | Apache-2.0 | assets `dfine_{m,l,x}_coco.pth` (79 108 938 / 126 059 754 / 252 128 986 B) | **[V]** licence, size, SHA-256 (computed 2026-11-19 with `tools/hash_models_lock.py`) | Passes the gate (`hostable: true`). Needs the checklist below. |
 | `nitid1s` detect, `dfine_s_obj2coco.pth` (**default**) | idem | Apache-2.0 for the code; **Objects365 caveat open** | asset `.../dfine_s_obj2coco.pth` (41 847 790 B) | **[V]** licence, size, SHA-256, caveat text; **[NV]** what the Objects365 terms allow | No (`open_caveats`). |
-| `nitid1m/l/x` detect, `obj2coco` (**default**) | idem | same | assets `dfine_m_obj2coco.pth`, `dfine_l_obj2coco_e25.pth`, `dfine_x_obj2coco.pth` (79 117 378 / 126 083 766 / 252 140 594 B) | **[V]** licence, size, caveat; **[NV]** SHA-256 and Objects365 terms | No. |
-| `nitid1*` segment, `dfine_seg_{n,s,m,l,x}_coco.pt` | `ArgoHA/D-FINE-seg`, weights on `huggingface.co/ArgoSA/D-FINE-seg` | Apache-2.0 per the upstream README ("The COCO weights ... are released under Apache-2.0") | README `License` section at D-FINE-seg `13385ab`; code `LICENSE` same commit | **[V]** README and code licence; **[NV]** the Hugging Face model card, file sizes, SHA-256 and a pinnable revision | Not in the lock: no revision can be pinned without the Hub. See "What to check on Hugging Face". |
+| `nitid1m/l/x` detect, `obj2coco` (**default**) | idem | same | assets `dfine_m_obj2coco.pth`, `dfine_l_obj2coco_e25.pth`, `dfine_x_obj2coco.pth` (79 117 378 / 126 083 766 / 252 140 594 B) | **[V]** licence, size, SHA-256 (2026-11-19), caveat; **[NV]** Objects365 terms | No (`open_caveats`). |
+| `nitid1*` segment, `dfine_seg_{n,s,m,l,x}_coco.pt` | `ArgoHA/D-FINE-seg`, weights on `huggingface.co/ArgoSA/D-FINE-seg` | Apache-2.0 per the upstream README ("The COCO weights ... are released under Apache-2.0") | README `License` section at D-FINE-seg `13385ab`; code `LICENSE` same commit | **[V]** README, code licence and, since 2026-11-19, the model card's licence paragraph (pasted by the maintainer, see below); **[NV]** file sizes, SHA-256 and a pinnable revision | Not in the lock yet: no revision can be pinned without the Hub. Run `python tools/hash_models_lock.py --huggingface-only` (see "Computing the SHA-256"). |
 | D-FINE-seg Cityscapes semantic weights (`dfine_sem_*_cityscapes.pt`) | `ArgoHA/D-FINE-seg` | Non-commercial (derivative of Cityscapes, per the README) | README `License` section, same commit | **[V]** README statement | **No. Excluded.** |
 | D-FINE-seg keypoints (`dfine_kpts_s_coco.pt`) | idem | Apache-2.0 per the README (COCO weights) | same | **[V]** README; **[NV]** Hub | Out of scope (pose is not in Studio). |
 | RT-DETR (code lineage only) | `lyuwenyu/RT-DETR` | Apache-2.0 | `LICENSE` at `df2a96c8c3a098567a1149bf0248da6efe6d495d` | **[V]** | No weights involved. |
@@ -128,18 +129,26 @@ Tick every item; any miss means "do not host".
 - [ ] Any weight with a non-commercial, copyleft, platform or unknown licence stays out (see the
       exclusion table).
 
-## What to check on Hugging Face (`ArgoSA/D-FINE-seg`) [NV]
+## What to check on Hugging Face (`ArgoSA/D-FINE-seg`)
 
-Could not be reached from the audit environment. With browser access, record:
+The Hub is not reachable from the audit environment, so this part was done by a person.
 
-1. The model card's `license` field (YAML header) and any licence text in the card body.
-2. The file list at a pinned **commit id** (the `Files and versions` page, then a commit hash;
-   do not pin `main`): which of `dfine_seg_{n,s,m,l,x}_coco.pt` exist, their sizes and the LFS
-   SHA-256 shown next to each file (the Hub shows it for LFS files).
-3. Whether a `LICENSE`/`NOTICE` file exists in the model repository and whether it matches the
-   Apache-2.0 text.
-4. Whether the card repeats the README's separation between COCO weights (Apache-2.0) and the
-   Cityscapes weights (non-commercial).
+**Model card licence paragraph [V, 2026-11-19, pasted by the maintainer from the Hub card]:** the
+code and the COCO-pretrained checkpoints (detection, instance segmentation, person keypoints) are
+Apache-2.0. The Cityscapes semantic-segmentation checkpoints (`dfine_sem_*_cityscapes.pt`) are
+derivative works of the Cityscapes dataset and inherit its terms: non-commercial use only (academic
+research, teaching, scientific publications, personal experimentation). A model trained on your own
+data is yours to ship; the code stays Apache-2.0. This matches the upstream README (item above), so
+the card repeats the separation between COCO weights (hostable) and Cityscapes weights (excluded).
+
+Still to record, with `python tools/hash_models_lock.py --huggingface-only` run on a machine that
+can reach the Hub (it only calls the Hub API, it downloads no weights):
+
+1. The **commit id** of the repository (the report's `huggingface.revision`; do not pin `main`).
+2. Which of `dfine_seg_{n,s,m,l,x}_coco.pt` exist, their sizes and the LFS SHA-256
+   (`huggingface.files`).
+3. Whether a `LICENSE`/`NOTICE` file exists in the model repository and matches the Apache-2.0 text
+   (the Hub's file list shows it; the script's `huggingface.license_tag` is only the card's tag).
 
 Then add `segment` entries to `studio/models.lock.json` with the commit id as `revision`
 (`revision_kind: "commit"`) and the LFS hash as `sha256`.
@@ -189,3 +198,38 @@ curl -sSL -o /tmp/dfine_s_coco.pth \
   https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_coco.pth
 sha256sum /tmp/dfine_s_coco.pth   # 48a6c8cc...3e89
 ```
+
+## Computing the SHA-256 (`tools/hash_models_lock.py`)
+
+The lock's SHA-256 is the integrity pin of every weight. `tools/hash_models_lock.py` reads
+`studio/models.lock.json`, downloads each `url`, streams it into a SHA-256 and writes a JSON report.
+It uses only the Python standard library.
+
+```bash
+python tools/hash_models_lock.py --missing-only            # hash only what is not verified yet
+python tools/hash_models_lock.py --only dfine-m-coco       # a single entry
+python tools/hash_models_lock.py --huggingface-only        # ArgoSA/D-FINE-seg commit, sizes, LFS hashes (no downloads)
+python tools/hash_models_lock.py --missing-only --update-lock   # also write hashes into the lock
+```
+
+Safety rules built into the script: a hash or size that disagrees with the lock is reported as a
+`mismatch` (exit code 1) and never overwritten; `--update-lock` changes only `sha256` and
+`sha256_status`, never `hostable`, `open_caveats` or the licence fields (a licence decision belongs
+to a person); the report is rewritten after every file, so an interruption loses nothing. Tests:
+`tests/unit/test_hash_models_lock.py` (real local HTTP server, truncated downloads, redirects,
+mismatches).
+
+**Result of 2026-11-19** (downloaded from the release URLs; every size matched `size_bytes`):
+
+| Entry | SHA-256 |
+|---|---|
+| `dfine-m-coco` | `b44a7586bf490858c7b8bce9e44bd025cb88724df9a07a8deb3ae1c12e608195` |
+| `dfine-l-coco` | `f1d76b20c06610e03fa833ac9524337635e5e74204f22f4f8721174f19303d78` |
+| `dfine-x-coco` | `9a82252f2d0426b2c24e99905c36c33a4ea850f247c247bda76fb5f76daea123` |
+| `dfine-m-obj2coco` | `183caeb10b3266b62b9bc36917f8b7c0b10c14d3ed2dc4c9ce776ea14e3ec1d8` |
+| `dfine-l-obj2coco-e25` | `c913aef6dc89c327c1a8b9e4ee5cf93eeeb3a1692ffe8ab40f1aa576ee6c3611` |
+| `dfine-x-obj2coco` | `39361855c21f8c4757a9bb777a7ff134ae8aa110d0db67a374f081e44c2ce04b` |
+
+As a control, the script reproduced the already verified `dfine-s-coco` hash
+(`48a6c8cc…3e89`) from a fresh download. With these hashes `dfine-{m,l,x}-coco` pass the gate
+(`hostable: true`); the three `obj2coco` entries stay blocked by the Objects365 caveat only.
