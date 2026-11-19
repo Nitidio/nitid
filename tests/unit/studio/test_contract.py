@@ -400,3 +400,14 @@ def test_status_enums() -> None:
     expected = ["pending", "running", "done", "failed"]
     assert schemas["RunStatus"]["enum"] == expected
     assert schemas["Job"]["properties"]["status"]["enum"] == expected
+
+
+def test_model_download_documents_every_status_the_route_returns() -> None:
+    responses = OPENAPI["paths"]["/models/{id}/download"]["post"]["responses"]
+    assert {"202", "404", "409", "422", "401", "403"} <= set(responses)
+    assert responses["422"] == {"$ref": "#/components/responses/InvalidParams"}
+
+
+def test_create_run_documents_every_status_the_route_returns() -> None:
+    responses = OPENAPI["paths"]["/runs"]["post"]["responses"]
+    assert {"202", "409", "413", "415", "422", "401", "403"} <= set(responses)

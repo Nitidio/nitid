@@ -162,7 +162,7 @@
         "tags": [
           "models"
         ],
-        "description": "Only ids with source=registry. Returns 409 for a local model, 404 for an unknown id.",
+        "description": "Only ids with source=registry. Returns 404 for an unknown id (or an id without official weights for the requested task), 409 for a local model or a download already running, and 422 when the `task` query parameter is missing or not one of the Task values.",
         "parameters": [
           {
             "name": "id",
@@ -200,6 +200,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidParams"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -988,7 +991,7 @@
         }
       },
       "InvalidParams": {
-        "description": "`params` failed validation.",
+        "description": "A request parameter (or the `params` field of a multipart request) failed validation.",
         "content": {
           "application/json": {
             "schema": {
