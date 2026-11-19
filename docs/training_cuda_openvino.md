@@ -230,7 +230,7 @@ uv run nitid train model=nitid1s task=detect \
 ```
 
 On the first run, nitid downloads the `nitid1s` detection weights (about 40 MB)
-and saves `dfine_s_obj2coco_wrapped.pth` in the current directory. AMP (mixed
+and saves `dfine_s_coco_wrapped.pth` in the current directory. AMP (mixed
 precision) and EMA are on by default for detection on CUDA.
 
 Each epoch prints one summary line:

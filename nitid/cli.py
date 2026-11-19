@@ -84,7 +84,7 @@ Required:
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
-  weights=NAME        default, obj2coco, or coco (default: default)
+  weights=NAME        default (= coco), coco, or obj2coco (default: default)
   conf=FLOAT          Confidence threshold (default: 0.5)
   imgsz=INT           Square inference image size (default: 640)
   stream=BOOL         Return results as a generator (default: false)
@@ -117,7 +117,7 @@ Required:
 
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
-  weights=NAME        default, obj2coco, or coco (default: default)
+  weights=NAME        default (= coco), coco, or obj2coco (default: default)
   tracker=NAME        bytetrack (default), botsort, or ocsort
   conf=FLOAT          Detection confidence threshold (default: 0.1)
   imgsz=INT           Square inference image size (default: 640)
@@ -182,7 +182,7 @@ Options:
   model=NAME          nitid1n, nitid1s, nitid1m, nitid1l, or nitid1x
                       (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
-  weights=NAME        default, obj2coco, or coco (default: default)
+  weights=NAME        default (= coco), coco, or obj2coco (default: default)
   output=PATH         Output directory or .pth file (default: current directory)
   force=BOOL          Overwrite an existing wrapped checkpoint (default: false)
 
@@ -207,7 +207,7 @@ Required:
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
-  weights=NAME        default, obj2coco, or coco (default: default)
+  weights=NAME        default (= coco), coco, or obj2coco (default: default)
   epochs=INT          Number of training epochs (default: 50)
   imgsz=INT           Square training image size (default: 640)
   batch=INT           Batch size (default: 16)
@@ -274,7 +274,7 @@ Required:
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
-  weights=NAME        default, obj2coco, or coco (default: default)
+  weights=NAME        default (= coco), coco, or obj2coco (default: default)
   imgsz=INT           Square validation image size (default: 640)
   batch=INT           Batch size (default: 16)
   conf=FLOAT          Confidence threshold (default: 0.001)
@@ -299,7 +299,7 @@ Usage:
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
-  weights=NAME        default, obj2coco, or coco (default: default)
+  weights=NAME        default (= coco), coco, or obj2coco (default: default)
   format=FORMAT       onnx, openvino, torchscript, or tensorrt (default: onnx)
   imgsz=INT           Square export image size (default: 640)
   batch=INT           Static batch size (default: 1)
@@ -352,7 +352,7 @@ Usage:
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect or segment (default: detect)
-  weights=NAME        default, obj2coco, or coco (default: default)
+  weights=NAME        default (= coco), coco, or obj2coco (default: default)
   formats=LIST        onnx, torchscript, tensorrt (default: all three)
   imgsz=INT           Square input size (default: 640)
   batch=INT           Images per inference call (default: 1)
@@ -378,7 +378,7 @@ Usage:
 Options:
   model=MODEL         Architecture name or wrapped checkpoint path (default: nitid1l)
   task=TASK           detect or segment (default: detect)
-  weights=NAME        default, obj2coco, or coco (default: default)
+  weights=NAME        default (= coco), coco, or obj2coco (default: default)
   detailed=BOOL       Include per-layer parameter counts (default: false)
 
 Example:

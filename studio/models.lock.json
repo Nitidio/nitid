@@ -167,7 +167,7 @@
       ],
       "hostable": false,
       "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance).",
-      "notes": "This is the default weights variant for nitid1s/m/l/x detection (DEFAULT_WEIGHTS in dfine/utils/downloads.py)."
+      "notes": "Opt-in weights variant (weights=obj2coco). Until 0.9.6 it was the default; since 0.10.0 DEFAULT_WEIGHTS in dfine/utils/downloads.py is coco (Objects365 option B)."
     },
     {
       "id": "dfine-m-obj2coco",
@@ -198,7 +198,7 @@
       ],
       "hostable": false,
       "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance).",
-      "notes": "This is the default weights variant for nitid1s/m/l/x detection (DEFAULT_WEIGHTS in dfine/utils/downloads.py)."
+      "notes": "Opt-in weights variant (weights=obj2coco). Until 0.9.6 it was the default; since 0.10.0 DEFAULT_WEIGHTS in dfine/utils/downloads.py is coco (Objects365 option B)."
     },
     {
       "id": "dfine-l-obj2coco-e25",
@@ -229,7 +229,7 @@
       ],
       "hostable": false,
       "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance).",
-      "notes": "This is the default weights variant for nitid1s/m/l/x detection (DEFAULT_WEIGHTS in dfine/utils/downloads.py)."
+      "notes": "Opt-in weights variant (weights=obj2coco). Until 0.9.6 it was the default; since 0.10.0 DEFAULT_WEIGHTS in dfine/utils/downloads.py is coco (Objects365 option B)."
     },
     {
       "id": "dfine-x-obj2coco",
@@ -260,7 +260,7 @@
       ],
       "hostable": false,
       "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance).",
-      "notes": "This is the default weights variant for nitid1s/m/l/x detection (DEFAULT_WEIGHTS in dfine/utils/downloads.py)."
+      "notes": "Opt-in weights variant (weights=obj2coco). Until 0.9.6 it was the default; since 0.10.0 DEFAULT_WEIGHTS in dfine/utils/downloads.py is coco (Objects365 option B)."
     },
     {
       "id": "dfine-seg-n-coco",

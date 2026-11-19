@@ -44,7 +44,8 @@ class DFINE:
     Args:
         model:   D-FINE architecture name or path to a wrapped .pth checkpoint.
         task:    ``"detect"``, ``"segment"``, or ``"semantic"`` (alias ``"sem_seg"``).
-        weights: Official weight variant: ``default``, ``obj2coco``, or ``coco``.
+        weights: Official weight variant: ``default`` (= ``coco``), ``coco``, or ``obj2coco``
+            (Objects365 pre-trained; see ``THIRD_PARTY_NOTICES.md``).
         backend: ``"torch"`` (default) or ``"openvino"``. ``"openvino"`` routes
                  ``predict()``/``track()`` through OpenVINO Runtime, enabling
                  Intel NPU and integrated GPU inference; every other method
