@@ -197,7 +197,7 @@ export function ResultsView({
         </div>
       </div>
 
-      {anyMask && (
+      {anyMask && results.source === "local" && (
         <p className="hint">
           Mask outlines are not provided by the server API yet; instances with a mask are marked with a tinted box.
         </p>

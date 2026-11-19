@@ -86,7 +86,7 @@ export function parseHostedCatalog(value: unknown, baseUrl: string): BrowserMode
       task: e.task,
       label: typeof e.label === "string" && e.label ? e.label : `${e.id} (${e.task})`,
       origin: "hosted",
-      url: new URL(e.url, new URL(baseUrl, globalThis.location?.href ?? "http://localhost/")).href,
+      url: new URL(e.url, new URL(baseUrl, globalThis.location?.href)).href,
       ...(typeof e.sha256 === "string" ? { sha256: e.sha256 } : {}),
     });
   });

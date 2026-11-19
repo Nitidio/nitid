@@ -71,6 +71,15 @@ export function Home() {
             {browserAvailable ? "Available." : "Waiting for the start-up check."}
           </p>
         </section>
+        {localAvailable && (
+          <section className="card" aria-labelledby="card-compare">
+            <h2 id="card-compare">Compare</h2>
+            <p>Run one image on the server and in the browser (or with two models) and see where they agree.</p>
+            <button type="button" onClick={() => navigate("/compare")}>
+              Open comparison
+            </button>
+          </section>
+        )}
       </div>
     </>
   );

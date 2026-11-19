@@ -447,3 +447,39 @@ table.detections td {
   padding: 0.35rem 0.5rem;
   border-bottom: 1px solid var(--border);
 }
+
+/* Unified UI: comparison view and browser-mode extras */
+.lanes-config,
+.lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1rem;
+}
+
+.lane {
+  min-width: 0;
+}
+
+.lane h3 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.lane-config {
+  margin: 0;
+}
+
+.agreement {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.run-status progress {
+  display: block;
+  width: 100%;
+  max-width: 24rem;
+}

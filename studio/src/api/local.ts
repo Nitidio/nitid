@@ -54,3 +54,14 @@ export function createLocalApi(client: ApiClient = createApiClient()): LocalApi 
       }),
   };
 }
+
+/**
+ * `GET /onnx/{model}/meta?task=`: the ONNX descriptor plus `sha256` (the ETag of the binary).
+ * Kept outside `LocalApi` because only the in-browser mode needs it.
+ */
+export function fetchOnnxMeta(client: ApiClient, id: string, task: Task, signal?: AbortSignal): Promise<unknown> {
+  return client.request<unknown>(`/onnx/${encodeURIComponent(id)}/meta?task=${encodeURIComponent(task)}`, {
+    ...(signal ? { signal } : {}),
+    timeoutMs: 60_000, // the first request may export the model on demand
+  });
+}

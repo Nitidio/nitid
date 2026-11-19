@@ -1,4 +1,5 @@
 import { type ComponentType } from "react";
+import { ResultsExportMenu } from "../exports/ResultsExportMenu";
 import { Link } from "react-router";
 import { useBackend } from "../backend-context";
 import { LocalPanel } from "../local/LocalPanel";
@@ -6,7 +7,7 @@ import type { ExportMenuProps } from "../local/results-model";
 import { usePageTitle } from "../use-page-title";
 
 /** `/run/local`: the workbench when a local server is present, an explanation otherwise. */
-export function RunLocal({ ExportMenu }: { ExportMenu?: ComponentType<ExportMenuProps> }) {
+export function RunLocal({ ExportMenu = ResultsExportMenu }: { ExportMenu?: ComponentType<ExportMenuProps> }) {
   usePageTitle("Local mode");
   const backend = useBackend();
 
@@ -24,5 +25,5 @@ export function RunLocal({ ExportMenu }: { ExportMenu?: ComponentType<ExportMenu
       </>
     );
   }
-  return <LocalPanel {...(ExportMenu ? { ExportMenu } : {})} />;
+  return <LocalPanel ExportMenu={ExportMenu} />;
 }

@@ -5,9 +5,15 @@ export interface ImageDropzoneProps {
   files: readonly File[];
   onChange: (files: File[]) => void;
   disabled?: boolean;
+  /** Several images (default) or exactly one: a new pick then replaces the old one. */
+  multiple?: boolean;
+  /** Help text under the button; the default describes the server mode. */
+  hint?: string;
 }
 
-export function ImageDropzone({ files, onChange, disabled }: ImageDropzoneProps) {
+const DEFAULT_HINT = "JPEG, PNG or WebP. Up to 25 MB each. Images are sent only to the server on this computer.";
+
+export function ImageDropzone({ files, onChange, disabled, multiple = true, hint = DEFAULT_HINT }: ImageDropzoneProps) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -15,9 +21,10 @@ export function ImageDropzone({ files, onChange, disabled }: ImageDropzoneProps)
 
   function add(list: FileList | null) {
     if (!list || disabled) return;
-    const { accepted, rejected } = checkFiles([...list], files);
+    const { accepted, rejected } = checkFiles([...list], multiple ? files : []);
     setProblems(rejected);
-    if (accepted.length > 0) onChange([...files, ...accepted]);
+    if (accepted.length === 0) return;
+    onChange(multiple ? [...files, ...accepted] : [accepted[0]!]);
   }
 
   function onDrop(e: DragEvent) {
@@ -40,14 +47,14 @@ export function ImageDropzone({ files, onChange, disabled }: ImageDropzoneProps)
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
-        <p>Drop images here, or</p>
+        <p>{multiple ? "Drop images here, or" : "Drop an image here, or"}</p>
         <input
           ref={input}
           id={`${id}-input`}
           className="visually-hidden-input"
           type="file"
           accept="image/*"
-          multiple
+          multiple={multiple}
           disabled={disabled}
           aria-labelledby={`${id}-label`}
           aria-describedby={`${id}-hint`}
@@ -57,10 +64,10 @@ export function ImageDropzone({ files, onChange, disabled }: ImageDropzoneProps)
           }}
         />
         <label htmlFor={`${id}-input`} className="button-like" aria-disabled={disabled}>
-          Choose images
+          {multiple ? "Choose images" : "Choose an image"}
         </label>
         <p id={`${id}-hint`} className="hint">
-          JPEG, PNG or WebP. Up to 25 MB each. Images are sent only to the server on this computer.
+          {hint}
         </p>
       </div>
 
