@@ -156,6 +156,27 @@ describe("fromRun", () => {
     expect(r.items[0]?.detections[0]).toMatchObject({ classId: 2, hasMask: true, name: "car" });
     expect(itemTotalMs(r.items[0]!)).toBe(6);
   });
+  it("carries the segments outline as a mask polygon, and nothing without it", () => {
+    const seg = {
+      ...run,
+      task: "segment" as const,
+      items: [
+        {
+          ...run.items[0]!,
+          detections: [
+            { box: { x1: 0, y1: 0, x2: 5, y2: 5 }, confidence: 0.9, class_id: 2, name: "car", has_mask: true, segments: { x: [0, 5, 5, 0], y: [0, 0, 5, 0] } },
+            { box: { x1: 0, y1: 0, x2: 5, y2: 5 }, confidence: 0.8, class_id: 2, name: "car", has_mask: true },
+            { box: { x1: 0, y1: 0, x2: 5, y2: 5 }, confidence: 0.7, class_id: 2, name: "car", has_mask: true, segments: { x: [1, 2], y: [1, 2] } },
+          ],
+        },
+      ],
+    };
+    const [a, b, c] = fromRun(seg).items[0]!.detections;
+    expect(a?.mask).toEqual({ polygons: [[0, 0, 5, 0, 5, 5]] });
+    expect(b?.mask).toBeUndefined();
+    expect(c?.mask).toBeUndefined(); // degenerate outline: flag only
+    expect(c?.hasMask).toBe(true);
+  });
   it("omits wallClockMs when unknown", () => {
     expect("wallClockMs" in fromRun(run)).toBe(false);
   });

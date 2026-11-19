@@ -96,12 +96,24 @@ export interface Box {
   y2: number;
 }
 
+/**
+ * Outline of an instance mask (`segments` of the contract): parallel arrays of vertex
+ * coordinates in pixels of the ORIGINAL image. One outline per detection (the server sends
+ * the largest contour). Not closed explicitly: the last vertex joins the first.
+ */
+export interface Segments {
+  x: number[];
+  y: number[];
+}
+
 export interface Detection {
   box: Box;
   confidence: number;
   class_id: number;
   name: string;
   has_mask: boolean;
+  /** Present only for `task=segment` (`has_mask` true); absent for older servers. */
+  segments?: Segments;
 }
 
 /** Milliseconds. */

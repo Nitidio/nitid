@@ -1,3 +1,4 @@
+import { ringToFlat, segmentsToRing } from "../api/segments";
 import type { Box, Run, RunItem, Task } from "../api/types";
 import { fromServerRun } from "../exports/mappers";
 import type { ExportResults } from "../exports/model";
@@ -22,8 +23,9 @@ export interface ResultDetection {
   name: string;
   hasMask: boolean;
   /**
-   * Mask geometry when the source provides it. API v1 only reports `has_mask`
-   * (no mask endpoint), so this is undefined for local runs and `hasMask` is the signal. [NV]
+   * Mask geometry when the source provides it. Server runs carry the `segments` outline
+   * (one polygon, no pixels); browser runs carry the traced contour of the pixel mask.
+   * Undefined when only the `has_mask` flag is known (servers that predate `segments`).
    */
   mask?: DetectionMask;
 }
@@ -82,13 +84,17 @@ function fromItem(item: RunItem): ResultItem {
     width: item.width,
     height: item.height,
     speed: { ...item.speed },
-    detections: item.detections.map((d) => ({
-      box: { ...d.box },
-      confidence: d.confidence,
-      classId: d.class_id,
-      name: d.name,
-      hasMask: d.has_mask,
-    })),
+    detections: item.detections.map((d) => {
+      const ring = segmentsToRing(d.segments);
+      return {
+        box: { ...d.box },
+        confidence: d.confidence,
+        classId: d.class_id,
+        name: d.name,
+        hasMask: d.has_mask,
+        ...(ring ? { mask: { polygons: [ringToFlat(ring)] } } : {}),
+      };
+    }),
   };
 }
 
