@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "conflict",
+    "message": "Model 'nitid1s' (detect) is not downloaded yet."
+  }
+}

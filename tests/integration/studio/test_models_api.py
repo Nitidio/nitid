@@ -397,3 +397,15 @@ def test_each_app_has_its_own_jobs(models_dir, tmp_path, fake_download):
 def test_contract_documents_the_four_paths():
     paths = OPENAPI["paths"]
     assert {"/devices", "/models", "/models/{id}/download", "/jobs/{job_id}"} <= set(paths)
+
+
+def test_download_route_only_returns_documented_statuses(client, fake_download):
+    documented = set(OPENAPI["paths"]["/models/{id}/download"]["post"]["responses"])
+    seen = {
+        client.post("/api/v1/models/nitid1s/download", headers=AUTH).status_code,  # 422
+        client.post("/api/v1/models/ghost/download?task=detect", headers=AUTH).status_code,  # 404
+        client.post("/api/v1/models/nitid1s/download?task=detect", headers=AUTH).status_code,  # 202
+        client.post("/api/v1/models/nitid1s/download?task=detect").status_code,  # 401
+    }
+    assert {422, 404, 401} <= seen
+    assert {str(code) for code in seen} <= documented

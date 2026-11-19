@@ -64,7 +64,7 @@ Kinds: `meta`, `health`, `devices`, `models`, `job`, `run-params`, `run`, `error
   are pixels of the *model input* (`xyxy_input_px`) and must be rescaled by the consumer.
 - **ONNX ETag** is the lowercase sha256 of the body, quoted (`"<hex64>"`). `sha256` in the meta
   returned by `/onnx/{model}/meta` is the same value; it is never embedded in the ONNX itself.
-- **Limits**: 25 MB and 20 Mpx per image, rejected with 413 before decoding.
+- **Limits**: 25 MB and 20 Mpx per image, rejected with 413 before decoding. At most 50 files per run.
 - Items marked `[NV]` in descriptions are not verified against an implementation yet.
 
 ## Changing the contract
@@ -83,3 +83,36 @@ accepted; mixing them is invalid. The API always serves postprocessed ONNX files
 described for completeness because the exporter embeds a meta in both cases.
 Found while integrating the `studio/onnx-meta` branch (the exporter produced raw layouts the first
 schema version rejected); see fixtures `meta.*-raw.valid.json` and `meta.invalid.raw-*.json`.
+
+## Runs (implemented in `nitid/studio/runs.py`, `routes_runs.py`)
+
+`POST /runs` takes `files` plus a JSON `params` part (`RunParams`) and answers `202 {"id"}`.
+Behaviour the schema alone does not say:
+
+- **Queue**: one inference at a time, in submission order; a queued run is `pending`.
+- **`item_count`** is the number of uploaded files, `items` the results done so far.
+- **Defaults** for omitted params: `conf` 0.25, `iou` 0.85, `imgsz` 640, `classes` null,
+  `mask_threshold` 0.5, `device` null, `frame_step` 1. Unknown keys are `422`.
+- **Files** are sniffed from their bytes: JPEG, PNG, WEBP, BMP. Anything else, video included,
+  is `415`. (Video is not implemented yet.)
+- **Status codes of `POST /runs`**: 202, 409 (official model not downloaded), 413, 415, 422.
+  `409` was added to the original list; it is additive.
+- **`Detection.segments`** (optional, only when `has_mask`): `{"x": [...], "y": [...]}` outline in
+  original-image pixels. Additive to v1.
+- `GET /runs/{id}/items/{n}.json`, `/items/{n}/image`, `/export.csv`, `/export.zip` and
+  `DELETE /runs/{id}` follow the schema; an unknown run or item index is `404`.
+
+## Error codes in use
+
+`unauthorized` (401), `forbidden_host` / `forbidden_origin` (403), `not_found` (404),
+`method_not_allowed` (405), `conflict` (409), `payload_too_large` (413),
+`unsupported_media_type` (415), `invalid_params` (422), `internal_error` (500). Errors raised by
+the framework under `/api/v1` (unknown path, wrong method, malformed multipart) use the same
+envelope. `Health.api_version` is the **integer** `1`.
+
+## Conformance tests
+
+`tests/integration/studio/test_runs_api.py` drives the real app with tiny checkpoints built at
+runtime and validates every response against the operation's schema in `openapi.json`
+(including that the status code is documented). It also asserts that every `/api/v1` route the
+app exposes exists in the contract.

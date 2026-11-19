@@ -1,0 +1,4 @@
+{
+  "task": "detect",
+  "backend": "torch"
+}
