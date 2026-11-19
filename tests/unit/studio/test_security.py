@@ -174,7 +174,9 @@ def test_modifying_method_with_foreign_origin_gets_403(client, method):
         "/api/v1/_mutate", headers={**AUTH, "Origin": "http://evil.example.com"}
     )
     assert response.status_code == 403
-    assert response.json() == {"error": {"code": "forbidden_origin", "message": "Origin not allowed."}}
+    assert response.json() == {
+        "error": {"code": "forbidden_origin", "message": "Origin not allowed."}
+    }
 
 
 @pytest.mark.parametrize(

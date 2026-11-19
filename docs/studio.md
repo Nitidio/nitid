@@ -91,7 +91,7 @@ on a network you trust, or put your own TLS-terminating reverse proxy in front
 ## Limits
 
 These are constants in `nitid/studio/settings.py`, enforced by the endpoints
-that accept images (added later):
+that accept images (`POST /runs`):
 
 | Limit | Value |
 |---|---|
@@ -219,12 +219,129 @@ live in memory, at most two run at once, and a finished job is forgotten one hou
 later (`JOB_TTL_SECONDS` in `nitid/studio/jobs.py`); asking for it afterwards
 returns 404. Jobs do not survive a restart. A downloaded checkpoint does.
 
+### Runs (inference)
+
+A run takes one or more images, a model and a backend, and returns detections. It is
+asynchronous: `POST /runs` answers `202` with an id, and you poll `GET /runs/{id}`.
+
+Runs execute **one at a time**, in submission order, on a single worker thread. A run
+queued behind another reports `pending`. The model is loaded lazily by the worker on the
+first run that needs it (nothing is loaded when Studio starts) and the two most recently
+used models stay in memory. Runs and their uploaded images live in memory and in a private
+temporary directory that is deleted when Studio stops; at most 50 runs are kept (creating
+another evicts the oldest finished one).
+
+The examples assume `TOKEN` and `BASE=http://127.0.0.1:8000/api/v1`.
+
+#### 1. Pick a model that is on disk
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" $BASE/models
+# [{"id":"nitid1s","task":"detect","size":"s","downloaded":true,"source":"registry"}, ...]
+```
+
+An official model must be `downloaded: true` (see the download endpoint above), otherwise
+`POST /runs` answers `409 conflict`. A local checkpoint in `models/` is addressed by its file
+stem and works for the task it was trained for.
+
+#### 2. `POST /api/v1/runs`
+
+`multipart/form-data` with one or more `files` parts and a `params` part holding JSON:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" $BASE/runs \
+  -F "files=@street.jpg" -F "files=@park.png" \
+  -F 'params={"model":"nitid1s","task":"detect","backend":"torch","device":"cpu","conf":0.25}'
+# {"id":"r_9f2c4a1b7d30"}
+```
+
+| `params` field | Default | Meaning |
+|---|---|---|
+| `model` | required | Model id from `GET /models`. |
+| `task` | required | `detect` or `segment`. |
+| `backend` | required | `torch` or `openvino`. |
+| `device` | `null` | A name from `GET /devices`: `cpu`, `cuda:0` (torch) or `CPU`, `GPU`, `NPU` (OpenVINO). `null` is the backend default. |
+| `conf` | `0.25` | Minimum confidence, 0 to 1. |
+| `iou` | `0.85` | NMS/IoU threshold, 0 to 1. |
+| `imgsz` | `640` | Model input size, a multiple of 32 (at least 32). |
+| `classes` | `null` | Class ids to keep, `null` keeps all. |
+| `mask_threshold` | `0.5` | Mask binarisation threshold (segment), 0 to 1. |
+| `frame_step` | `1` | Accepted for forthcoming video input; unused for images. |
+
+Unknown keys are rejected, so a typo such as `confidence` is a `422`, not silently ignored.
+
+Accepted files: JPEG, PNG, WEBP and BMP, recognised from the bytes (the declared content
+type and the file name are ignored), up to 25 MB and 20 megapixels each and 50 files per
+run. Video is not supported yet.
+
+| Status | `code` | When |
+|---|---|---|
+| 202 | | Accepted; body `{"id": "..."}`. |
+| 409 | `conflict` | The model is official but not downloaded yet. |
+| 413 | `payload_too_large` | A file is over 25 MB or 20 megapixels (checked before decoding). |
+| 415 | `unsupported_media_type` | A file is empty or not JPEG/PNG/WEBP/BMP. |
+| 422 | `invalid_params` | Bad or missing `params`/`files`, unknown model, model without weights for that task, unknown device, `openvino` backend not available, too many files. |
+
+#### 3. `GET /api/v1/runs/{id}`
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" $BASE/runs/r_9f2c4a1b7d30
+```
+
+```json
+{
+  "id": "r_9f2c4a1b7d30", "model": "nitid1s", "task": "detect", "backend": "torch",
+  "device": "cpu", "status": "done", "error_msg": null, "item_count": 2,
+  "items": [
+    {"id": 0, "name": "street.jpg", "width": 1280, "height": 720,
+     "detections": [{"box": {"x1": 12.5, "y1": 40.0, "x2": 210.0, "y2": 388.25},
+                     "confidence": 0.91, "class_id": 0, "name": "person", "has_mask": false}],
+     "speed": {"preprocess": 3.1, "inference": 28.4, "postprocess": 1.2}},
+    {"id": 1, "name": "park.png", "...": "..."}
+  ]
+}
+```
+
+- `status` is `pending`, `running`, `done` or `failed`. Poll until `done` or `failed`.
+- `item_count` is the number of uploaded files; `items` fills as they are processed. After a
+  failure, `items` holds those finished before it and `error_msg` says what happened.
+- `items[].id` is the **zero-based** position of the file in the upload and the `{n}` of the
+  item endpoints. `name` is the base name of the uploaded file (directories removed).
+- Boxes are `xyxy` in pixels of the **original** image, as `Results.boxes.xyxy` in Python.
+  `confidence` is in 0 to 1. `speed` is in milliseconds.
+- With `task=segment`, every detection has `has_mask: true` and a `segments` outline
+  `{"x": [...], "y": [...]}` (largest contour, original-image pixels), the same shape as
+  `Results.to_json()`. `segments` is an optional addition to the v1 schema.
+- `error_msg` is a fixed sentence (for example `Could not load model 'my-detector'.` or
+  `Inference failed (ValueError).`); paths and exception text stay in the server log.
+
+#### Other run endpoints
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" $BASE/runs                       # summaries, newest first
+curl -H "Authorization: Bearer $TOKEN" $BASE/runs/$ID/items/0.json      # one item
+curl -H "Authorization: Bearer $TOKEN" $BASE/runs/$ID/items/0/image -o original.png
+curl -H "Authorization: Bearer $TOKEN" $BASE/runs/$ID/export.csv -o detections.csv
+curl -H "Authorization: Bearer $TOKEN" $BASE/runs/$ID/export.zip -o run.zip
+curl -X DELETE -H "Authorization: Bearer $TOKEN" $BASE/runs/$ID        # 204
+```
+
+- `items/{n}/image` is the original, un-annotated upload (overlays are drawn by the client).
+- `export.csv` columns: `item,image,x1,y1,x2,y2,confidence,class_id,name`, one row per
+  detection. Cells starting with `=`, `+`, `-` or `@` are prefixed with `'` so spreadsheets
+  do not run them as formulas.
+- `export.zip` holds `run.json`, `detections.csv`, `items/<n>.json` and `images/<n>.<ext>`.
+- Exports and item endpoints work on a run that is still going, using the items done so far.
+- An unknown run id, or an item index that does not exist (yet), is `404 not_found`.
+- Deleting a run that is queued skips it; deleting one that is running stops it after the
+  current image.
+
 ## What is not here yet
 
 - The web UI (the `static/` directory is empty in a source checkout).
 - Model deletion and management beyond listing and downloading.
-- Jobs: prediction, training, export and their progress reporting.
-- Image upload endpoints and the limits above being enforced.
+- Video input, training and export jobs, and the ONNX endpoints (`/onnx/...`) of the contract.
+- Pagination or persistence of runs (they are in memory only).
 
 ## For developers
 
@@ -235,11 +352,13 @@ returns 404. Jobs do not survive a restart. A downloaded checkpoint does.
 | `settings.py` | Immutable, validated `StudioSettings`; `key=value` parsing. No FastAPI import. |
 | `security.py` | Pure ASGI middleware: Host, Origin, token, headers. No FastAPI import. |
 | `static.py` | SPA serving, cache headers, 503 page. |
-| `api.py` | `build_v1_router()`; add new `/api/v1` routes here. |
+| `api.py` | `build_v1_router(run_service=...)`; add new `/api/v1` routes here. |
 | `devices.py` | Tolerant hardware discovery (torch CPU/CUDA, OpenVINO). |
 | `registry.py` | Model catalogue: registry pairs, local `*.pth` scan, staged download, safe error text. |
 | `jobs.py` | Thread-safe in-memory job store with TTL and one active job per key. |
 | `routes_models.py` | `/devices`, `/models`, `/models/{id}/download`, `/jobs/{job_id}`. |
+| `runs.py` | Runs core: `params` validation, image intake/limits, single-worker execution, lazy model cache, result serialisation, CSV/ZIP. |
+| `routes_runs.py` | `/runs` and its item/export endpoints. |
 | `app.py` | `create_app(settings, static_dir=..., extra_routers=...)`. |
 | `launcher.py` | Extra check, socket binding, uvicorn, `nitid studio` entry point. |
 

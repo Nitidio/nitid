@@ -2,9 +2,9 @@
 
 import importlib
 import socket
-import time
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest

@@ -150,9 +150,7 @@ def run(settings: StudioSettings) -> int:
 
     # The URL is printed (and the browser opened) by this thread only once uvicorn is
     # accepting connections, never before.
-    threading.Thread(
-        target=_announce_when_ready, args=(server, settings, url), daemon=True
-    ).start()
+    threading.Thread(target=_announce_when_ready, args=(server, settings, url), daemon=True).start()
 
     try:
         server.run(sockets=[sock])
