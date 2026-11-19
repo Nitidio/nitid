@@ -457,13 +457,18 @@ def test_default_exporter_leaves_no_run_metadata_in_the_cache(models_dir, tmp_pa
 # ------------------------------------------------------------------ the contract lists what is served
 
 
-def test_served_routes_are_the_ones_in_the_contract(client):
+def test_served_routes_are_the_ones_in_the_contract(models_dir, tmp_path):
+    settings = StudioSettings(port=PORT, token=TOKEN, models_dir=models_dir)
+    generated = create_app(settings, static_dir=tmp_path).openapi()["paths"]
     served = {
-        route.path.removeprefix("/api/v1")
-        for route in client.app.routes
-        if getattr(route, "path", "").startswith("/api/v1/onnx")
+        path.removeprefix("/api/v1"): item
+        for path, item in generated.items()
+        if path.startswith("/api/v1/onnx")
     }
-    assert served == {path for path in OPENAPI["paths"] if path.startswith("/onnx")}
-    for path in served:
+    assert set(served) == {path for path in OPENAPI["paths"] if path.startswith("/onnx")}
+    for path, item in served.items():
+        assert list(item) == ["get"]
+        names = {p["name"] for p in item["get"]["parameters"]}
         declared = {p["name"] for p in OPENAPI["paths"][path]["get"]["parameters"]}
-        assert {"model", "task", "imgsz"} <= declared
+        assert {"model", "task", "imgsz"} <= names
+        assert names <= declared | {"model", "task", "imgsz"}
