@@ -162,7 +162,7 @@
         "tags": [
           "models"
         ],
-        "description": "Only ids with source=registry. Returns 409 for a local model, 404 for an unknown id.",
+        "description": "Only ids with source=registry. Returns 404 for an unknown id (or an id without official weights for the requested task), 409 for a local model or a download already running, and 422 when the `task` query parameter is missing or not one of the Task values.",
         "parameters": [
           {
             "name": "id",
@@ -200,6 +200,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidParams"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -294,11 +297,11 @@
       },
       "post": {
         "operationId": "createRun",
-        "summary": "Upload images/videos and start inference",
+        "summary": "Upload images and start inference",
         "tags": [
           "runs"
         ],
-        "description": "Limits per image: 25 MB and 20 Mpx. Larger inputs are rejected with 413 payload_too_large before any decoding.",
+        "description": "Limits per image: 25 MB and 20 Mpx. Larger inputs are rejected with 413 payload_too_large before any decoding. Accepted formats: JPEG, PNG, WEBP and BMP (sniffed from the bytes, not from the declared content type); anything else, including video, is 415 unsupported_media_type. At most 50 files per run. 422 invalid_params covers a bad `params` document, an unknown model or one without weights for the task, an unavailable backend or an unknown device. 409 conflict means the model is an official one that has not been downloaded yet (see POST /models/{id}/download). Runs execute one at a time in submission order; a queued run reports `pending`. `item_count` is the number of uploaded files; `items` fills as they are processed.",
         "x-limits": {
           "max_image_bytes": 26214400,
           "max_image_megapixels": 20
@@ -334,7 +337,7 @@
               },
               "encoding": {
                 "files": {
-                  "contentType": "image/*, video/*"
+                  "contentType": "image/jpeg, image/png, image/webp, image/bmp"
                 },
                 "params": {
                   "contentType": "application/json"
@@ -356,6 +359,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
@@ -940,7 +946,7 @@
         }
       },
       "Conflict": {
-        "description": "Operation not valid in the current state.",
+        "description": "Operation not valid in the current state (local model, download already running, model not downloaded).",
         "content": {
           "application/json": {
             "schema": {
@@ -988,7 +994,7 @@
         }
       },
       "InvalidParams": {
-        "description": "`params` failed validation.",
+        "description": "A request parameter (or the `params` field of a multipart request) failed validation.",
         "content": {
           "application/json": {
             "schema": {
@@ -1011,7 +1017,7 @@
           "code": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]*$",
-            "description": "Stable machine-readable snake_case code, e.g. unauthorized, forbidden_origin, not_found, invalid_params, payload_too_large, unsupported_media_type, conflict, internal_error. The definitive list is fixed by the backend implementation [NV]."
+            "description": "Stable machine-readable snake_case code. Used by the backend: unauthorized (401), forbidden_host and forbidden_origin (403), not_found (404), method_not_allowed (405), conflict (409), payload_too_large (413), unsupported_media_type (415), invalid_params (422), internal_error (500)."
           },
           "message": {
             "type": "string",
@@ -1320,7 +1326,7 @@
       },
       "RunParams": {
         "type": "object",
-        "description": "JSON carried in the `params` multipart field of POST /runs. Defaults for omitted optional fields are chosen by the backend [NV].",
+        "description": "JSON carried in the `params` multipart field of POST /runs. Unknown keys are rejected (422). Defaults when omitted: conf 0.25, iou 0.85, imgsz 640, classes null, mask_threshold 0.5, device null (backend default), frame_step 1. `frame_step` is accepted but unused until video input exists.",
         "properties": {
           "model": {
             "type": "string",
@@ -1460,6 +1466,28 @@
           },
           "has_mask": {
             "type": "boolean"
+          },
+          "segments": {
+            "type": "object",
+            "description": "Optional outline of the mask for task=segment (largest contour, pixels of the ORIGINAL image). Present only when has_mask is true. Same shape as `Results.to_json()` in the Python API.",
+            "properties": {
+              "x": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "y": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
           }
         },
         "required": [
@@ -1728,7 +1756,8 @@
               }
             ]
           }
-        ]
+        ],
+        "description": "`item_count` is the number of uploaded files; `items` holds the results processed so far (all of them once status is done)."
       },
       "RunList": {
         "type": "array",

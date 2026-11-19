@@ -1,0 +1,11 @@
+{
+  "id": "r_0a1b2c3d4e5f",
+  "model": "nitid1s",
+  "task": "detect",
+  "backend": "torch",
+  "device": "cpu",
+  "status": "pending",
+  "error_msg": null,
+  "item_count": 1,
+  "items": []
+}

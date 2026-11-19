@@ -95,7 +95,7 @@ The same frontend ships in two deployments:
 - **Local**: served by the Python server. On start-up the SPA calls
   `GET /api/v1/health` (the probe is aborted after 2 s).
   If the answer is HTTP 200 with a JSON body
-  `{"status":"ok","nitid_version":"...","api_version":"..."}`, the mode is
+  `{"status":"ok","nitid_version":"...","api_version":1}`, the mode is
   `local` and both cards are enabled.
 - **Hosted**: a static site with no backend. Any other outcome (404, an HTML
   fallback page, invalid JSON, wrong shape, network error, timeout) means
@@ -110,7 +110,7 @@ simply never reached. Tree-shaking it away was not attempted.)
 
 If the server reports an `api_version` different from `EXPECTED_API_VERSION` in
 `src/api/types.ts`, the mode stays `local` and the home page shows a warning.
-The expected value `"1"` is a placeholder `[NV]` until the API contract exists.
+The server sends `api_version` as the integer `1` (contract `Health.api_version`); the client normalises it to a string.
 
 The health probe is sent **without** the bearer token on purpose: it is only a
 liveness check.

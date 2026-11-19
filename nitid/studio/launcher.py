@@ -96,16 +96,35 @@ def make_server(app: Any, *, log_level: str = "info") -> Any:
     return uvicorn.Server(config)
 
 
-def _open_when_ready(server: Any, url: str) -> None:
-    deadline = time.monotonic() + 30
+def _announce_when_ready(
+    server: Any, settings: StudioSettings, url: str, *, timeout: float = 30.0
+) -> bool:
+    """Wait until ``server`` is listening, then print the URL and open the browser.
+
+    Nothing is printed if the server never starts (it failed, or was asked to exit
+    first), so a URL that leads nowhere is never shown. Returns whether it announced.
+    """
+    deadline = time.monotonic() + timeout
     while not server.started and not server.should_exit and time.monotonic() < deadline:
-        time.sleep(0.05)
-    if server.started:
+        time.sleep(0.02)
+    if not server.started:
+        return False
+    print(f"Open: {url}")
+    print(f"Models directory: {settings.models_dir}")
+    print("Press Ctrl+C to stop.")
+    sys.stdout.flush()
+    if settings.open_browser:
         webbrowser.open(url)
+    return True
 
 
 def run(settings: StudioSettings) -> int:
-    """Bind, announce and serve until interrupted. Returns a process exit code."""
+    """Bind, serve until interrupted and announce the URL once listening.
+
+    Returns a process exit code: :data:`EXIT_OK` after a normal stop (including
+    Ctrl+C, after uvicorn has finished its graceful shutdown) and
+    :data:`EXIT_FAILURE` if the address cannot be bound.
+    """
     from nitid import __version__
     from nitid.studio.app import create_app
 
@@ -120,8 +139,6 @@ def run(settings: StudioSettings) -> int:
     url = access_url(settings)
 
     print(f"Nitid Studio {__version__}")
-    print(f"Open: {url}")
-    print(f"Models directory: {settings.models_dir}")
     if not settings.is_loopback:
         print(
             "WARNING: Studio is listening beyond this machine. Anyone on the network who has the\n"
@@ -129,14 +146,18 @@ def run(settings: StudioSettings) -> int:
             "Only use this on a network you trust.",
             file=sys.stderr,
         )
-    print("Press Ctrl+C to stop.")
     sys.stdout.flush()
 
-    if settings.open_browser:
-        threading.Thread(target=_open_when_ready, args=(server, url), daemon=True).start()
+    # The URL is printed (and the browser opened) by this thread only once uvicorn is
+    # accepting connections, never before.
+    threading.Thread(target=_announce_when_ready, args=(server, settings, url), daemon=True).start()
 
     try:
         server.run(sockets=[sock])
+    except KeyboardInterrupt:
+        # uvicorn finishes its graceful shutdown, then re-raises the captured SIGINT.
+        # Left alone, the interpreter would die from the signal (exit status -2 / 130).
+        pass
     finally:
         sock.close()
     return EXIT_OK

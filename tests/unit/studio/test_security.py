@@ -88,7 +88,7 @@ def test_valid_hosts_are_accepted(client, host):
 def test_foreign_or_rebinding_hosts_get_403(client, host):
     response = client.get("/api/v1/health", headers={"Host": host})
     assert response.status_code == 403
-    assert response.json() == {"detail": "Host not allowed"}
+    assert response.json() == {"error": {"code": "forbidden_host", "message": "Host not allowed."}}
 
 
 def test_host_guard_applies_to_static_routes_too(client):
@@ -174,7 +174,9 @@ def test_modifying_method_with_foreign_origin_gets_403(client, method):
         "/api/v1/_mutate", headers={**AUTH, "Origin": "http://evil.example.com"}
     )
     assert response.status_code == 403
-    assert response.json() == {"detail": "Origin not allowed"}
+    assert response.json() == {
+        "error": {"code": "forbidden_origin", "message": "Origin not allowed."}
+    }
 
 
 @pytest.mark.parametrize(
@@ -223,6 +225,10 @@ def test_missing_token_gets_401(client):
     response = client.get("/api/v1/_secret")
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
+    assert response.json() == {
+        "error": {"code": "unauthorized", "message": "Missing or invalid bearer token."}
+    }
+    assert response.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.parametrize(
@@ -326,3 +332,23 @@ def test_no_server_banner_or_duplicate_security_headers(client):
     raw = [k.lower() for k, _ in response.headers.raw]
     assert raw.count(b"x-content-type-options") == 1
     assert raw.count(b"content-security-policy") == 1
+
+
+def test_all_rejections_use_the_contract_error_envelope(client):
+    """401 and both 403 variants are ``{"error": {"code", "message"}}``, never ``{"detail"}``."""
+    cases = [
+        (client.get("/api/v1/_secret"), 401, "unauthorized"),
+        (client.get("/api/v1/health", headers={"Host": "evil.com"}), 403, "forbidden_host"),
+        (
+            client.post("/api/v1/_mutate", headers={**AUTH, "Origin": "http://evil.com"}),
+            403,
+            "forbidden_origin",
+        ),
+    ]
+    for response, status, code in cases:
+        body = response.json()
+        assert response.status_code == status
+        assert set(body) == {"error"}
+        assert set(body["error"]) == {"code", "message"}
+        assert body["error"]["code"] == code
+        assert response.headers["content-type"] == "application/json"

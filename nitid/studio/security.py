@@ -163,13 +163,13 @@ class SecurityMiddleware:
         hosts = headers_in.get(b"host", [])
         host_header = hosts[0].decode("latin-1") if len(hosts) == 1 else None
         if not self.host_allowed(host_header):
-            await _reject(send_secured, 403, "Host not allowed")
+            await _reject(send_secured, 403, "forbidden_host", "Host not allowed.")
             return
 
         origins = headers_in.get(b"origin", [])
         if scope["method"] in MODIFYING_METHODS and origins:
             if len(origins) != 1 or not self.origin_allowed(origins[0].decode("latin-1")):
-                await _reject(send_secured, 403, "Origin not allowed")
+                await _reject(send_secured, 403, "forbidden_origin", "Origin not allowed.")
                 return
 
         path = scope["path"]
@@ -183,7 +183,8 @@ class SecurityMiddleware:
                 await _reject(
                     send_secured,
                     401,
-                    "Missing or invalid token",
+                    "unauthorized",
+                    "Missing or invalid bearer token.",
                     extra=[(b"www-authenticate", b"Bearer")],
                 )
                 return
@@ -192,9 +193,14 @@ class SecurityMiddleware:
 
 
 async def _reject(
-    send: Send, status: int, detail: str, extra: list[tuple[bytes, bytes]] | None = None
+    send: Send,
+    status: int,
+    code: str,
+    message: str,
+    extra: list[tuple[bytes, bytes]] | None = None,
 ) -> None:
-    body = json.dumps({"detail": detail}).encode()
+    """Send the contract error envelope ``{"error": {"code", "message"}}``."""
+    body = json.dumps({"error": {"code": code, "message": message}}).encode()
     headers = [
         (b"content-type", b"application/json"),
         (b"content-length", str(len(body)).encode()),

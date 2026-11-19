@@ -114,7 +114,7 @@ def test_symlink_escaping_static_root_is_not_served(tmp_path, static_dir):
 def test_unknown_api_paths_never_fall_back_to_the_spa(client):
     response = client.get("/api/unknown")
     assert response.status_code == 404
-    assert response.json() == {"detail": "Not Found"}
+    assert response.json() == {"error": {"code": "not_found", "message": "Not found."}}
     assert client.get("/api").status_code == 404
 
 

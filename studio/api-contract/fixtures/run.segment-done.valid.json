@@ -1,0 +1,51 @@
+{
+  "id": "r_0a1b2c3d4e5f",
+  "model": "nitid1s",
+  "task": "segment",
+  "backend": "torch",
+  "device": "cpu",
+  "status": "done",
+  "error_msg": null,
+  "item_count": 1,
+  "items": [
+    {
+      "id": 0,
+      "name": "cat.png",
+      "width": 64,
+      "height": 48,
+      "detections": [
+        {
+          "box": {
+            "x1": 4.0,
+            "y1": 5.5,
+            "x2": 40.0,
+            "y2": 44.0
+          },
+          "confidence": 0.8765,
+          "class_id": 1,
+          "name": "b",
+          "has_mask": true,
+          "segments": {
+            "x": [
+              4.0,
+              40.0,
+              40.0,
+              4.0
+            ],
+            "y": [
+              5.5,
+              5.5,
+              44.0,
+              44.0
+            ]
+          }
+        }
+      ],
+      "speed": {
+        "preprocess": 1.2,
+        "inference": 30.5,
+        "postprocess": 4.1
+      }
+    }
+  ]
+}
