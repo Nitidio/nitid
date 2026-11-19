@@ -44,9 +44,15 @@ export function drawDetections(
           for (let i = 2; i + 1 < pts.length; i += 2) ctx.lineTo(pts[i] ?? 0, pts[i + 1] ?? 0);
           ctx.closePath();
           ctx.fill();
+          // Outline at full opacity so thin or low-contrast instances stay visible.
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.globalAlpha = 0.35;
         }
       } else {
-        // API v1 does not serve mask pixels: mark the instance with a lighter box fill.
+        // No outline available (server without `segments`): mark the instance with a lighter box fill.
         ctx.globalAlpha = 0.18;
         ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
       }

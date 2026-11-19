@@ -16,6 +16,7 @@ function fakeCtx() {
     lineTo: rec("lineTo"),
     closePath: rec("closePath"),
     fill: rec("fill"),
+    stroke: rec("stroke"),
     fillRect: rec("fillRect"),
     strokeRect: rec("strokeRect"),
     fillText: rec("fillText"),
@@ -60,6 +61,31 @@ describe("drawDetections", () => {
     expect(calls).toContain("moveTo(0,0)");
     expect(calls).toContain("lineTo(50,0)");
     expect(calls).toContain("fill()");
+  });
+
+  it("strokes the outline after filling it, once per polygon", () => {
+    const { ctx, calls } = fakeCtx();
+    const mask = { polygons: [[0, 0, 100, 0, 100, 100], [120, 20, 180, 20, 180, 60]] };
+    drawDetections(ctx, [det({ hasMask: true, mask })], { ...base, showLabels: false });
+    expect(calls.filter((c) => c === "fill()")).toHaveLength(2);
+    expect(calls.filter((c) => c === "stroke()")).toHaveLength(2);
+    expect(calls.indexOf("fill()")).toBeLessThan(calls.indexOf("stroke()"));
+    expect(calls).toContain("lineTo(90,10)"); // second polygon, scaled by 0.5
+    // The outline sits under the box stroke.
+    expect(calls.indexOf("strokeRect(10,20,50,25)")).toBeGreaterThan(calls.lastIndexOf("stroke()"));
+  });
+
+  it("skips outlines with fewer than 3 vertices and falls back to the tinted box", () => {
+    const { ctx, calls } = fakeCtx();
+    drawDetections(ctx, [det({ hasMask: true, mask: { polygons: [[0, 0, 10, 10]] } })], base);
+    expect(calls).not.toContain("fill()");
+  });
+
+  it("draws nothing for outlines when masks are hidden", () => {
+    const { ctx, calls } = fakeCtx();
+    drawDetections(ctx, [det({ hasMask: true, mask: { polygons: [[0, 0, 100, 0, 100, 100]] } })], { ...base, showMasks: false });
+    expect(calls).not.toContain("fill()");
+    expect(calls).not.toContain("stroke()");
   });
 
   it("falls back to a tinted box when has_mask is true but no geometry exists", () => {
