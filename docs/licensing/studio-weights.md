@@ -53,9 +53,10 @@ D-FINE-seg are Apache-2.0. What was checked:
    RT-DETR, DEIM; root listing checked). DEIM's `LICENSE` carries an extra copyright line for
    INTELLINDUST (already recorded in `THIRD_PARTY_NOTICES.md`).
 
-Suggested follow-up (not done, outside the files this work package owns): align the "Pretrained
-weights" paragraph of `THIRD_PARTY_NOTICES.md` and ADR-0004 with item 2, and consider whether the
-default `obj2coco` choice and the README table need the same caveat.
+Follow-up **done (option A, 2026-11-19)**: `THIRD_PARTY_NOTICES.md`, ADR-0004 and the README now
+state the caveat. The default `obj2coco` choice is unchanged; `obj2coco` entries stay
+`hostable: false`. Reopen if the Objects365 terms are read and found compatible (clear
+`open_caveats`) or restrictive (switch the default to `coco`).
 
 ## Table: weights and upstream
 

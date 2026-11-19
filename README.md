@@ -69,7 +69,11 @@ and the instance-segmentation checkpoints by
 [D-FINE-seg](https://huggingface.co/ArgoSA/D-FINE-seg). nitid downloads them from
 those sources on first use. The public datasets used for pretraining keep their
 own terms: the checkpoints listed in [Verified models](#verified-models) are
-trained on COCO and Objects365.
+trained on COCO and Objects365. The upstream D-FINE authors note that Objects365
+checkpoints (the default `obj2coco` weights) may be subject to the Objects365 dataset
+terms and should not be assumed to be commercially cleared; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The COCO-only variants
+(`weights="coco"`) carry no such note.
 
 ## Installation
 

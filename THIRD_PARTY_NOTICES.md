@@ -94,6 +94,14 @@ keep the licence given there:
 The checkpoints are trained on public datasets (COCO, and Objects365 for the
 detection checkpoints listed as `obj2coco`), which keep their own terms.
 
+**Objects365 caveat.** The D-FINE README states that checkpoints trained or
+pretrained on Objects365 (`*_obj365`, `*_obj2coco`) may be subject to the
+Objects365 dataset terms and should not be assumed to be commercially cleared
+under the D-FINE licence. The default detection weights of nitid (`nitid1s`,
+`nitid1m`, `nitid1l`, `nitid1x`) are `obj2coco`. If you need a checkpoint
+without this caveat, use the COCO-only variants. nitid has not established what
+the Objects365 terms allow; review them before commercial use.
+
 ## Nitid Studio frontend (JavaScript bundle)
 
 The Nitid Studio single-page app (`studio/`, built into the wheel under
