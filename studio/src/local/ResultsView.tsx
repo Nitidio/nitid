@@ -10,7 +10,7 @@ export interface ResultsViewProps {
   initialConfidence?: number;
   /** Loads the original image of an item. Returns null when unavailable (a placeholder is drawn). */
   loadImage: (item: ResultItem) => Promise<ImageBitmap | null>;
-  /** Slot for the unified UI's export controls (issue #46). Not implemented here. */
+  /** Slot for the export controls; the unified UI plugs in `ResultsExportMenu`. */
   ExportMenu?: ComponentType<ExportMenuProps>;
 }
 
@@ -193,7 +193,7 @@ export function ResultsView({
             )}
           </fieldset>
 
-          {ExportMenu && <ExportMenu results={results} filter={filter} selectedItemId={item.id} />}
+          {ExportMenu && <ExportMenu results={results} filter={filter} selectedItemId={item.id} image={images[item.id] ?? null} />}
         </div>
       </div>
 

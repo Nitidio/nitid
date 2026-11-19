@@ -1,4 +1,6 @@
 import type { Box, Run, RunItem, Task } from "../api/types";
+import { fromServerRun } from "../exports/mappers";
+import type { ExportResults } from "../exports/model";
 
 /**
  * UI-facing results model. It is deliberately independent of where the numbers come
@@ -47,6 +49,12 @@ export interface RunResults {
   items: ResultItem[];
   /** Wall-clock milliseconds from "Run" to results (upload + queue + inference), if measured. */
   wallClockMs?: number;
+  /**
+   * Builds the `ExportResults` of one item through the shared mappers (`fromServerRun` /
+   * `fromEngineResult`), so the export code never needs to know where the numbers came from.
+   * Undefined when a producer does not support exports.
+   */
+  toExport?: (itemId: number) => ExportResults;
 }
 
 /** What the user has chosen to see; export code should honour it ("export what I see"). */
@@ -63,6 +71,8 @@ export interface ExportMenuProps {
   filter: ViewFilter;
   /** The item currently on screen. */
   selectedItemId: number;
+  /** Decoded original image of that item, when available (PNG, crops and PDF need it). */
+  image?: ImageBitmap | null;
 }
 
 function fromItem(item: RunItem): ResultItem {
@@ -92,6 +102,7 @@ export function fromRun(run: Run, wallClockMs?: number): RunResults {
     backend: run.backend,
     device: run.device,
     items: run.items.map(fromItem),
+    toExport: (itemId) => fromServerRun(run, itemId),
     ...(wallClockMs !== undefined ? { wallClockMs } : {}),
   };
 }

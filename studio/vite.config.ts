@@ -10,6 +10,7 @@ import { defineConfig } from "vitest/config";
  *               ../nitid/studio/static so the Python package can serve it.
  *   hosted   -> `vite build --mode hosted`: no backend probing at all; the
  *               output (dist-hosted/) is a plain static site.
+ * STUDIO_MODELS_BASE_URL (build time) points the browser-only mode at a folder with models.json.
  * STUDIO_OUT_DIR overrides the output directory in both modes. The directory is
  * emptied before each build, so point it at a dedicated folder.
  */
@@ -30,6 +31,8 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       __STUDIO_MODE__: JSON.stringify(hosted ? "hosted" : "auto"),
+      // Base URL of the hosted model catalogue ("" = none configured). Never hardcode a vendor URL here.
+      __STUDIO_MODELS_BASE_URL__: JSON.stringify(process.env.STUDIO_MODELS_BASE_URL ?? ""),
     },
     server: {
       port: 5173,

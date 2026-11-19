@@ -7,10 +7,10 @@ export function defaultFilter(minConfidence = DEFAULT_MIN_CONFIDENCE): ViewFilte
 }
 
 /** Detections that pass the confidence threshold (inclusive) and the class filter. */
-export function filterDetections(
-  detections: readonly ResultDetection[],
+export function filterDetections<T extends Pick<ResultDetection, "confidence" | "classId">>(
+  detections: readonly T[],
   filter: ViewFilter,
-): ResultDetection[] {
+): T[] {
   return detections.filter(
     (d) => d.confidence >= filter.minConfidence && !filter.hiddenClasses.has(d.classId),
   );
