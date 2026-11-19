@@ -7,15 +7,15 @@
  * marked [NV] is an assumption that has not been verified against the server.
  */
 
-/** API version this UI build was written against. [NV] value and format. */
-export const EXPECTED_API_VERSION = "1";
+/** Major API version this UI build was written against (contract `Health.api_version`, an integer). */
+export const EXPECTED_API_VERSION = 1;
 
 /** Body of `GET /api/v1/health` (validated at runtime by `parseHealth`). */
 export interface HealthResponse {
   status: "ok";
   nitid_version: string;
-  /** Normalised to a string even if the server sends a number. [NV] */
-  api_version: string;
+  /** Integer per the contract. `parseHealth` also accepts legacy servers that sent `"1"`. */
+  api_version: number;
 }
 
 /**

@@ -7,7 +7,7 @@ describe("App", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        new Response(JSON.stringify({ status: "ok", nitid_version: "0.9.6", api_version: "1" }), {
+        new Response(JSON.stringify({ status: "ok", nitid_version: "0.9.6", api_version: 1 }), {
           status: 200,
         }),
       ),

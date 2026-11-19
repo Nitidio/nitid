@@ -17,7 +17,7 @@ function renderHome(backend: BackendInfo | null) {
 
 const local: BackendInfo = {
   mode: "local",
-  health: { status: "ok", nitid_version: "0.9.6", api_version: "1" },
+  health: { status: "ok", nitid_version: "0.9.6", api_version: 1 },
   versionMismatch: false,
 };
 const hosted: BackendInfo = { mode: "hosted", versionMismatch: false };

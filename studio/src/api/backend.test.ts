@@ -13,8 +13,13 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 }
 
 describe("parseHealth", () => {
-  it("accepts a valid body and normalises a numeric api_version", () => {
-    expect(parseHealth({ ...okBody, api_version: 1 })?.api_version).toBe("1");
+  it("keeps an integer api_version as a number", () => {
+    expect(parseHealth({ ...okBody, api_version: 1 })?.api_version).toBe(1);
+  });
+
+  it("still accepts a legacy string api_version and converts it", () => {
+    expect(parseHealth({ ...okBody, api_version: "1" })?.api_version).toBe(1);
+    expect(parseHealth({ ...okBody, api_version: " 2 " })?.api_version).toBe(2);
   });
 
   it.each([
@@ -26,6 +31,9 @@ describe("parseHealth", () => {
     { ...okBody, nitid_version: 3 },
     { status: "ok", nitid_version: "1" },
     { ...okBody, api_version: null },
+    { ...okBody, api_version: "v1" },
+    { ...okBody, api_version: 1.5 },
+    { ...okBody, api_version: -1 },
   ])("rejects %j", (value) => {
     expect(parseHealth(value)).toBeNull();
   });
@@ -44,15 +52,22 @@ describe("detectBackend", () => {
   });
 
   it("flags a version mismatch but stays local", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ ...okBody, api_version: "999" }));
+    const fetchImpl = vi.fn(async () => jsonResponse({ ...okBody, api_version: 999 }));
     const info = await detectBackend({ studioMode: "auto", fetchImpl });
     expect(info.mode).toBe("local");
     expect(info.versionMismatch).toBe(true);
   });
 
+  it("treats a legacy string api_version \"1\" as matching", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ...okBody, api_version: "1" }));
+    const info = await detectBackend({ studioMode: "auto", fetchImpl });
+    expect(info).toMatchObject({ mode: "local", versionMismatch: false });
+    expect(info.health?.api_version).toBe(1);
+  });
+
   it("honours a custom expected api version", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ ...okBody, api_version: "2" }));
-    const info = await detectBackend({ studioMode: "auto", fetchImpl, expectedApiVersion: "2" });
+    const fetchImpl = vi.fn(async () => jsonResponse({ ...okBody, api_version: 2 }));
+    const info = await detectBackend({ studioMode: "auto", fetchImpl, expectedApiVersion: 2 });
     expect(info.versionMismatch).toBe(false);
   });
 

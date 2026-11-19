@@ -12,7 +12,7 @@ export interface BackendInfo {
 export interface DetectOptions {
   /** Defaults to the build-time `__STUDIO_MODE__`. "hosted" skips probing entirely. */
   studioMode?: "auto" | "hosted";
-  expectedApiVersion?: string;
+  expectedApiVersion?: number;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
@@ -20,15 +20,25 @@ export interface DetectOptions {
 /** Health probe timeout: a static host answers (or refuses) fast. */
 export const HEALTH_TIMEOUT_MS = 2_000;
 
+/**
+ * The contract says integer. Servers that predate it sent a string (`"1"`), so a string of
+ * digits is still accepted and converted; anything else is not a health body we understand.
+ */
+function parseApiVersion(value: unknown): number | null {
+  if (typeof value === "number") return Number.isInteger(value) && value >= 0 ? value : null;
+  if (typeof value === "string" && /^\d{1,6}$/.test(value.trim())) return Number(value.trim());
+  return null;
+}
+
 /** Validate the `/health` body; returns null if it is not what the contract promises. */
 export function parseHealth(value: unknown): HealthResponse | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
   if (v.status !== "ok") return null;
   if (typeof v.nitid_version !== "string" || !v.nitid_version) return null;
-  const api = v.api_version;
-  if (typeof api !== "string" && typeof api !== "number") return null;
-  return { status: "ok", nitid_version: v.nitid_version, api_version: String(api) };
+  const api = parseApiVersion(v.api_version);
+  if (api === null) return null;
+  return { status: "ok", nitid_version: v.nitid_version, api_version: api };
 }
 
 /**
