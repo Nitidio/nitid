@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router";
 import { detectBackend, type BackendInfo } from "./api/backend";
 import { BackendContext } from "./backend-context";
 import { About } from "./pages/About";
 import { Home } from "./pages/Home";
 import { RunPlaceholder } from "./pages/RunPlaceholder";
+
+// The workbench is only needed on /run/local: keep it out of the first load.
+const RunLocal = lazy(() => import("./pages/RunLocal").then((m) => ({ default: m.RunLocal })));
 
 export function AppRoutes() {
   return (
@@ -25,6 +28,14 @@ export function AppRoutes() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
+          <Route
+            path="/run/local"
+            element={
+              <Suspense fallback={<p role="status">Loading...</p>}>
+                <RunLocal />
+              </Suspense>
+            }
+          />
           <Route path="/run/:mode" element={<RunPlaceholder />} />
           <Route path="*" element={<RunPlaceholder />} />
         </Routes>
