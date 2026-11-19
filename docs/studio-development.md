@@ -65,6 +65,7 @@ studio/
       client.ts         same-origin fetch client: bearer token, timeout, typed errors
       backend.ts        detectBackend(), parseHealth()
       types.ts          hand-written API types (to be generated, see below)
+    exports/            result exports: PNG, JSON, CSV, YOLO TXT, crops, ZIP, PDF, <ExportMenu/> (see "Exports")
     pages/              Home, About, RunPlaceholder
     test/setup.ts       Testing Library + jest-dom setup
     **/*.test.ts(x)     tests live next to the code they cover
@@ -181,9 +182,11 @@ ecosystem for `/studio` to `.github/dependabot.yml` is a suggested follow-up.
 
 ## Dependencies and licences
 
-Runtime (`pnpm licenses list --prod`, 9 packages, all MIT): react, react-dom,
-react-router, scheduler, cookie-es, @remix-run/route-pattern, csstype and the
-type packages `@types/react`, `@types/react-dom`.
+Runtime (`pnpm licenses list --prod`, all MIT): react, react-dom,
+react-router, scheduler, cookie-es, @remix-run/route-pattern, csstype, the
+type packages `@types/react`, `@types/react-dom`, and `fflate` (ZIP, see
+"Exports"). The list above predates later packages such as `onnxruntime-web`;
+run `pnpm licenses list --prod` for the current set.
 
 All installed packages including development tooling (`pnpm licenses list`,
 Nov 2026): MIT 178, Apache-2.0 17, ISC 10, BSD-2-Clause 8, BSD-3-Clause 3,
@@ -203,6 +206,233 @@ open question for the maintainers `[NV]`.
 TypeScript is pinned to 6.x (`^6`) because `typescript-eslint` 8.73 refuses to run
 with TypeScript 7 (it prints "typescript-eslint does not support TS 7.0"). Move to
 7.x once typescript-eslint supports it.
+
+## Exports (`src/exports/`)
+
+Issue #45. A framework-light module that turns one inference result into files.
+The unified UI (issue #46) mounts `<ExportMenu/>`; everything else is plain
+functions. Facts verified by running the tests and tools named below are
+unmarked; open points are marked `[NV]`.
+
+### One input type: `ExportResults`
+
+Both producers map into the same type (`src/exports/model.ts`), so no exporter
+knows where the numbers came from.
+
+| Producer | Mapper | Notes |
+| --- | --- | --- |
+| Browser engine (`RunResult` of `src/engine`) | `fromEngineResult(result, { imageName, model, task, backend })` | Masks are present (`DetectionMask`, cropped to the box). `device` is `null`. |
+| REST server (`GET /runs/{id}`, one `RunItem`) | `fromServerRun(run, itemId)` | The contract reports `has_mask` but **no mask pixels** (no mask endpoint in `api-contract/openapi.json`), so server results carry `hasMask: true` and no `mask`: PNG draws boxes only and YOLO TXT falls back to box lines. `device` is the server's device name. |
+
+```ts
+interface ExportResults {
+  source: "browser" | "server";
+  image: { name: string; width: number; height: number };   // original image
+  model: string;  task: "detect" | "segment";
+  backend: string;            // browser: wasm | webgpu; server: torch | openvino
+  device: string | null;
+  timings: { preprocessMs; inferenceMs; postprocessMs } | null;
+  createdAt: string;          // ISO 8601, injected so outputs are reproducible
+  detections: Array<{
+    box: { x1; y1; x2; y2 };  // xyxy, pixels of the ORIGINAL image
+    confidence: number;       // 0..1
+    classId: number;  name: string;   // any Unicode
+    hasMask: boolean;
+    mask?: { x; y; width; height; data: Uint8Array };  // 0/1, row-major, top-left at (x, y)
+  }>;
+}
+```
+
+The server image comes from `GET /runs/{id}/items/{n}/image`; the caller turns
+it into an `ImageBitmap` and passes it as `image`.
+
+### Formats
+
+| Format | File name | Function | Needs image |
+| --- | --- | --- | --- |
+| Annotated image | `<base>_annotated.png` | `renderAnnotated`, `annotatedBlob` | yes |
+| JSON | `<base>.json` | `formatJson`, `toJsonDocument` | no |
+| CSV | `<base>.csv` | `formatCsv` | no |
+| YOLO TXT | `<base>.txt` + `classes.txt` | `formatYoloTxt`, `formatClassesTxt`, `parseYoloTxt` | no |
+| Crops | `crops/<base>_<NNNN>_<class>.png` | `renderCrops` | yes |
+| PDF report | `<base>_report.pdf` | `buildPdfReport` (`pdf.ts`) | yes |
+| ZIP bundle | `<base>_export.zip` | `buildZip` (`bundle.ts`) | if a member needs it |
+
+`<base>` is the image file name without extension, with every run of characters
+that are not Unicode letters, digits, `_` or `-` replaced by `_`
+(`street view.JPG` becomes `street_view`; empty becomes `image`).
+`buildFiles(format, results, ctx)` and `buildZip(formats, results, ctx)` in
+`bundle.ts` are the entry points when you do not use the component. Multi-file
+results (YOLO TXT + `classes.txt`, crops) are delivered by `ExportMenu` as a ZIP.
+
+### JSON schema (`nitid-studio-results`, version 1)
+
+```json
+{
+  "schema": "nitid-studio-results",
+  "version": 1,
+  "created_at": "2026-11-19T10:00:00.000Z",
+  "source": "browser",
+  "image": { "name": "street.jpg", "width": 1280, "height": 720 },
+  "model": { "id": "nitid1s", "task": "segment" },
+  "runtime": { "backend": "wasm", "device": null },
+  "timings_ms": { "preprocess": 3.1, "inference": 28.4, "postprocess": 1.2 },
+  "detection_count": 1,
+  "detections": [
+    {
+      "index": 0, "class_id": 0, "name": "person", "confidence": 0.91,
+      "box": { "x1": 12.5, "y1": 40, "x2": 210, "y2": 388.25 },
+      "has_mask": true,
+      "mask": { "polygon": [[12.5, 40], [210, 40]], "pixels": 5123 }
+    }
+  ]
+}
+```
+
+- Keys are snake_case like the REST API. `timings_ms` is `null` when unknown.
+- Pixels are rounded to 2 decimals, confidence to 6, timings to 3.
+- `mask` exists only when mask pixels are available. `polygon` is the contour
+  below, in ORIGINAL image pixels (`[]` for an empty mask); `pixels` is the
+  number of set mask pixels.
+- Adding a key is not a breaking change; removing or renaming one bumps `version`.
+
+### CSV
+
+RFC 4180: header row always present, CRLF line ends, fields containing the
+delimiter, `"`, CR or LF are quoted with doubled quotes. Columns, one row per
+detection:
+
+`image,index,class_id,class_name,confidence,x1,y1,x2,y2,width,height,has_mask,mask_pixels`
+
+`mask_pixels` is empty when the mask pixels are not available. Options:
+`delimiter` (`,` default, `;` or TAB for Excel in European locales) and `bom`
+(UTF-8 byte-order mark so Excel detects Unicode; off by default). Text cells that
+start with `=`, `+`, `-`, `@`, TAB or CR get a leading `'` so spreadsheets do not
+evaluate them (class names come from user-supplied models); numeric cells are
+never touched.
+
+### YOLO TXT
+
+One line per detection, class id first, coordinates normalised by the ORIGINAL
+image size, clamped to 0..1, six decimals:
+
+- box: `<class> <cx> <cy> <w> <h>`
+- polygon (detections with mask pixels): `<class> <x1> <y1> ... <xn> <yn>`,
+  `n >= 3` (the Ultralytics segmentation format)
+
+No detections give an empty file, the YOLO convention for a negative sample.
+`classes.txt` lists names by class id (ids that never occur are `class_<id>`).
+`segmentation: "box"` forces box lines. `parseYoloTxt` reads both line kinds and
+throws a `SyntaxError` naming the line; the tests round-trip through it.
+
+### Mask contour extraction (`contour.ts`)
+
+1. Label the 8-connected components of the binary mask and keep the largest. A
+   YOLO line holds one polygon, so smaller islands are dropped; holes are
+   ignored (outer boundary only).
+2. Trace that component's boundary by crack following on pixel corners, with the
+   foreground on the right-hand side. At each corner look at the two pixels
+   ahead: ahead-left set, turn left; else ahead-right set, go straight; else
+   turn right. This joins diagonal neighbours, consistent with step 1. Stop when
+   the start corner is reached again with the start direction. The ring encloses
+   every pixel of the component, so with tolerance 0 its area equals the pixel
+   count (tested on L shapes, discs, strips).
+3. Remove collinear vertices, then simplify the closed ring with
+   Ramer-Douglas-Peucker. Default tolerance 1 pixel, capped at a quarter of the
+   mask's smaller side so thin masks do not collapse. A disc of radius 40 goes
+   from 196 vertices (tolerance 0, exact area) to 20 with +1.1 % area (measured; the test asserts under half the vertices and under 3 %).
+4. Add the mask origin, divide by image width/height.
+
+Cost is linear in the mask size. Limitation: instances with several separate
+parts lose all but the largest part in YOLO TXT and in JSON `mask.polygon`
+(the PNG overlay draws every mask pixel).
+
+### Annotated PNG and crops
+
+`renderAnnotated` draws the image and then, on a canvas of the original size:
+mask overlays (class colour, 40 % opacity) first, then boxes and labels
+(`name NN%`). Colours are deterministic per class id (golden-angle hue). Line
+width and font scale with the image. Crops are the box region of the original
+image, rounded outwards and clamped (at least 1x1), without overlays.
+
+Canvas access goes through `RasterBackend` (`createCanvas`, `toBlob`,
+`makeImageData`). The default uses `OffscreenCanvas` when present, otherwise a
+detached `<canvas>`. jsdom has no canvas, so tests use a recording fake
+(`fakeRaster()` in `test-fixtures.ts`): drawing order and arguments are tested,
+**pixel output in a real browser is not** `[NV]`. Check it by hand once the UI
+mounts the menu (a tainted canvas from a cross-origin image would make
+`toBlob` fail; the menu shows the error).
+
+### PDF report (`pdf.ts`)
+
+A4, 40 pt margins. Page 1: title, metadata (image, model and task, runtime and
+device, timings, creation time, detection count), the annotated image (JPEG,
+scaled to fit, at most 300 pt tall), then the detections table: `# | Class |
+Conf. | x1 | y1 | x2 | y2 | Mask`. The table breaks across pages with the
+header repeated; every page has a `Page n of N` footer. Metadata goes into the
+Info dictionary (title, creation date).
+
+Verified on a 1000-detection report (22 pages) with `qpdf --check` (no errors),
+`pypdf` (22 pages, text and one image found) and `pdftoppm` (rendered and
+inspected). The test suite asserts the header, `%%EOF`, xref offsets, page
+count (`/Count` equals the number of `/Type /Page` objects), the text strings, the
+image object, and that the file body is ASCII.
+
+Limits: only Helvetica with WinAnsi encoding, so Latin-1 and a few cp1252
+marks (euro, curly quotes, dashes, ellipsis, bullet) are shown; any other
+character (CJK, Cyrillic, Arabic) prints as `?`. JSON, CSV and YOLO TXT keep
+exact Unicode. Embedding a Unicode font would add hundreds of kB; revisit if
+needed. Content streams are uncompressed; the image is the annotated picture as
+JPEG (quality 0.9) at original size, so the report of a 20-megapixel image is
+large `[NV: not measured]`.
+
+### `ExportMenu`
+
+```tsx
+<ExportMenu
+  results={exportResults}     // ExportResults
+  image={imageBitmap}         // optional; without it png/crops/pdf/zip are disabled
+  formats={["png", "json", "csv", "yolo", "crops", "pdf", "zip"]}   // default: all, in this order
+  context={{ csv: { delimiter: ";", bom: true }, yolo: { tolerance: 1 } }}  // optional
+  onDownload={(file) => ...}  // optional; default saves via an <a download> object URL
+  onError={(error) => ...}
+/>
+```
+
+An "Export" disclosure button (`aria-expanded`) opens a group with one
+"Download" button per format and a checkbox per bundle member; "Download ZIP of
+checked formats" builds the bundle. Crops are disabled without detections;
+image formats are disabled without `image`; only one export runs at a time; the
+`role="status"` line reports progress and errors. Styles are the `.export-*`
+rules in `styles.css`. The component does not know about routes or API calls.
+
+### Dependencies
+
+| Package | Why | Cost |
+| --- | --- | --- |
+| `fflate` 0.8.3 (MIT, no dependencies) | ZIP. `zipSync` with per-file level (stored for PNG/PDF, deflate for text) and fixed timestamps so the same input gives the same bytes. Chosen over JSZip (larger, with Promise/stream layers we do not use `[NV: size not measured]`) and over writing a ZIP writer by hand (CRC32, deflate, ZIP64 edge cases). | 8.8 kB minified (4.4 kB gzip) lazy chunk |
+| none for PDF | A hand-written PDF 1.4 writer (about 250 lines) covers one JPEG, Helvetica text and a table. pdf-lib and jsPDF would add several hundred kB to the browser for the same output. The cost is the limits above (Latin-1 text) and owning the code; the xref/validity risk is covered by tests plus the `qpdf`/`pypdf` check. | 5.7 kB minified (2.7 kB gzip) lazy chunk |
+
+Both load by dynamic `import()` the first time a ZIP or PDF is built
+(`bundle.ts`), so the main bundle does not carry them. Measured with
+`vite build` (Vite 8.3.8): the baseline main chunk is 263.26 kB (83.80 kB gzip).
+Forcing the whole `src/exports` index into the entry (worst case: the menu,
+formatters, contour, raster and mapper code all in main) gives 278.10 kB
+(89.62 kB gzip), i.e. +14.8 kB (+5.8 kB gzip), plus lazy chunks `browser`
+(fflate) 8.76 kB, `pdf` 5.72 kB and `bundle` 1.81 kB. Until the UI imports the
+menu, the shipped bundle is unchanged (tree-shaken).
+
+### Tests
+
+`src/exports/*.test.ts(x)`: golden outputs for JSON, CSV and YOLO TXT; YOLO
+round trip (box and polygon); CSV escaping, formula neutralisation, Unicode
+names, BOM and delimiter; empty results everywhere; contour cases (rectangle, L
+shape, hole, islands, diagonal pixels, disc, thin strips); mappers; raster
+drawing order with the fake backend; PDF structure (header, xref, page count,
+text, multi-page with repeated header, Latin-1 escaping); ZIP round trip and
+determinism; a 1000-detection sanity test (all text formats plus ZIP, bound 5 s,
+about 0.4 s measured in jsdom with 1000 masks of 40x30 px); `ExportMenu` component tests (expand, download, ZIP of
+checked formats, disabled states, error status).
 
 ## Testing
 
