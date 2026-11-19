@@ -142,9 +142,45 @@ Example (`nitid1s`, detection, `postprocess=True`; `names` shortened):
 | `nitid_version` | Version of the nitid library that wrote the file. |
 
 The file's own `sha256` is intentionally not in the meta, because a file cannot
-contain its own hash; whoever serves the file can publish the hash alongside it.
-The document is built by `dfine.export_meta.build_onnx_meta` and the field
-names above are the canonical `schema_version` 1 contract.
+contain its own hash; whoever serves the file can publish the hash alongside it
+(Nitid Studio does: `GET /api/v1/onnx/{model}/meta` returns this document plus
+`sha256`, see [Studio](studio.md)). The document is built by
+`dfine.export_meta.build_onnx_meta` and the field names above are the canonical
+`schema_version` 1 contract.
+
+### Why `simplify=True` drops `graph.value_info`
+
+`value_info` is optional documentation of intermediate tensor shapes and types. It
+is not needed to run the model: every runtime infers shapes when it loads the graph.
+`onnxsim` rewrites the graph but keeps these annotations, and some of them end up
+wrong. In the segmentation graph, for example, the output of `Gemm_1` (`_v_2148`)
+was declared with rank 0 while its real shape is `[4, 256]`. The effects:
+
+| Consumer | Result with the stale entry |
+|---|---|
+| `onnx.checker.check_model(model, full_check=True)` | `ShapeInferenceError ... Inferred shape and existing shape differ in rank: (2) vs (0)` |
+| onnxruntime (Python) | Loads, with a warning ("Error merging shape info ... Falling back to lenient merge") |
+| onnxruntime-web 1.31.1 | Refuses to load: `ShapeInferenceError ... inferred=2 declared=0` |
+
+Since the fix, the exporter removes every `value_info` entry (main graph and
+sub-graphs) right after `onnxsim`, before the `nitid_meta` is written. Graph
+inputs, outputs, initializers, nodes and metadata are untouched, and the outputs
+are bit-identical: with a tiny segmentation checkpoint, onnxruntime returned
+exactly the same arrays before and after, and the full ONNX checker now passes.
+The file also gets a little smaller (about 40 KB on that checkpoint).
+`simplify=False` never had the problem (torch writes no `value_info`).
+Files exported by earlier versions can still contain it; the browser engine
+keeps a fallback (`stripValueInfo`) that retries without it, and you can clear
+an old file yourself:
+
+```python
+import onnx
+from dfine.exporter import drop_value_info
+
+proto = onnx.load("old_segment.onnx")
+drop_value_info(proto)
+onnx.save(proto, "old_segment_fixed.onnx")
+```
 
 ## OpenVINO
 

@@ -228,8 +228,11 @@ rank 0 for a `Gemm` output that is `[4, 256]`. Python `onnxruntime` 1.28 accepts
 - Engine workaround (committed, tested): on that error the session retries once with the bytes
   minus `graph.value_info` (`stripValueInfo`, 25 ms for 35 MB; computation unchanged). The result is
   reported in `info.workarounds = ["stripped-value-info"]`.
-- Proper fix (outside this work package, `dfine/exporter.py`): clear `graph.value_info` (or fix that entry)
-  after export. Then the workaround never triggers.
+- Proper fix (done in `dfine/exporter.py`, `drop_value_info`): the exporter clears `graph.value_info`
+  right after `onnxsim`, so ONNX files served by `GET /api/v1/onnx/{model}` no longer trigger the
+  workaround (outputs are bit-identical; see [Export](export.md)). The workaround stays for files
+  exported by older nitid versions or supplied from elsewhere. [NV: not re-run in ORT-web 1.31.1 in a
+  browser from this branch; verified with `onnx.checker` full check and Python onnxruntime only.]
 
 ## Regenerating the parity fixtures
 

@@ -7,7 +7,7 @@ browser. It runs on your own machine, in a single process started by
 !!! note "Status: backend in progress"
     This release contains the server foundation (settings, security guards,
     static serving, `GET /api/v1/health`) plus device discovery and model
-    listing/downloading. Prediction, training and export jobs and the web UI
+    listing/downloading, and the ONNX endpoints for the browser engine. Prediction, training and export jobs and the web UI
     itself arrive in later changes. Until the UI is built into your installation, opening the URL
     shows a short page that says so (HTTP 503); the API still works.
 
@@ -218,11 +218,119 @@ live in memory, at most two run at once, and a finished job is forgotten one hou
 later (`JOB_TTL_SECONDS` in `nitid/studio/jobs.py`); asking for it afterwards
 returns 404. Jobs do not survive a restart. A downloaded checkpoint does.
 
+### ONNX for the browser engine
+
+The browser engine (`studio/src/engine`, see [Studio engine](studio-engine.md)) runs the model
+itself with ONNX Runtime Web. These two endpoints give it the file and the facts needed to use it.
+Both follow `studio/api-contract/openapi.json` (`/onnx/{model}` and `/onnx/{model}/meta`).
+
+| Query parameter | Required | Meaning |
+|---|---|---|
+| `task` | yes | `detect` or `segment`. The same id can exist for both. |
+| `imgsz` | no | Square input size: a multiple of 32 from 32 to 4096. Default: the checkpoint's own `eval_spatial_size` (640 for the official models). |
+
+The model must be known and **already downloaded** (see `POST /models/{id}/download`): these
+endpoints never touch the network. Local `*.pth` checkpoints work too, by file stem.
+
+#### `GET /api/v1/onnx/{model}?task=detect|segment[&imgsz=N]`
+
+Streams the ONNX file (`application/octet-stream`, with `Content-Length`). The first request for a
+given model exports it from the checkpoint, which takes from a few seconds (nano/small on a
+laptop) to minutes (`nitid1x` on a slow CPU); the HTTP request simply stays open meanwhile, so use
+a generous timeout. Later requests are served from the cache.
+
+What you get is always the same shape of file: batch fixed to 1, input `images`
+`float32 [1, 3, S, S]` (RGB, 0-1, plain resize without letterbox), post-processed outputs
+(`labels`, `boxes`, `scores` and, for `segment`, `masks`) and the descriptor (`nitid_meta`)
+embedded in the file's `metadata_props`. Boxes are pixels of the *model input*, so rescale them to
+the original image.
+
+```bash
+# Download the weights once (see "Devices and models" above), then:
+curl -H "Authorization: Bearer $TOKEN" -o nitid1s-detect.onnx -D - \
+  "http://127.0.0.1:8000/api/v1/onnx/nitid1s?task=detect"
+# HTTP/1.1 200 OK
+# content-type: application/octet-stream
+# content-length: 41683291
+# etag: "9f2c...e1"          <- sha256 of the body, quoted
+# cache-control: private, no-cache
+
+sha256sum nitid1s-detect.onnx      # 9f2c...e1, the same value as the ETag
+```
+
+**ETag and revalidation.** The `ETag` is a strong validator: the lowercase sha256 of the body,
+inside double quotes. Send it back in `If-None-Match` to avoid downloading again; a match returns
+`304 Not Modified` with no body (`*` and weak `W/"..."` forms are accepted as well). The response
+has `Cache-Control: private, no-cache`: the browser may keep the file but must ask first, which
+is cheap once the export exists.
+
+```bash
+curl -i -H "Authorization: Bearer $TOKEN" \
+  -H 'If-None-Match: "9f2c...e1"' \
+  "http://127.0.0.1:8000/api/v1/onnx/nitid1s?task=detect"
+# HTTP/1.1 304 Not Modified
+```
+
+**Range.** The contract does not define byte ranges. Because the file is served by Starlette's
+`FileResponse`, `Range: bytes=...` requests do work (`206 Partial Content`), but treat that as a
+transport nicety, not as part of the API.
+
+#### `GET /api/v1/onnx/{model}/meta?task=detect|segment[&imgsz=N]`
+
+Returns the descriptor as JSON: exactly the `nitid_meta` embedded in the file (schema
+`studio/api-contract/onnx-meta.schema.json`) plus `sha256`, the same value as the ETag of the
+binary. `sha256` is never embedded in the ONNX, since a file cannot contain its own hash. The
+response carries the same `ETag` header. The contract has no `size` field in the meta; take the
+size from the `Content-Length` of the binary.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8000/api/v1/onnx/nitid1s/meta?task=detect"
+# {"schema_version":1,"task":"detect","model":"nitid1s","imgsz":640,
+#  "input":{"name":"images","shape":[1,3,640,640],"dtype":"float32","range":"0-1",
+#           "color":"RGB","resize":"squash"},
+#  "outputs":[{"name":"labels","dtype":"int64"},
+#             {"name":"boxes","dtype":"float32","format":"xyxy_input_px"},
+#             {"name":"scores","dtype":"float32"}],
+#  "names":{"0":"person","1":"bicycle", ...},"topk":300,"default_iou":0.85,
+#  "nitid_version":"0.9.6","sha256":"9f2c...e1"}
+```
+
+Asking for the meta also triggers the export when the file is not cached yet.
+
+#### Errors
+
+| Status | `code` | When |
+|---|---|---|
+| 401 | `unauthorized` | Missing or wrong token (central middleware). |
+| 403 | `forbidden_origin` | Host or Origin not allowed. |
+| 404 | `not_found` | Unknown model, no weights for that `task`, or the checkpoint is not downloaded (the message says which and how to fix it). |
+| 422 | `invalid_params` | `task` missing or not `detect`/`segment`; `imgsz` not an integer, not a multiple of 32, or outside 32-4096. |
+| 500 | `internal_error` | The export failed. The message names only the exception type; details are in the server log. |
+
+All errors use the envelope `{"error": {"code": "...", "message": "..."}}`.
+
+#### How the export is cached and scheduled
+
+- Exports are written to `<models>/.cache/onnx/` (the catalogue ignores that directory). Delete it
+  at any time; the next request exports again. Nothing is evicted automatically.
+- The cache key is the model id, task, `imgsz`, the nitid version **and** the checkpoint's size and
+  modification time. Upgrading nitid, or replacing a local `.pth`, therefore produces a new file
+  instead of serving a stale one. File names are hashes: nothing from the URL becomes a path.
+- **One export at a time.** A lock serialises them, because an export is CPU- and memory-heavy.
+  Requests for the same file that arrive while it is being exported wait and then reuse the result,
+  so ten browser tabs cause one export. Requests for other files queue behind it.
+- Exports run on CPU in the server's worker thread pool, so the rest of the API (and the web UI)
+  keeps answering while one is in progress.
+- The sha256 is computed once per file and remembered in memory (recomputed if the file changes).
+- Not provided: uploading your own ONNX. The contract defines no endpoint for it.
+
 ## What is not here yet
 
 - The web UI (the `static/` directory is empty in a source checkout).
 - Model deletion and management beyond listing and downloading.
-- Jobs: prediction, training, export and their progress reporting.
+- Jobs: prediction, training, and a progress-reporting export job. (ONNX export for the browser
+  engine exists, but synchronously: see above.)
 - Image upload endpoints and the limits above being enforced.
 
 ## For developers
@@ -239,6 +347,8 @@ returns 404. Jobs do not survive a restart. A downloaded checkpoint does.
 | `registry.py` | Model catalogue: registry pairs, local `*.pth` scan, staged download, safe error text. |
 | `jobs.py` | Thread-safe in-memory job store with TTL and one active job per key. |
 | `routes_models.py` | `/devices`, `/models`, `/models/{id}/download`, `/jobs/{job_id}`. |
+| `onnx_service.py` | On-demand ONNX export, disk cache, serialisation, sha256 and meta of each file. No FastAPI import. |
+| `routes_onnx.py` | `/onnx/{model}` and `/onnx/{model}/meta`: ETag, 304, error envelope. |
 | `app.py` | `create_app(settings, static_dir=..., extra_routers=...)`. |
 | `launcher.py` | Extra check, socket binding, uvicorn, `nitid studio` entry point. |
 

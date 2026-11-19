@@ -452,3 +452,18 @@ def test_default_exporter_leaves_no_run_metadata_in_the_cache(models_dir, tmp_pa
         assert client.get("/api/v1/onnx/mine?task=detect", headers=AUTH).status_code == 200
     names = sorted(p.name for p in (models_dir / ".cache" / "onnx").iterdir())
     assert len(names) == 1 and names[0].endswith(".onnx")  # no args.yaml / environment.yaml
+
+
+# ------------------------------------------------------------------ the contract lists what is served
+
+
+def test_served_routes_are_the_ones_in_the_contract(client):
+    served = {
+        route.path.removeprefix("/api/v1")
+        for route in client.app.routes
+        if getattr(route, "path", "").startswith("/api/v1/onnx")
+    }
+    assert served == {path for path in OPENAPI["paths"] if path.startswith("/onnx")}
+    for path in served:
+        declared = {p["name"] for p in OPENAPI["paths"][path]["get"]["parameters"]}
+        assert {"model", "task", "imgsz"} <= declared
