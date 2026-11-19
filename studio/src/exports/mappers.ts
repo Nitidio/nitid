@@ -9,6 +9,8 @@
  * `src/api/types.ts` has no run types yet) and contain exactly the fields the
  * contract marks as required.
  */
+import { segmentsToRing } from "../api/segments";
+import type { Segments } from "../api/types";
 import type { Detection, DetectionMask } from "../engine/types";
 import type { RunResult } from "../engine/session";
 import type { ExportDetection, ExportMask, ExportResults, ExportTask } from "./model";
@@ -66,6 +68,8 @@ export interface ServerDetection {
   class_id: number;
   name: string;
   has_mask: boolean;
+  /** Optional outline (task=segment), see `Segments`. */
+  segments?: Segments;
 }
 
 /** `RunItem` of the REST contract. */
@@ -90,8 +94,10 @@ export interface ServerRun {
 
 /**
  * Maps item `itemIndex` (the `id` of the item, zero-based) of a finished run.
- * The REST API reports `has_mask` but not the mask pixels, so server results
- * never carry `mask`: PNG shows boxes only and YOLO TXT falls back to boxes.
+ * The REST API reports `has_mask` and an optional `segments` outline but no mask pixels, so
+ * server results carry `polygon` and never `mask`: PNG, JSON and YOLO TXT use the outline,
+ * CSV `mask_pixels` stays empty and crops are plain boxes. Without `segments` (older servers)
+ * everything falls back to boxes as before.
  */
 export function fromServerRun(run: ServerRun, itemIndex: number, createdAt?: string): ExportResults {
   const item = run.items.find((i) => i.id === itemIndex);
@@ -109,12 +115,16 @@ export function fromServerRun(run: ServerRun, itemIndex: number, createdAt?: str
       postprocessMs: item.speed.postprocess,
     },
     createdAt: createdAt ?? new Date().toISOString(),
-    detections: item.detections.map((d) => ({
-      box: { x1: d.box.x1, y1: d.box.y1, x2: d.box.x2, y2: d.box.y2 },
-      confidence: d.confidence,
-      classId: d.class_id,
-      name: d.name,
-      hasMask: d.has_mask,
-    })),
+    detections: item.detections.map((d) => {
+      const polygon = segmentsToRing(d.segments);
+      return {
+        box: { x1: d.box.x1, y1: d.box.y1, x2: d.box.x2, y2: d.box.y2 },
+        confidence: d.confidence,
+        classId: d.class_id,
+        name: d.name,
+        hasMask: d.has_mask,
+        ...(polygon ? { polygon } : {}),
+      };
+    }),
   };
 }

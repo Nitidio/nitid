@@ -6,7 +6,7 @@
  *   box:     `<class> <cx> <cy> <w> <h>`
  *   polygon: `<class> <x1> <y1> <x2> <y2> ... <xn> <yn>`   (n >= 3; Ultralytics segmentation format)
  * Polygon lines are written for detections that carry a mask (see
- * `contour.ts` for the extraction); everything else falls back to a box line.
+ * `contour.ts` for the extraction) or a server outline (`polygon`, used as is); everything else falls back to a box line.
  * An image without detections gives an empty file (""), the YOLO convention for a negative sample.
  */
 import { maskToPolygon } from "./contour";
@@ -27,7 +27,8 @@ export function formatYoloTxt(results: ExportResults, options: YoloOptions = {})
   const usePolygons = (options.segmentation ?? "polygon") === "polygon";
   const lines: string[] = [];
   for (const d of results.detections) {
-    const poly = usePolygons && d.mask ? maskToPolygon(d.mask, options.tolerance ?? 1) : null;
+    // Pixel mask (browser) is traced; a server outline is used as delivered.
+    const poly = !usePolygons ? null : d.mask ? maskToPolygon(d.mask, options.tolerance ?? 1) : (d.polygon ?? null);
     if (poly) {
       const coords = poly.map(([x, y]) => `${fmt(x / width)} ${fmt(y / height)}`);
       lines.push(`${d.classId} ${coords.join(" ")}`);

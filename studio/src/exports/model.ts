@@ -41,10 +41,17 @@ export interface ExportDetection {
   /**
    * The model produced a mask for this detection. `mask` holds its pixels when
    * they are available; the REST API only reports the flag, so for server
-   * results `hasMask` can be true while `mask` is undefined.
+   * results `hasMask` can be true while `mask` is undefined (they carry `polygon` instead).
    */
   hasMask: boolean;
   mask?: ExportMask;
+  /**
+   * Outline of the instance as vertices in pixels of the ORIGINAL image (implicitly closed),
+   * for sources that give an outline but no pixels (the REST API `segments`). Browser results
+   * leave it undefined and derive the outline from `mask` when exporting. When both exist,
+   * `mask` wins. One outline per detection; see "Server outlines" in docs/studio-development.md.
+   */
+  polygon?: Array<[number, number]>;
 }
 
 export interface ExportTimings {

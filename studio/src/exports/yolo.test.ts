@@ -11,6 +11,31 @@ describe("formatYoloTxt", () => {
     );
   });
 
+  it("writes one polygon line per server outline, as delivered and clamped", () => {
+    const polygon: Array<[number, number]> = [[20, 10], [100, 10], [210, 50], [20, 90]]; // 210 is outside the 200 px image
+    const r = results({
+      source: "server",
+      task: "segment",
+      detections: [
+        det({ hasMask: true, polygon, classId: 3 }),
+        det({ hasMask: true, classId: 1 }), // flag only (older server): box line
+      ],
+    });
+    const lines = formatYoloTxt(r).trim().split("\n");
+    expect(lines).toHaveLength(2); // one line per detection, never one per vertex group
+    expect(lines[0]).toBe("3 0.100000 0.100000 0.500000 0.100000 1.000000 0.500000 0.100000 0.900000");
+    expect(lines[1]).toBe("1 0.300000 0.450000 0.500000 0.500000");
+    const parsed = parseYoloTxt(formatYoloTxt(r));
+    expect(parsed[0]).toMatchObject({ kind: "polygon", classId: 3 });
+    expect(formatYoloTxt(r, { segmentation: "box" }).split("\n")[0]).toBe("3 0.300000 0.450000 0.500000 0.500000");
+  });
+
+  it("prefers the pixel mask over an outline when both exist", () => {
+    const mask = maskFromRows(20, 30, ["####", "####", "####"]);
+    const r = results({ detections: [det({ hasMask: true, mask, polygon: [[0, 0], [1, 0], [1, 1]] })] });
+    expect(formatYoloTxt(r)).toContain("0.100000 0.300000"); // from the mask origin (20/200, 30/100)
+  });
+
   it("gives an empty file when there are no detections", () => {
     expect(formatYoloTxt(results({ detections: [] }))).toBe("");
   });

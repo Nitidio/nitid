@@ -21,6 +21,18 @@ describe("toJsonDocument", () => {
     });
   });
 
+  it("writes the server outline as mask.polygon without a pixel count", () => {
+    const doc = toJsonDocument(
+      results({
+        source: "server",
+        task: "segment",
+        detections: [det({ hasMask: true, polygon: [[10.123, 20], [110, 20.456], [60, 70]] })],
+      }),
+    );
+    expect(doc.detections[0]?.mask).toEqual({ polygon: [[10.12, 20], [110, 20.46], [60, 70]] });
+    expect(doc.detections[0]?.mask && "pixels" in doc.detections[0].mask).toBe(false);
+  });
+
   it("handles empty results and missing timings", () => {
     const doc = toJsonDocument(results({ detections: [], timings: null }));
     expect(doc.detections).toEqual([]);

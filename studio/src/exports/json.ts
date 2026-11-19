@@ -19,7 +19,8 @@ export interface JsonDetection {
   confidence: number;
   box: { x1: number; y1: number; x2: number; y2: number };
   has_mask: boolean;
-  mask?: { polygon: Array<[number, number]>; pixels: number };
+  /** `pixels` is absent when the source gives an outline but no pixel mask (server results). */
+  mask?: { polygon: Array<[number, number]>; pixels?: number };
 }
 
 export interface JsonDocument {
@@ -68,6 +69,8 @@ export function toJsonDocument(results: ExportResults): JsonDocument {
         let pixels = 0;
         for (let i = 0; i < d.mask.data.length; i++) if (d.mask.data[i]) pixels++;
         out.mask = { polygon: poly ? poly.map(([x, y]) => [r(x, 2), r(y, 2)]) : [], pixels };
+      } else if (d.polygon) {
+        out.mask = { polygon: d.polygon.map(([x, y]) => [r(x, 2), r(y, 2)]) };
       }
       return out;
     }),

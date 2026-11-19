@@ -45,6 +45,9 @@ describe("formatCsv", () => {
   });
 
   it("reports mask pixel counts", () => {
+    const serverR = results({ source: "server", detections: [det({ hasMask: true, polygon: [[0, 0], [5, 0], [5, 5]] })] });
+    // Server outlines carry no pixels: mask_pixels stays empty.
+    expect(formatCsv(serverR).split("\r\n")[1]).toMatch(/,true,$/);
     const r = results({ detections: [det({ hasMask: true, mask: rectMask(0, 0, 3, 2) })] });
     expect(formatCsv(r).split("\r\n")[1]).toMatch(/,true,6$/);
   });

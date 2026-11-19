@@ -46,6 +46,26 @@ describe("renderAnnotated", () => {
     expect(canvas.calls.find((c) => c[0] === "fillText")?.[1]).toBe("person 90%");
   });
 
+  it("draws a server outline as a translucent fill plus a stroke, before the boxes", () => {
+    const { backend, canvases } = fakeRaster();
+    const polygon: Array<[number, number]> = [[10, 20], [110, 20], [60, 70]];
+    const r = results({ source: "server", detections: [det({ hasMask: true, polygon })] });
+    const canvas = renderAnnotated(r, "IMG", backend) as unknown as FakeCanvas;
+    const ops = canvas.calls.map((c) => c[0]);
+    expect(canvases).toHaveLength(1); // no pixel-mask canvas needed
+    expect(ops.slice(1, 7)).toEqual(["beginPath", "moveTo", "lineTo", "lineTo", "closePath", "fill"]);
+    expect(canvas.calls.find((c) => c[0] === "moveTo")).toEqual(["moveTo", 10, 20]);
+    expect(String(canvas.calls.find((c) => c[0] === "fill")?.[1])).toMatch(/^rgba\(\d+,\d+,\d+,0\.4\)$/);
+    expect(ops.indexOf("stroke")).toBeLessThan(ops.indexOf("strokeRect"));
+  });
+
+  it("ignores outlines with fewer than 3 vertices", () => {
+    const { backend } = fakeRaster();
+    const r = results({ detections: [det({ hasMask: true, polygon: [[0, 0], [5, 5]] })] });
+    const canvas = renderAnnotated(r, "IMG", backend) as unknown as FakeCanvas;
+    expect(canvas.calls.some((c) => c[0] === "fill")).toBe(false);
+  });
+
   it("works with zero detections and can hide labels", () => {
     const { backend } = fakeRaster();
     const empty = renderAnnotated(results({ detections: [] }), "IMG", backend) as unknown as FakeCanvas;

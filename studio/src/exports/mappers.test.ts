@@ -61,6 +61,27 @@ describe("mappers", () => {
     });
   });
 
+  it("maps segments to an export polygon (no pixel mask)", () => {
+    const run = {
+      ...serverRun,
+      task: "segment" as const,
+      items: [
+        {
+          ...serverRun.items[0]!,
+          detections: [
+            { box: { x1: 0, y1: 0, x2: 10, y2: 10 }, confidence: 0.9, class_id: 1, name: "car", has_mask: true, segments: { x: [0, 10, 10, 0], y: [0, 0, 10, 0] } },
+            { box: { x1: 0, y1: 0, x2: 10, y2: 10 }, confidence: 0.8, class_id: 1, name: "car", has_mask: true },
+          ],
+        },
+      ],
+    };
+    const [a, b] = fromServerRun(run, 0).detections;
+    expect(a?.polygon).toEqual([[0, 0], [10, 0], [10, 10]]);
+    expect(a?.mask).toBeUndefined();
+    expect(a?.hasMask).toBe(true);
+    expect("polygon" in (b ?? {})).toBe(false);
+  });
+
   it("throws for a missing item", () => {
     expect(() => fromServerRun(serverRun, 3)).toThrow(RangeError);
   });

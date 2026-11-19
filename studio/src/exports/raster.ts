@@ -12,6 +12,12 @@ import { baseName } from "./model";
 export interface Ctx2DLike {
   drawImage(image: unknown, ...args: number[]): void;
   fillRect(x: number, y: number, w: number, h: number): void;
+  beginPath(): void;
+  moveTo(x: number, y: number): void;
+  lineTo(x: number, y: number): void;
+  closePath(): void;
+  fill(): void;
+  stroke(): void;
   strokeRect(x: number, y: number, w: number, h: number): void;
   fillText(text: string, x: number, y: number): void;
   measureText(text: string): { width: number };
@@ -101,6 +107,21 @@ export interface AnnotateOptions {
   showLabels?: boolean;
 }
 
+function drawPolygon(
+  ctx: Ctx2DLike,
+  polygon: ReadonlyArray<readonly [number, number]>,
+  color: { css: string; rgb: [number, number, number] },
+  alpha: number,
+): void {
+  ctx.beginPath();
+  polygon.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+  ctx.closePath();
+  ctx.fillStyle = `rgba(${color.rgb.join(",")},${alpha})`;
+  ctx.fill();
+  ctx.strokeStyle = color.css;
+  ctx.stroke();
+}
+
 /** Draws `image` and the detections of `results` on a new canvas of the ORIGINAL image size. */
 export function renderAnnotated(
   results: ExportResults,
@@ -124,7 +145,11 @@ export function renderAnnotated(
 
   // Masks first so boxes and labels stay readable on top.
   for (const d of results.detections) {
-    if (!d.mask) continue;
+    if (!d.mask) {
+      // Server results: outline only, no pixels. Translucent fill, then a solid stroke.
+      if (d.polygon && d.polygon.length >= 3) drawPolygon(ctx, d.polygon, classColor(d.classId), options.maskAlpha ?? 0.4);
+      continue;
+    }
     const overlay = maskOverlay(d.mask, classColor(d.classId).rgb, alpha);
     const tmp = backend.createCanvas(d.mask.width, d.mask.height);
     const tctx = tmp.getContext("2d");
