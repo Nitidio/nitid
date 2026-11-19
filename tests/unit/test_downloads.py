@@ -8,8 +8,9 @@ from dfine.utils import downloads
 
 
 def test_model_registry_contains_architectures_and_weight_variants():
-    assert downloads.list_models() == ["dfine_l", "dfine_m", "dfine_s", "dfine_x"]
+    assert downloads.list_models() == ["dfine_l", "dfine_m", "dfine_n", "dfine_s", "dfine_x"]
     assert downloads.list_weights("dfine_s") == ["coco", "obj2coco"]
+    assert downloads.list_weights("dfine_n") == ["coco"]
     assert downloads.list_models("segment") == [
         "dfine_l",
         "dfine_m",
@@ -26,6 +27,25 @@ def test_model_registry_contains_architectures_and_weight_variants():
         "dfine_x",
     ]
     assert downloads.list_weights("dfine_s", task="semantic") == ["coco"]
+
+
+def test_nano_detect_asset_is_coco_only_and_carries_a_notice():
+    # Decision D8: nitid1n detection is registered, with COCO weights only.
+    asset = downloads.get_model_asset("dfine_n")  # "default" falls back to coco
+    assert asset.weights == "coco"
+    assert asset.url.endswith("/dfine_n_coco.pth")
+    assert asset.filename == "dfine_n_coco_wrapped.pth"
+    assert asset.sha256 == "41973938d2784d38a9836990d805b8392855ebf611aba55f0f7add90e110744c"
+    assert asset.notice is not None and "COCO" in asset.notice
+    # Same rule as segmentation: the default variant falls back to coco when a size has
+    # no obj2coco weights, so the nano model is never refused for lack of one.
+    assert downloads.get_model_asset("dfine_n", "obj2coco").weights == "coco"
+
+
+def test_larger_detect_models_keep_obj2coco_as_default_and_have_no_notice():
+    asset = downloads.get_model_asset("dfine_s")
+    assert asset.weights == "obj2coco"
+    assert asset.notice is None
 
 
 def test_segment_asset_uses_coco_mask_checkpoint():
@@ -218,3 +238,66 @@ def test_download_semantic_model_transfers_instance_fuser(monkeypatch, tmp_path)
         for name, value in instance_model.state_dict().items()
         if name.startswith("decoder.mask_decoder.")
     )
+
+
+def test_download_nano_detect_prints_the_coco_only_notice(monkeypatch, tmp_path, capsys):
+    import hashlib
+
+    payload = b"raw"
+    asset = downloads.get_model_asset("dfine_n")
+    monkeypatch.setitem(
+        downloads.MODEL_REGISTRY["dfine_n"],
+        "coco",
+        downloads.ModelAsset(
+            model=asset.model,
+            task=asset.task,
+            weights=asset.weights,
+            url=asset.url,
+            filename=asset.filename,
+            sha256=hashlib.sha256(payload).hexdigest(),
+            notice=asset.notice,
+        ),
+    )
+
+    def fake_urlretrieve(url, filename):
+        Path(filename).write_bytes(payload)
+        return filename, None
+
+    def fake_convert(weights, config, names_file, output):
+        Path(output).write_bytes(b"wrapped")
+
+    monkeypatch.setattr(downloads, "urlretrieve", fake_urlretrieve)
+    monkeypatch.setattr(downloads, "convert_checkpoint", fake_convert)
+
+    out = downloads.download_model("dfine_n", output=tmp_path)
+
+    assert out == tmp_path / "dfine_n_coco_wrapped.pth"
+    assert "Notice: nitid1n detection weights are trained on COCO train2017 only" in (
+        capsys.readouterr().out
+    )
+
+
+def test_download_nano_detect_rejects_a_corrupted_file(monkeypatch, tmp_path):
+    def fake_urlretrieve(url, filename):
+        Path(filename).write_bytes(b"corrupted")
+        return filename, None
+
+    monkeypatch.setattr(downloads, "urlretrieve", fake_urlretrieve)
+
+    with pytest.raises(RuntimeError, match="Checksum mismatch"):
+        downloads.download_model("dfine_n", output=tmp_path)
+
+
+def test_segment_downloads_are_pinned_and_match_models_lock():
+    import json
+
+    lock = json.loads(
+        (Path(__file__).resolve().parents[2] / "studio" / "models.lock.json").read_text()
+    )
+    entries = {e["nitid_model"]: e for e in lock["entries"] if e["task"] == "segment"}
+    assert set(entries) == {f"nitid1{s}" for s in "nsmlx"}
+    for size in "nsmlx":
+        asset = downloads.get_model_asset(f"dfine_{size}", task="segment")
+        assert "/resolve/main/" not in asset.url
+        assert asset.url == entries[f"nitid1{size}"]["url"]
+        assert entries[f"nitid1{size}"]["revision"] in asset.url

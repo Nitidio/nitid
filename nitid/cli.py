@@ -7,6 +7,7 @@ Usage:
     nitid train    model=nitid1l data=coco.yaml epochs=50
     nitid val      model=nitid1l data=coco.yaml
     nitid export   model=nitid1l format=onnx
+    nitid studio   port=8000
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ COMMANDS = {
     "benchmark",
     "info",
     "bugreport",
+    "studio",
 }
 REPORT_COMMANDS = {"predict", "track", "train", "val", "export", "benchmark"}
 HELP_FLAGS = {"-h", "--help"}
@@ -65,6 +67,7 @@ Commands:
   benchmark Compare exported runtime performance on this machine
   info     Show model parameters, GFLOPs, and checkpoint size
   bugreport Create an environment-only log for a GitHub issue
+  studio   Start the local Nitid app, Nitid Studio (needs: pip install "nitid[studio]")
 
 Run "nitid COMMAND --help" for command-specific options and examples.
 Add --report to train, predict, track, val, or export to capture output and environment details.
@@ -176,7 +179,7 @@ Usage:
   nitid download [model=MODEL] [key=value ...]
 
 Options:
-  model=NAME          nitid1n (segmentation only), nitid1s, nitid1m, nitid1l, or nitid1x
+  model=NAME          nitid1n, nitid1s, nitid1m, nitid1l, or nitid1x
                       (default: nitid1l)
   task=TASK           detect, segment, or semantic (default: detect)
   weights=NAME        default, obj2coco, or coco (default: default)
@@ -388,6 +391,33 @@ Usage:
 Creates an environment-only log containing OS, Python, package, PyTorch,
 CUDA, cuDNN, and GPU information. Attach the resulting file to a GitHub issue.
 """,
+    "studio": """\
+Usage:
+  nitid studio [key=value ...] [--no-browser]
+  python -m nitid.studio [key=value ...] [--no-browser]
+
+Starts the local Nitid app (Nitid Studio). Requires the optional extra:
+  pip install "nitid[studio]"
+
+Options:
+  host=HOST           Interface to listen on (default: 127.0.0.1)
+  port=INT            TCP port; 0 picks a free port (default: 8000)
+  models=PATH         Directory for models (default: ./models)
+  open=BOOL           Open the browser when ready (default: true)
+  --no-browser        Same as open=false
+  token=TOKEN         Access token, at least 8 characters (default: random per start)
+
+The access URL, including the token, is printed at start:
+  http://127.0.0.1:PORT/#t=TOKEN
+
+Binding to an address other than loopback (for example host=0.0.0.0) requires
+an explicit token= and exposes Studio to your network over plain HTTP.
+
+Examples:
+  nitid studio
+  nitid studio port=8080 --no-browser
+  nitid studio host=0.0.0.0 token=a-long-secret-value open=false
+""",
 }
 
 
@@ -466,6 +496,16 @@ def _configure_rtsp_credentials(kwargs: dict) -> None:
 def _execute(argv: list[str]) -> None:
     """Parse and execute one command without report lifecycle handling."""
     command, kwargs = parse_args(argv)
+
+    if command == "studio":
+        # Studio parses its own raw key=value tokens (no numeric coercion) and
+        # imports FastAPI/uvicorn only when the extra is installed.
+        from nitid.studio.launcher import main as studio_main
+
+        code = studio_main(argv[2:])
+        if code:
+            raise SystemExit(code)
+        return
 
     if command == "bugreport":
         from dfine.utils.reporting import write_standalone_report

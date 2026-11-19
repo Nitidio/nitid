@@ -67,6 +67,121 @@ model.export(format="onnx", dynamic=True, simplify=False)
 
 Dynamic export currently marks the batch axis as dynamic.
 
+### Embedded metadata (`nitid_meta`)
+
+Detection and instance-segmentation ONNX files carry a self-describing JSON
+document in the ONNX `metadata_props` under the key `nitid_meta`. Without it, a
+client such as ONNX Runtime Web has no class names and cannot know how to
+prepare the input. The meta is additive: the graph, input/output names and
+computed values are identical to an export without it, and ONNX files written
+by earlier nitid versions (which have no `nitid_meta`) keep loading. It is
+written after `onnxsim`, so `simplify=True` and `simplify=False` both keep it,
+and it is written with `postprocess=True` and `postprocess=False`. The value is
+compact UTF-8 JSON with sorted keys, so two identical exports carry
+byte-identical meta. Semantic-segmentation ONNX exports and OpenVINO/TensorRT/
+TorchScript artifacts do not carry it (OpenVINO is converted from an
+intermediate ONNX file that is discarded).
+
+Read it with `nitid` installed:
+
+```python
+from dfine.export_meta import read_onnx_meta
+
+meta = read_onnx_meta("dfine_640.onnx")  # dict, or None for older files
+print(meta["names"]["0"], meta["input"]["resize"])
+```
+
+or with only `onnx` / `onnxruntime`:
+
+```python
+import json
+import onnx
+
+proto = onnx.load("dfine_640.onnx", load_external_data=False)
+meta = json.loads({p.key: p.value for p in proto.metadata_props}["nitid_meta"])
+
+import onnxruntime as ort
+
+session = ort.InferenceSession("dfine_640.onnx")
+meta = json.loads(session.get_modelmeta().custom_metadata_map["nitid_meta"])
+```
+
+Example (`nitid1s`, detection, `postprocess=True`; `names` shortened):
+
+```json
+{
+  "schema_version": 1,
+  "task": "detect",
+  "model": "nitid1s",
+  "imgsz": 640,
+  "input": {"name": "images", "shape": [1, 3, 640, 640], "dtype": "float32",
+            "range": "0-1", "color": "RGB", "resize": "squash"},
+  "outputs": [
+    {"name": "labels", "dtype": "int64"},
+    {"name": "boxes", "dtype": "float32", "format": "xyxy_input_px"},
+    {"name": "scores", "dtype": "float32"}
+  ],
+  "names": {"0": "person", "1": "bicycle"},
+  "topk": 300,
+  "default_iou": 0.85,
+  "nitid_version": "0.9.6"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `schema_version` | Shape of this document (currently `1`). |
+| `task` | `detect` or `segment`. |
+| `model` | Public model name (`nitid1s`, ...) inferred from the checkpoint architecture. Omitted when it matches no supported size; it is never an empty string. |
+| `imgsz` | Square input size in pixels. |
+| `input` | Name, shape, dtype and preprocessing. `resize: "squash"` means a plain resize to `imgsz x imgsz` that does **not** keep the aspect ratio (no letterbox); `range: "0-1"` means pixel values divided by 255 with no mean/std normalisation; `color: "RGB"`. This is what `nitid` itself does (`PIL` RGB, `T.Resize((imgsz, imgsz))`, `T.ToTensor()`). The first shape entry is the `batch` used for the export (with `dynamic=True` that axis is dynamic). |
+| `outputs` | Real output names and dtypes, in graph order. With `postprocess=True`: `labels`, `boxes`, `scores` (+ `masks` for segment). `boxes` are `xyxy` pixels in the *model input* (`imgsz`) space, so divide by `imgsz` and multiply by the original width/height to map back to the source image. `masks` carries `stride: 4`: the mask grid is `imgsz / 4` square and holds sigmoid probabilities. With `postprocess=False` the outputs are `pred_logits`, `pred_boxes` (`cxcywh_norm`: normalised centre/size) and, for segment, `pred_masks`. |
+| `names` | Class id (as a string, because JSON keys are strings) to class name. Do not rely on key order. |
+| `topk` | Rows returned per image: the post-processor keeps `min(300, num_queries x num_classes)` (focal-loss models), which can be below 300 for small models. With `postprocess=False` it is the number a client should keep. |
+| `default_iou` | nitid's default IoU threshold (`0.85`). The exported graph does not run NMS; nitid uses it only to merge flip-augmentation views. |
+| `nitid_version` | Version of the nitid library that wrote the file. |
+
+The file's own `sha256` is intentionally not in the meta, because a file cannot
+contain its own hash; whoever serves the file can publish the hash alongside it
+(Nitid Studio does: `GET /api/v1/onnx/{model}/meta` returns this document plus
+`sha256`, see [Studio](studio.md)). The document is built by
+`dfine.export_meta.build_onnx_meta` and the field names above are the canonical
+`schema_version` 1 contract.
+
+### Why `simplify=True` drops `graph.value_info`
+
+`value_info` is optional documentation of intermediate tensor shapes and types. It
+is not needed to run the model: every runtime infers shapes when it loads the graph.
+`onnxsim` rewrites the graph but keeps these annotations, and some of them end up
+wrong. In the segmentation graph, for example, the output of `Gemm_1` (`_v_2148`)
+was declared with rank 0 while its real shape is `[4, 256]`. The effects:
+
+| Consumer | Result with the stale entry |
+|---|---|
+| `onnx.checker.check_model(model, full_check=True)` | `ShapeInferenceError ... Inferred shape and existing shape differ in rank: (2) vs (0)` |
+| onnxruntime (Python) | Loads, with a warning ("Error merging shape info ... Falling back to lenient merge") |
+| onnxruntime-web 1.31.1 | Refuses to load: `ShapeInferenceError ... inferred=2 declared=0` |
+
+Since the fix, the exporter removes every `value_info` entry (main graph and
+sub-graphs) right after `onnxsim`, before the `nitid_meta` is written. Graph
+inputs, outputs, initializers, nodes and metadata are untouched, and the outputs
+are bit-identical: with a tiny segmentation checkpoint, onnxruntime returned
+exactly the same arrays before and after, and the full ONNX checker now passes.
+The file also gets a little smaller (about 40 KB on that checkpoint).
+`simplify=False` never had the problem (torch writes no `value_info`).
+Files exported by earlier versions can still contain it; the browser engine
+keeps a fallback (`stripValueInfo`) that retries without it, and you can clear
+an old file yourself:
+
+```python
+import onnx
+from dfine.exporter import drop_value_info
+
+proto = onnx.load("old_segment.onnx")
+drop_value_info(proto)
+onnx.save(proto, "old_segment_fixed.onnx")
+```
+
 ## OpenVINO
 
 Install the optional OpenVINO dependency:

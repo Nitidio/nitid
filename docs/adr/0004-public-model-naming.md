@@ -21,6 +21,13 @@ Facts that constrain the choice:
 - nitid does not redistribute pretrained weights; checkpoints are downloaded on first use from the
   sources their authors publish. If that ever changes, every weight repository must ship the upstream
   `LICENSE` and `NOTICE`, not only a sentence in a model card.
+- Apache-2.0 covers the D-FINE code and checkpoints, but the upstream README adds that checkpoints
+  trained or pretrained on Objects365 (`*_obj365`, `*_obj2coco`) may be subject to the Objects365
+  dataset terms and should not be assumed to be commercially cleared under the D-FINE licence.
+  nitid's default detection weights are `obj2coco`, so this caveat applies to `nitid1s`-`nitid1x`
+  by default. Whether the Objects365 terms restrict commercial use of the derived weights has not
+  been established; until it is, nitid documents the caveat (see `THIRD_PARTY_NOTICES.md` and
+  `docs/licensing/studio-weights.md`) and does not host `obj2coco` weights or ONNX exports.
 - The architecture may change in the future. The name must survive that without breaking users.
 - Benchmarks are cited by hardware vendors and researchers, who need to map a nitid name to the
   upstream architecture and checkpoint.

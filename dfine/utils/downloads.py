@@ -18,7 +18,10 @@ from dfine.tasks import normalize_task
 from nitid.convert_checkpoint import convert as convert_checkpoint
 
 _RELEASE_ROOT = "https://github.com/Peterande/storage/releases/download/dfinev1.0"
-_SEGMENT_RELEASE_ROOT = "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/main"
+# Pinned to a commit so that the files (and the SHA-256 values in studio/models.lock.json)
+# cannot change under a release; ``resolve/main`` would follow every later push.
+_SEGMENT_REVISION = "79572c466448db97aa2b2f029c907d8e6b2a42fc"
+_SEGMENT_RELEASE_ROOT = f"https://huggingface.co/ArgoSA/D-FINE-seg/resolve/{_SEGMENT_REVISION}"
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,7 @@ class ModelAsset:
     url: str
     filename: str
     sha256: str | None = None
+    notice: str | None = None
 
     @property
     def name(self) -> str:
@@ -45,6 +49,8 @@ def _asset(
     *,
     task: str = "detect",
     release_root: str = _RELEASE_ROOT,
+    sha256: str | None = None,
+    notice: str | None = None,
 ) -> ModelAsset:
     return ModelAsset(
         model=model,
@@ -60,10 +66,26 @@ def _asset(
                 else f"{model}_{weights}_wrapped.pth"
             )
         ),
+        sha256=sha256,
+        notice=notice,
     )
 
 
+_NANO_DETECT_NOTICE = (
+    "nitid1n detection weights are trained on COCO train2017 only: there is no "
+    "Objects365 pre-trained variant, unlike nitid1s/m/l/x."
+)
+
 MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
+    "dfine_n": {
+        "coco": _asset(
+            "dfine_n",
+            "coco",
+            "dfine_n_coco.pth",
+            sha256="41973938d2784d38a9836990d805b8392855ebf611aba55f0f7add90e110744c",
+            notice=_NANO_DETECT_NOTICE,
+        ),
+    },
     "dfine_s": {
         "obj2coco": _asset(
             "dfine_s",
@@ -195,7 +217,7 @@ def get_model_asset(
         raise ValueError(f"Unknown model {model!r}. Choose one of: {choices}")
 
     weights_key = _normalize_weights(weights)
-    if resolved_task in {"segment", "semantic"} and weights_key == DEFAULT_WEIGHTS:
+    if weights_key == DEFAULT_WEIGHTS and DEFAULT_WEIGHTS not in registry[model_key]:
         weights_key = "coco"
     variants = registry[model_key]
     if weights_key not in variants:
@@ -257,6 +279,8 @@ def download_model(
     ):
         raw_path = Path(tmp_dir) / raw_filename
         print(f"Downloading {asset.model} weights={asset.weights} from {asset.url}")
+        if asset.notice:
+            print(f"Notice: {asset.notice}")
         urlretrieve(asset.url, raw_path)
         _verify_sha256(raw_path, asset.sha256)
         print(f"Converting to nitid checkpoint: {out_path}")

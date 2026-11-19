@@ -69,7 +69,11 @@ and the instance-segmentation checkpoints by
 [D-FINE-seg](https://huggingface.co/ArgoSA/D-FINE-seg). nitid downloads them from
 those sources on first use. The public datasets used for pretraining keep their
 own terms: the checkpoints listed in [Verified models](#verified-models) are
-trained on COCO and Objects365.
+trained on COCO and Objects365. The upstream D-FINE authors note that Objects365
+checkpoints (the default `obj2coco` weights) may be subject to the Objects365 dataset
+terms and should not be assumed to be commercially cleared; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The COCO-only variants
+(`weights="coco"`) carry no such note.
 
 ## Installation
 
@@ -272,8 +276,8 @@ _Evaluated on COCO val2017 at 640x640 resolution._
 
 _Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference._  
 _Speed<sup>T4 TRT10 FP16</sup> comes from the D-FINE paper. Speed<sup>Arc B390 OV FP16</sup> is our own measurement with the same method ([how to reproduce it](docs/deployment.md#measuring-latency-and-accuracy-on-intel-hardware)): integrated Arc B390 GPU of an Intel Core Ultra X7 358H, OpenVINO 2026.4.1, mean over 1000 COCO val2017 images. COCO mAP on this GPU is within 0.1 of the table. `nitid1n` was not measured._  
-_Official checkpoints for `nitid1s/m/l/x` download automatically upon first use._  
-_† `nitid1n` has no official detection weights, so `NITID("nitid1n", task="detect")` raises an error; the row shows the published D-FINE-N figures for reference only. To use it, pass the path to your own checkpoint, or use `task="segment"`._
+_Official checkpoints for `nitid1n/s/m/l/x` download automatically upon first use._  
+_† `nitid1n` detection has COCO weights only (`dfine_n_coco.pth`, trained on COCO train2017): there is no Objects365 pre-trained variant, unlike `nitid1s/m/l/x`. `nitid download model=nitid1n` prints this notice. `nitid1n` was not measured on the Arc B390 GPU._
 
 ### Instance Segmentation (`task="segment"`)
 

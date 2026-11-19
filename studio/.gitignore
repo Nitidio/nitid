@@ -1,0 +1,10 @@
+# Build and tooling output (see also the "Nitid Studio" block in the root .gitignore)
+node_modules/
+dist/
+dist-hosted/
+dist-e2e-harness/
+.vite/
+coverage/
+*.tsbuildinfo
+# ONNX Runtime Web runtime copied by scripts/copy-ort.mjs (never commit .wasm)
+public/ort/

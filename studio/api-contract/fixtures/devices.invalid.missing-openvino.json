@@ -1,0 +1,11 @@
+{
+  "torch": {
+    "cpu": true,
+    "cuda": [
+      {
+        "index": 0,
+        "name": "NVIDIA GeForce RTX 4070"
+      }
+    ]
+  }
+}

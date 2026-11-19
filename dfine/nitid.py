@@ -99,15 +99,7 @@ def _warn_if_legacy_name(model: str | Path, *, stacklevel: int) -> None:
 def resolve_nitid_backend_model(model: str | Path, *, task: str) -> str:
     """Resolve a public ``nitid`` model name to the current backend model family."""
     spec = parse_nitid_model_name(model)
-    resolved_task = normalize_task(task)
-
-    if resolved_task == "detect" and spec.size == "n":
-        raise ValueError(
-            f"NITID({spec.name!r}, task='detect') is not available because no official "
-            "DFINE-N detection checkpoint is registered. Use nitid1s/m/l/x or a "
-            "checkpoint path."
-        )
-
+    normalize_task(task)  # validates the task name
     return f"dfine_{spec.size}"
 
 

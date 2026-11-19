@@ -1,0 +1,16 @@
+{
+  "torch": {
+    "cpu": true,
+    "cuda": [
+      "cuda:0"
+    ]
+  },
+  "openvino": {
+    "available": true,
+    "devices": [
+      "CPU",
+      "GPU",
+      "NPU"
+    ]
+  }
+}

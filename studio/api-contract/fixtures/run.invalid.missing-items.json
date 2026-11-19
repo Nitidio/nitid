@@ -1,0 +1,10 @@
+{
+  "id": "r_01",
+  "model": "nitid1s",
+  "task": "detect",
+  "backend": "openvino",
+  "device": "CPU",
+  "status": "done",
+  "error_msg": null,
+  "item_count": 1
+}

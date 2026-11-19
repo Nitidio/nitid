@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import torch
 
+from dfine.export_meta import META_TASKS, build_onnx_meta, embed_onnx_meta
 from dfine.tasks import normalize_task
 from dfine.utils.logging import LOGGER
 from dfine.utils.runs import atomic_output_path, resolve_run_dir, write_run_metadata
@@ -32,6 +35,40 @@ _POSTPROCESSED_OUTPUT_NAMES: dict[str, list[str]] = {
     "segment": ["labels", "boxes", "scores", "masks"],
     "semantic": ["semantic_logits"],
 }
+
+
+def drop_value_info(model: Any) -> int:
+    """Remove every ``value_info`` entry of an ONNX ``ModelProto`` (in place).
+
+    ``onnxsim`` rewrites the graph and keeps intermediate shape annotations that no
+    longer match it. In the segmentation graph the output of ``Gemm_1`` is declared
+    with rank 0 while its real shape is ``[4, 256]`` (``_v_2148``). Python
+    onnxruntime tolerates that with a warning ("Falling back to lenient merge") and
+    ``onnx.checker.check_model(full_check=True)`` rejects it, but onnxruntime-web
+    refuses to load the file (``ShapeInferenceError ... inferred=2 declared=0``).
+
+    ``value_info`` is optional documentation: it is not read to compute anything, and
+    every runtime re-infers shapes on load. Dropping it (in the main graph and in the
+    sub-graphs of ``If``/``Loop``/``Scan`` nodes) leaves the outputs unchanged and the
+    file smaller. Graph inputs, outputs and initializers are not touched.
+
+    Returns the number of entries removed.
+    """
+    import onnx
+
+    def clear(graph: Any) -> int:
+        removed = len(graph.value_info)
+        del graph.value_info[:]
+        for node in graph.node:
+            for attribute in node.attribute:
+                if attribute.type == onnx.AttributeProto.GRAPH:
+                    removed += clear(attribute.g)
+                elif attribute.type == onnx.AttributeProto.GRAPHS:
+                    for sub in attribute.graphs:
+                        removed += clear(sub)
+        return removed
+
+    return clear(model.graph)
 
 
 class DeployModel(torch.nn.Module):
@@ -56,10 +93,19 @@ class DeployModel(torch.nn.Module):
 
 
 class DFINEExporter:
-    def __init__(self, model, cfg: dict, device: str) -> None:
+    def __init__(
+        self,
+        model,
+        cfg: dict,
+        device: str,
+        names: Mapping[Any, Any] | None = None,
+    ) -> None:
         self.model = model
         self.cfg = cfg
         self.device = device
+        # Class names to embed in exported ONNX files (see dfine.export_meta).
+        # ``None`` (e.g. the raw-trace OpenVINO runtime) embeds no meta.
+        self.names = names
 
     def export(
         self,
@@ -130,7 +176,15 @@ class DFINEExporter:
         )
         if format == "onnx":
             return self._to_onnx(
-                out, imgsz, batch, dynamic, simplify, opset, verbose, postprocess=postprocess
+                out,
+                imgsz,
+                batch,
+                dynamic,
+                simplify,
+                opset,
+                verbose,
+                postprocess=postprocess,
+                embed_meta=True,
             )
         if format == "openvino":
             return self._to_openvino(
@@ -155,7 +209,17 @@ class DFINEExporter:
     # ── ONNX ────────────────────────────────────────────────────────────────
 
     def _to_onnx(
-        self, out, imgsz, batch, dynamic, simplify, opset, verbose, *, postprocess: bool = True
+        self,
+        out,
+        imgsz,
+        batch,
+        dynamic,
+        simplify,
+        opset,
+        verbose,
+        *,
+        postprocess: bool = True,
+        embed_meta: bool = False,
     ) -> Path:
         import onnx
 
@@ -169,10 +233,54 @@ class DFINEExporter:
                 model_onnx = onnx.load(str(temporary))
                 model_onnx, ok = onnxsim.simplify(model_onnx)
                 if ok:
+                    # onnxsim can leave stale ``value_info`` behind (see _drop_value_info).
+                    drop_value_info(model_onnx)
                     onnx.save(model_onnx, str(temporary))
+            # Embed last: onnxsim rewrites the model and may drop metadata_props.
+            if embed_meta:
+                self._embed_onnx_meta(temporary, imgsz, batch, postprocess=postprocess)
         if verbose:
             LOGGER.info("ONNX export saved to %s", out)
         return out
+
+    def _effective_topk(self) -> int:
+        """Rows the post-processor keeps per image (dfine/nn/postprocessor.py:53,68-69)."""
+        from dfine.nn.build import build_postprocessor
+
+        post = build_postprocessor(self.cfg)
+        top = int(getattr(post, "num_top_queries", 300))
+        if not getattr(post, "use_focal_loss", True):
+            queries = int(self.cfg["DFINETransformer"]["num_queries"])
+            top = min(top, queries)
+        return top
+
+    def _embed_onnx_meta(self, path: Path, imgsz: int, batch: int, *, postprocess: bool) -> None:
+        """Add the ``nitid_meta`` entry to ``path``'s ``metadata_props`` (additive only).
+
+        Skipped for semantic exports and when no class names were provided.
+        """
+        task = normalize_task(str(self.cfg.get("task", "detect")))
+        if self.names is None or task not in META_TASKS:
+            return
+        import onnx
+
+        from dfine import __version__
+        from dfine.nitid import infer_nitid_model_spec
+
+        spec = infer_nitid_model_spec(self.cfg)
+        meta = build_onnx_meta(
+            task=task,
+            imgsz=imgsz,
+            names=self.names,
+            topk=self._effective_topk(),
+            nitid_version=__version__,
+            postprocess=postprocess,
+            model=spec.name if spec else None,
+            batch=batch,
+        )
+        proto = onnx.load(str(path))
+        embed_onnx_meta(proto, meta)
+        onnx.save(proto, str(path))
 
     # ── OpenVINO ────────────────────────────────────────────────────────────
 
@@ -251,7 +359,6 @@ class DFINEExporter:
         graph exposes the decoder's raw outputs (``pred_logits``/``pred_boxes``/…)
         instead of the decoded ``(labels, boxes, scores, …)`` contract.
         """
-        from typing import Any
 
         from dfine.nn.build import build_postprocessor
 

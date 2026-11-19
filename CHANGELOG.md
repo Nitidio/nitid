@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Segmentation checkpoints are now downloaded from a pinned commit of `ArgoSA/D-FINE-seg` instead of `resolve/main`, so the files match `studio/models.lock.json`.
+- The Studio interface, its PDF report and its start-up messages call the app "Nitid app"; the command, extra and package stay `nitid studio` / `nitid[studio]`.
+- Docs: "Migrating to Studio 0.10" (`docs/studio-migration.md`) and `studio/IMPORT.md` record what was taken from the old `nitid-studio` repository and the decisions taken at the acceptance of ADR-0005, which moves to Accepted.
+- `NITID("nitid1n", task="detect")` and `nitid download model=nitid1n` now work: the official D-FINE-N COCO checkpoint (`dfine_n_coco.pth`, SHA-256 verified) is registered. It is COCO-only (no Objects365 variant) and the download prints a notice saying so; `weights=default` falls back to `coco` for sizes without `obj2coco`. Nitid Studio lists the pair.
+- ONNX exports of detection and instance-segmentation models now embed a `nitid_meta` entry in the ONNX `metadata_props` with class names, input preprocessing, output contract, `topk` and default IoU. It is additive and does not change the graph; read it with `dfine.export_meta.read_onnx_meta` or plain `onnx`/`onnxruntime` (see `docs/export.md`).
+- `nitid studio` (and `python -m nitid.studio`) starts the local Nitid Studio backend: a token-protected FastAPI app with `GET /api/v1/health`, Host/Origin guards, security headers and a single-page-app static fallback. It needs the new optional extra `pip install "nitid[studio]"`; the web UI, model management and jobs arrive in later changes.
+- Nitid Studio: `GET /api/v1/devices`, `GET /api/v1/models`, `POST /api/v1/models/{id}/download` and `GET /api/v1/jobs/{job_id}` list the installed compute devices (CPU, OpenVINO CPU/iGPU/NPU, CUDA), the available `nitid1*` models and their download state.
+- Nitid Studio packaging: `scripts/build_studio.py` builds the UI into the wheel, `scripts/verify_wheel.py` and `scripts/verify_install.py --require-ui` check size, contents and a clean install; CI has a `studio-ui` job and releases build the UI first.
+- Licensing for Studio weights: `studio/models.lock.json` pins revision, SHA-256 and SPDX licence per model, `tools/check_models_lock.py` validates it, and `THIRD_PARTY_NOTICES.md` plus `docs/licensing/studio-weights.md` document redistribution terms.
+- Nitid Studio in-browser engine: ONNX Runtime Web in a Web Worker with Pillow-exact preprocessing, `nitid_meta` decoding for detection and segmentation, and a Cache API keyed by SHA-256; parity fixtures in `studio/` compare it with the Python predictor.
+- Nitid Studio result exports: annotated PNG, JSON, CSV, YOLO TXT (with mask polygons), crops, ZIP bundle and a PDF report, plus an `ExportMenu` component; adds the lazy-loaded `fflate` dependency.
+- Nitid Studio Local panel (`/run/local`): model download, backend/device picker, multi-image upload, run polling, canvas results with confidence and class filters, and an `ExportMenu` slot for the unified UI.
+- Nitid Studio runs API (`POST/GET/DELETE /api/v1/runs`, per-item JSON and image, CSV and ZIP export, one inference at a time, lazy model loading); `/health` reports `api_version` as an integer, 401/403 use the error envelope, `nitid studio` prints the URL only once the server is listening, and Ctrl+C exits with code 0.
+- Nitid Studio ONNX endpoints: `GET /api/v1/onnx/{model}` and `/onnx/{model}/meta` export on demand (cached, serialised, ETag = sha256, 304 on `If-None-Match`).
+- Nitid Studio unified UI for both deployments: server mode, in-browser mode with ONNX Runtime Web, server-vs-browser comparison with IoU agreement, and the export menu everywhere; the hosted catalogue is set with `STUDIO_MODELS_BASE_URL`.
+- Nitid Studio end-to-end suite (`pytest studio/e2e`, real server and real Chrome) with a server-vs-browser parity test, and an optional non-blocking `studio-e2e` CI job.
+- Nitid Studio draws the mask outlines of server segmentation runs and includes them as polygons in the YOLO TXT, JSON and annotated PNG exports (server results have no pixel masks, so CSV `mask_pixels` and crops are unchanged).
+
+### Fixed
+
+- Nitid Studio sends `X-Frame-Options: DENY` and CSP `frame-ancestors 'none'` so it cannot be framed by another site, and no longer logs a favicon 404 on every page load.
+- ONNX export with `simplify=True` no longer leaves a stale `graph.value_info`, which made instance-segmentation models fail the full ONNX check and load in onnxruntime-web; outputs are bit-identical.
+
 ## [0.9.6] - 2026-11-18
 
 Metadata-only release: PyPI and the repository now present nitid.io as the

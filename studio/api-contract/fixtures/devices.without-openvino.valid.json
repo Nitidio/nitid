@@ -1,0 +1,10 @@
+{
+  "torch": {
+    "cpu": true,
+    "cuda": []
+  },
+  "openvino": {
+    "available": false,
+    "devices": []
+  }
+}

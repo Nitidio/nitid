@@ -89,7 +89,78 @@ keep the licence given there:
   License: Apache-2.0.
 - D-FINE-seg instance-segmentation checkpoints (`task="segment"`):
   https://huggingface.co/ArgoSA/D-FINE-seg.
-  License: Apache-2.0 (model card).
+  License: Apache-2.0 for the COCO checkpoints, as stated in the model card (the Hub's
+  licence tag is `other`: the same repository also holds non-commercial Cityscapes weights,
+  which nitid does not use).
 
 The checkpoints are trained on public datasets (COCO, and Objects365 for the
 detection checkpoints listed as `obj2coco`), which keep their own terms.
+
+**Objects365 caveat.** The D-FINE README states that checkpoints trained or
+pretrained on Objects365 (`*_obj365`, `*_obj2coco`) may be subject to the
+Objects365 dataset terms and should not be assumed to be commercially cleared
+under the D-FINE licence. The default detection weights of nitid (`nitid1s`,
+`nitid1m`, `nitid1l`, `nitid1x`) are `obj2coco`. If you need a checkpoint
+without this caveat, use the COCO-only variants. nitid has not established what
+the Objects365 terms allow; review them before commercial use.
+
+## Nitid Studio frontend (JavaScript bundle)
+
+The Nitid Studio single-page app (`studio/`, built into the wheel under
+`nitid/studio/static/`) bundles the following MIT-licensed libraries. The
+copyright lines below were read from the `LICENSE` files of the installed
+packages (versions locked in `studio/pnpm-lock.yaml` on 2026-11-18). Their MIT
+permission notice is reproduced once, after the list.
+
+- React 19.3.1 and React DOM 19.3.1 (`react`, `react-dom`),
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+  Source: https://github.com/react/react
+- Scheduler 0.28.0 (`scheduler`, a dependency of React DOM),
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+  Source: https://github.com/react/react
+- React Router 8.5.2 (`react-router`),
+  Copyright (c) React Training LLC 2015-2019;
+  Copyright (c) Remix Software Inc. 2020-2021;
+  Copyright (c) Shopify Inc. 2022-2023.
+  Source: https://github.com/remix-run/react-router
+
+Source URLs are the `repository` fields of the installed packages' `package.json`.
+[NV: the URLs were not fetched from here; only the package metadata and `LICENSE`
+files were read.]
+
+`react-router` also depends on `cookie-es` (MIT, Copyright (c) Pooya Parsa and
+Roman Shtylman) and `@remix-run/route-pattern` (MIT, Copyright (c) 2025
+Shopify Inc.). No identifiable code from either was found in the scaffold's
+production bundle (checked on 2026-11-18 by searching the built JavaScript for
+their names and characteristic identifiers; this is a heuristic, not a
+guarantee). If a later build includes them, list them here. The remaining
+production packages (`csstype`, `@types/react`, `@types/react-dom`) are
+type-only and add no code to the bundle.
+
+MIT License. Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including without
+limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom
+the Software is furnished to do so, subject to the following conditions: the
+above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS
+IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+The bundle's other development-time tooling (Vite, Rollup, TypeScript and
+others) is not shipped in the wheel. `scripts/check-licenses.mjs` guards the
+production dependency tree (see `docs/licensing/studio-weights.md`).
+
+## ONNX Runtime Web
+
+Added with the browser engine. This entry is a placeholder: the licence,
+copyright holder and any additional notices of ONNX Runtime Web (and of the
+`.wasm` binaries it loads at run time) must be read from the package that is
+actually installed when the engine work package lands, and recorded here
+before the first release that contains it. [NV: not verified; `microsoft/onnxruntime` was not
+reachable from this audit session.]

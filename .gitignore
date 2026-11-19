@@ -234,3 +234,10 @@ __marimo__/
 # Notebook outputs
 /outputs/
 /datasets/
+
+# Nitid Studio
+studio/node_modules/
+studio/dist/
+nitid/studio/static/
+studio/.vite/
+studio/coverage/

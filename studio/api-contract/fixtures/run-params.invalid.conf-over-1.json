@@ -1,0 +1,15 @@
+{
+  "model": "nitid1s",
+  "task": "detect",
+  "conf": 2,
+  "iou": 0.85,
+  "imgsz": 640,
+  "classes": [
+    0,
+    2
+  ],
+  "mask_threshold": 0.5,
+  "backend": "torch",
+  "device": "cpu",
+  "frame_step": 1
+}

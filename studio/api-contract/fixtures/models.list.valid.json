@@ -1,0 +1,17 @@
+[
+  {
+    "id": "nitid1s",
+    "task": "detect",
+    "size": "s",
+    "downloaded": true,
+    "source": "registry"
+  },
+  {
+    "id": "my-detector",
+    "task": "detect",
+    "size": null,
+    "downloaded": true,
+    "source": "local",
+    "path": "/home/user/models/my-detector.onnx"
+  }
+]
