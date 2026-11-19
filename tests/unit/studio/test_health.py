@@ -27,7 +27,7 @@ def test_health_payload(client):
     assert response.json() == {
         "status": "ok",
         "nitid_version": nitid.__version__,
-        "api_version": "1",
+        "api_version": 1,
     }
 
 

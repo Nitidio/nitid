@@ -120,7 +120,7 @@ examples below use `TOKEN` for the token printed at start (the part after `#t=`)
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
-# {"status":"ok","nitid_version":"0.9.6","api_version":"1"}
+# {"status":"ok","nitid_version":"0.9.6","api_version":1}
 
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/openapi.json
 ```

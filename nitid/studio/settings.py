@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 API_PREFIX = "/api/v1"
-API_VERSION = "1"
+API_VERSION = 1  # integer major version of the contract (Health.api_version)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000

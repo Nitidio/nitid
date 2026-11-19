@@ -22,7 +22,7 @@ def build_v1_router() -> APIRouter:
     router.include_router(build_models_router())  # /devices, /models, /jobs (WP-1.2)
 
     @router.get("/health")
-    def health() -> dict[str, str]:
+    def health() -> dict[str, str | int]:
         """Liveness probe. The only unauthenticated API endpoint."""
         return {"status": "ok", "nitid_version": __version__, "api_version": API_VERSION}
 

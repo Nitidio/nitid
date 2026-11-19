@@ -70,7 +70,7 @@ def test_health_over_real_http(http):
     assert response.json() == {
         "status": "ok",
         "nitid_version": nitid.__version__,
-        "api_version": "1",
+        "api_version": 1,
     }
     assert response.headers["x-content-type-options"] == "nosniff"
     assert "server" not in response.headers
