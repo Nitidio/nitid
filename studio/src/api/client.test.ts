@@ -97,4 +97,51 @@ describe("createApiClient", () => {
       .catch((e: unknown) => e);
     expect(err).toMatchObject({ kind: "timeout" });
   });
+
+  it("reads the contract error envelope into code and message", async () => {
+    const fetchImpl = mockFetch(
+      () =>
+        new Response('{"error":{"code":"payload_too_large","message":"Image too big"}}', { status: 413 }),
+    );
+    const err = await createApiClient({ getToken: () => null, fetchImpl })
+      .request("/x")
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({ kind: "http", status: 413, code: "payload_too_large", message: "Image too big" });
+  });
+
+  it("keeps the code on 401 envelopes", async () => {
+    const fetchImpl = mockFetch(
+      () => new Response('{"error":{"code":"unauthorized","message":"Bad token"}}', { status: 401 }),
+    );
+    const err = await createApiClient({ getToken: () => "t", fetchImpl })
+      .request("/x")
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({ kind: "unauthorized", code: "unauthorized", message: "Bad token" });
+  });
+
+  it("returns a Blob for responseType blob and asks for images", async () => {
+    const fetchImpl = mockFetch(() => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "image/png" } }));
+    const out = await createApiClient({ getToken: () => null, fetchImpl }).request<Blob>("/img", {
+      responseType: "blob",
+    });
+    expect(out.size).toBe(3);
+    expect(headersOf(fetchImpl).get("Accept")).toBe("image/*");
+  });
+
+  it("lets a request override the default timeout", async () => {
+    const fetchImpl = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_res, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("a", "AbortError")));
+        }),
+    );
+    const err = await createApiClient({
+      getToken: () => null,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      timeoutMs: 60_000,
+    })
+      .request("/x", { timeoutMs: 5 })
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({ kind: "timeout" });
+  });
 });

@@ -19,6 +19,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "check:size": "node scripts/check-size.mjs",
+    "smoke:local": "node scripts/smoke-local.mjs",
     "test": "vitest run",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
   },
