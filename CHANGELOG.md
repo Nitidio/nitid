@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Nitid Studio in-browser engine: ONNX Runtime Web in a Web Worker with Pillow-exact preprocessing, `nitid_meta` decoding for detection and segmentation, and a Cache API keyed by SHA-256; parity fixtures in `studio/` compare it with the Python predictor.
 - Nitid Studio result exports: annotated PNG, JSON, CSV, YOLO TXT (with mask polygons), crops, ZIP bundle and a PDF report, plus an `ExportMenu` component; adds the lazy-loaded `fflate` dependency.
 - Nitid Studio Local panel (`/run/local`): model download, backend/device picker, multi-image upload, run polling, canvas results with confidence and class filters, and an `ExportMenu` slot for the unified UI.
+- Nitid Studio runs API (`POST/GET/DELETE /api/v1/runs`, per-item JSON and image, CSV and ZIP export, one inference at a time, lazy model loading); `/health` reports `api_version` as an integer, 401/403 use the error envelope, `nitid studio` prints the URL only once the server is listening, and Ctrl+C exits with code 0.
 
 ## [0.9.6] - 2026-11-18
 
