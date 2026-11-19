@@ -89,7 +89,9 @@ keep the licence given there:
   License: Apache-2.0.
 - D-FINE-seg instance-segmentation checkpoints (`task="segment"`):
   https://huggingface.co/ArgoSA/D-FINE-seg.
-  License: Apache-2.0 (model card).
+  License: Apache-2.0 for the COCO checkpoints, as stated in the model card (the Hub's
+  licence tag is `other`: the same repository also holds non-commercial Cityscapes weights,
+  which nitid does not use).
 
 The checkpoints are trained on public datasets (COCO, and Objects365 for the
 detection checkpoints listed as `obj2coco`), which keep their own terms.

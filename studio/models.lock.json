@@ -261,6 +261,146 @@
       "hostable": false,
       "hostable_reason": "Blocked: open Objects365 caveat (upstream says not to assume commercial clearance).",
       "notes": "This is the default weights variant for nitid1s/m/l/x detection (DEFAULT_WEIGHTS in dfine/utils/downloads.py)."
+    },
+    {
+      "id": "dfine-seg-n-coco",
+      "task": "segment",
+      "nitid_model": "nitid1n",
+      "weights_variant": "coco",
+      "format": "pytorch-checkpoint",
+      "upstream_repo": "https://github.com/ArgoHA/D-FINE-seg",
+      "revision": "79572c466448db97aa2b2f029c907d8e6b2a42fc",
+      "revision_kind": "commit",
+      "url": "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/79572c466448db97aa2b2f029c907d8e6b2a42fc/dfine_seg_n_coco.pt",
+      "size_bytes": 17113439,
+      "sha256": "064477a85ea102cb2652797987aacecfc7e870a798afb4d848fa7b75b665fdb2",
+      "sha256_status": "verified",
+      "sha256_note": "LFS SHA-256 reported by the Hugging Face API (/api/models/ArgoSA/D-FINE-seg?blobs=true) at the pinned commit, 2026-11-19; not recomputed from a download here (the Hub is unreachable from the audit environment). Recompute with: python tools/hash_models_lock.py --only dfine-seg-n-coco",
+      "license": "Apache-2.0",
+      "license_source": "Model card of huggingface.co/ArgoSA/D-FINE-seg at commit 79572c466448db97aa2b2f029c907d8e6b2a42fc, licence paragraph pasted by the maintainer on 2026-11-19: the code and the COCO-pretrained checkpoints (detection, instance segmentation, person keypoints) are Apache-2.0; the Cityscapes semantic checkpoints are non-commercial and excluded. Matches the upstream README of ArgoHA/D-FINE-seg at 13385ab (read via anonymous git clone on 2026-11-18). The Hub licence tag of the repository is 'other' and the repository holds no LICENSE or NOTICE file at this commit (file list of the Hub API).",
+      "training_data": [
+        "COCO train2017"
+      ],
+      "open_caveats": [],
+      "notice_required": true,
+      "notice_files": [
+        "LICENSE"
+      ],
+      "hostable": true,
+      "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
+      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_n_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+    },
+    {
+      "id": "dfine-seg-s-coco",
+      "task": "segment",
+      "nitid_model": "nitid1s",
+      "weights_variant": "coco",
+      "format": "pytorch-checkpoint",
+      "upstream_repo": "https://github.com/ArgoHA/D-FINE-seg",
+      "revision": "79572c466448db97aa2b2f029c907d8e6b2a42fc",
+      "revision_kind": "commit",
+      "url": "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/79572c466448db97aa2b2f029c907d8e6b2a42fc/dfine_seg_s_coco.pt",
+      "size_bytes": 48119167,
+      "sha256": "07500e13824b82c9ee7422fd98736259e3bafcad65bf63f48d0c386a4ba987c1",
+      "sha256_status": "verified",
+      "sha256_note": "LFS SHA-256 reported by the Hugging Face API (/api/models/ArgoSA/D-FINE-seg?blobs=true) at the pinned commit, 2026-11-19; not recomputed from a download here (the Hub is unreachable from the audit environment). Recompute with: python tools/hash_models_lock.py --only dfine-seg-s-coco",
+      "license": "Apache-2.0",
+      "license_source": "Model card of huggingface.co/ArgoSA/D-FINE-seg at commit 79572c466448db97aa2b2f029c907d8e6b2a42fc, licence paragraph pasted by the maintainer on 2026-11-19: the code and the COCO-pretrained checkpoints (detection, instance segmentation, person keypoints) are Apache-2.0; the Cityscapes semantic checkpoints are non-commercial and excluded. Matches the upstream README of ArgoHA/D-FINE-seg at 13385ab (read via anonymous git clone on 2026-11-18). The Hub licence tag of the repository is 'other' and the repository holds no LICENSE or NOTICE file at this commit (file list of the Hub API).",
+      "training_data": [
+        "COCO train2017"
+      ],
+      "open_caveats": [],
+      "notice_required": true,
+      "notice_files": [
+        "LICENSE"
+      ],
+      "hostable": true,
+      "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
+      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_s_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+    },
+    {
+      "id": "dfine-seg-m-coco",
+      "task": "segment",
+      "nitid_model": "nitid1m",
+      "weights_variant": "coco",
+      "format": "pytorch-checkpoint",
+      "upstream_repo": "https://github.com/ArgoHA/D-FINE-seg",
+      "revision": "79572c466448db97aa2b2f029c907d8e6b2a42fc",
+      "revision_kind": "commit",
+      "url": "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/79572c466448db97aa2b2f029c907d8e6b2a42fc/dfine_seg_m_coco.pt",
+      "size_bytes": 85380411,
+      "sha256": "babb166b9cdcfaba475485bd0152aeeae8dc351561b9ec6f7b37542368800dde",
+      "sha256_status": "verified",
+      "sha256_note": "LFS SHA-256 reported by the Hugging Face API (/api/models/ArgoSA/D-FINE-seg?blobs=true) at the pinned commit, 2026-11-19; not recomputed from a download here (the Hub is unreachable from the audit environment). Recompute with: python tools/hash_models_lock.py --only dfine-seg-m-coco",
+      "license": "Apache-2.0",
+      "license_source": "Model card of huggingface.co/ArgoSA/D-FINE-seg at commit 79572c466448db97aa2b2f029c907d8e6b2a42fc, licence paragraph pasted by the maintainer on 2026-11-19: the code and the COCO-pretrained checkpoints (detection, instance segmentation, person keypoints) are Apache-2.0; the Cityscapes semantic checkpoints are non-commercial and excluded. Matches the upstream README of ArgoHA/D-FINE-seg at 13385ab (read via anonymous git clone on 2026-11-18). The Hub licence tag of the repository is 'other' and the repository holds no LICENSE or NOTICE file at this commit (file list of the Hub API).",
+      "training_data": [
+        "COCO train2017"
+      ],
+      "open_caveats": [],
+      "notice_required": true,
+      "notice_files": [
+        "LICENSE"
+      ],
+      "hostable": true,
+      "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
+      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_m_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+    },
+    {
+      "id": "dfine-seg-l-coco",
+      "task": "segment",
+      "nitid_model": "nitid1l",
+      "weights_variant": "coco",
+      "format": "pytorch-checkpoint",
+      "upstream_repo": "https://github.com/ArgoHA/D-FINE-seg",
+      "revision": "79572c466448db97aa2b2f029c907d8e6b2a42fc",
+      "revision_kind": "commit",
+      "url": "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/79572c466448db97aa2b2f029c907d8e6b2a42fc/dfine_seg_l_coco.pt",
+      "size_bytes": 132322067,
+      "sha256": "8806097678cb7184ce48992c28e314b8514e79ea2933d1cfeb1df967ff3dc5d7",
+      "sha256_status": "verified",
+      "sha256_note": "LFS SHA-256 reported by the Hugging Face API (/api/models/ArgoSA/D-FINE-seg?blobs=true) at the pinned commit, 2026-11-19; not recomputed from a download here (the Hub is unreachable from the audit environment). Recompute with: python tools/hash_models_lock.py --only dfine-seg-l-coco",
+      "license": "Apache-2.0",
+      "license_source": "Model card of huggingface.co/ArgoSA/D-FINE-seg at commit 79572c466448db97aa2b2f029c907d8e6b2a42fc, licence paragraph pasted by the maintainer on 2026-11-19: the code and the COCO-pretrained checkpoints (detection, instance segmentation, person keypoints) are Apache-2.0; the Cityscapes semantic checkpoints are non-commercial and excluded. Matches the upstream README of ArgoHA/D-FINE-seg at 13385ab (read via anonymous git clone on 2026-11-18). The Hub licence tag of the repository is 'other' and the repository holds no LICENSE or NOTICE file at this commit (file list of the Hub API).",
+      "training_data": [
+        "COCO train2017"
+      ],
+      "open_caveats": [],
+      "notice_required": true,
+      "notice_files": [
+        "LICENSE"
+      ],
+      "hostable": true,
+      "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
+      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_l_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+    },
+    {
+      "id": "dfine-seg-x-coco",
+      "task": "segment",
+      "nitid_model": "nitid1x",
+      "weights_variant": "coco",
+      "format": "pytorch-checkpoint",
+      "upstream_repo": "https://github.com/ArgoHA/D-FINE-seg",
+      "revision": "79572c466448db97aa2b2f029c907d8e6b2a42fc",
+      "revision_kind": "commit",
+      "url": "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/79572c466448db97aa2b2f029c907d8e6b2a42fc/dfine_seg_x_coco.pt",
+      "size_bytes": 258783791,
+      "sha256": "06d848ffb0ab58eb18e3500c55cfc0ffc3a2bc82baa172b944858f40afceed10",
+      "sha256_status": "verified",
+      "sha256_note": "LFS SHA-256 reported by the Hugging Face API (/api/models/ArgoSA/D-FINE-seg?blobs=true) at the pinned commit, 2026-11-19; not recomputed from a download here (the Hub is unreachable from the audit environment). Recompute with: python tools/hash_models_lock.py --only dfine-seg-x-coco",
+      "license": "Apache-2.0",
+      "license_source": "Model card of huggingface.co/ArgoSA/D-FINE-seg at commit 79572c466448db97aa2b2f029c907d8e6b2a42fc, licence paragraph pasted by the maintainer on 2026-11-19: the code and the COCO-pretrained checkpoints (detection, instance segmentation, person keypoints) are Apache-2.0; the Cityscapes semantic checkpoints are non-commercial and excluded. Matches the upstream README of ArgoHA/D-FINE-seg at 13385ab (read via anonymous git clone on 2026-11-18). The Hub licence tag of the repository is 'other' and the repository holds no LICENSE or NOTICE file at this commit (file list of the Hub API).",
+      "training_data": [
+        "COCO train2017"
+      ],
+      "open_caveats": [],
+      "notice_required": true,
+      "notice_files": [
+        "LICENSE"
+      ],
+      "hostable": true,
+      "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
+      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_x_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
     }
   ]
 }
