@@ -14,7 +14,7 @@ describe("buildPdfReport", () => {
     expect(s.trimEnd().endsWith("%%EOF")).toBe(true);
     expect(pageCount(s)).toBe(1);
     expect(declaredCount(s)).toBe(1);
-    expect(s).toContain("(Nitid Studio detection report) Tj");
+    expect(s).toContain("(Nitid app detection report) Tj");
     expect(s).toContain("(street view.JPG \\(200 x 100 px\\)) Tj");
     expect(s).toContain("(nitid1s \\(detect\\)) Tj");
     expect(s).toContain("(Server: openvino, device NPU) Tj");

@@ -138,7 +138,7 @@ def run(settings: StudioSettings) -> int:
     server = make_server(create_app(settings))
     url = access_url(settings)
 
-    print(f"Nitid Studio {__version__}")
+    print(f"Nitid app {__version__}")
     if not settings.is_loopback:
         print(
             "WARNING: Studio is listening beyond this machine. Anyone on the network who has the\n"
@@ -183,7 +183,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     missing = missing_extra_modules()
     if missing:
         print(
-            f"ERROR: Nitid Studio needs {', '.join(missing)}, which "
+            f"ERROR: Nitid app needs {', '.join(missing)}, which "
             f"{'is' if len(missing) == 1 else 'are'} not installed.\n"
             f"Install the optional extra with:\n  {INSTALL_HINT}",
             file=sys.stderr,

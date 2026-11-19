@@ -18,7 +18,10 @@ from dfine.tasks import normalize_task
 from nitid.convert_checkpoint import convert as convert_checkpoint
 
 _RELEASE_ROOT = "https://github.com/Peterande/storage/releases/download/dfinev1.0"
-_SEGMENT_RELEASE_ROOT = "https://huggingface.co/ArgoSA/D-FINE-seg/resolve/main"
+# Pinned to a commit so that the files (and the SHA-256 values in studio/models.lock.json)
+# cannot change under a release; ``resolve/main`` would follow every later push.
+_SEGMENT_REVISION = "79572c466448db97aa2b2f029c907d8e6b2a42fc"
+_SEGMENT_RELEASE_ROOT = f"https://huggingface.co/ArgoSA/D-FINE-seg/resolve/{_SEGMENT_REVISION}"
 
 
 @dataclass(frozen=True)

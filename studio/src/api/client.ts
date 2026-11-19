@@ -124,7 +124,7 @@ export function createApiClient(options: ClientOptions = {}): ApiClient {
       if (timedOut) {
         throw new ApiError("timeout", `Request timed out after ${timeoutMs} ms`, undefined, { cause });
       }
-      throw new ApiError("network", "Could not reach the Nitid Studio server", undefined, { cause });
+      throw new ApiError("network", "Could not reach the Nitid app server", undefined, { cause });
     } finally {
       clearTimeout(timer);
       req.signal?.removeEventListener("abort", onCallerAbort);

@@ -286,3 +286,18 @@ def test_download_nano_detect_rejects_a_corrupted_file(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError, match="Checksum mismatch"):
         downloads.download_model("dfine_n", output=tmp_path)
+
+
+def test_segment_downloads_are_pinned_and_match_models_lock():
+    import json
+
+    lock = json.loads(
+        (Path(__file__).resolve().parents[2] / "studio" / "models.lock.json").read_text()
+    )
+    entries = {e["nitid_model"]: e for e in lock["entries"] if e["task"] == "segment"}
+    assert set(entries) == {f"nitid1{s}" for s in "nsmlx"}
+    for size in "nsmlx":
+        asset = downloads.get_model_asset(f"dfine_{size}", task="segment")
+        assert "/resolve/main/" not in asset.url
+        assert asset.url == entries[f"nitid1{size}"]["url"]
+        assert entries[f"nitid1{size}"]["revision"] in asset.url

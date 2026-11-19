@@ -9,7 +9,7 @@ export function About() {
     <>
       <h1>About</h1>
       <p>
-        Nitid Studio is a small workbench for trying Nitid models. It can run a model on this
+        Nitid app is a small workbench for trying Nitid models. It can run a model on this
         computer through a local Python server, or entirely inside your browser.
       </p>
       <dl>

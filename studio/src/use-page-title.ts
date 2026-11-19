@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const BASE = "Nitid Studio";
+const BASE = "Nitid app";
 
 /** Sets `document.title` so each route has a distinct, descriptive title. */
 export function usePageTitle(title?: string): void {

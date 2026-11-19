@@ -143,8 +143,8 @@ the card repeats the separation between COCO weights (hostable) and Cityscapes w
 
 **Result of the Hub query (2026-11-19, `tools/hash_models_lock.py --huggingface-only`, run by the maintainer):**
 
-- Commit: `79572c466448db97aa2b2f029c907d8e6b2a42fc` (pinned in the lock; nitid's own downloader
-  still follows `.../resolve/main/`, see "Findings" below).
+- Commit: `79572c466448db97aa2b2f029c907d8e6b2a42fc` (pinned in the lock and, since 2026-11-19, in
+  nitid's own downloader; see "Findings" below).
 - Hub licence tag: **`other`**, not `apache-2.0`. The card's text paragraph (above) is what says
   COCO checkpoints are Apache-2.0; the tag alone does not.
 - **No `LICENSE` and no `NOTICE` file** in the repository at that commit (files: `.gitattributes`,
@@ -172,10 +172,13 @@ the card repeats the separation between COCO weights (hostable) and Cityscapes w
    caveat; the card paragraph above does not address them.
 2. The Cityscapes semantic weights (`dfine_sem_{n,s,m,l,x}_cityscapes.pt`) are present at this
    commit and stay excluded (non-commercial).
-3. nitid's downloader uses `https://huggingface.co/ArgoSA/D-FINE-seg/resolve/main/...`
-   (`dfine/utils/downloads.py`), a moving ref: a new upstream upload under the same file name would
-   change what users get while the lock still says otherwise. Pinning that URL to the commit is a
-   product change left to the maintainers (DR-25).
+3. nitid's downloader used `https://huggingface.co/ArgoSA/D-FINE-seg/resolve/main/...`, a moving
+   ref: a new upstream upload under the same file name would have changed what users get while the
+   lock still said otherwise. **Resolved 2026-11-19 (owner's decision):** `dfine/utils/downloads.py`
+   now downloads from `.../resolve/79572c46.../`, and a unit test checks that every segmentation URL
+   equals the one in the lock. The downloader does not yet verify the SHA-256 of these files (the
+   hashes come from the Hub API and have not been recomputed from a download), so a wrong value
+   would block every user; add `sha256=` to the segmentation assets after recomputing them.
 
 To recompute the hashes from a real download (recommended before hosting), on a machine that can
 reach the Hub: `python tools/hash_models_lock.py --only dfine-seg-s-coco,dfine-seg-m-coco,...`.

@@ -54,7 +54,7 @@ Each one is reversible unless noted.
 
 | # | Decision | Outcome |
 | --- | --- | --- |
-| D4 | Name and fate of the old site, the installer and the old repository | The product is called "Nitid app" for people and `nitid studio` / `nitid[studio]` in commands and packages. [NV: the owner answered "Nitid app"; read as the user-facing name of this single app, command and package names unchanged]. The old installer is retired or marked obsolete; the marketing site and the old repository are archived or moved once the import is merged |
+| D4 | Name and fate of the old site, the installer and the old repository | The app is called **Nitid app** in the interface, the PDF report and the start-up messages (changed 2026-11-19 at the owner's request). Command, extra and package stay `nitid studio` / `nitid[studio]`, and the docs keep "Nitid Studio" as the project name. The old installer is retired or marked obsolete; the marketing site and the old repository are archived or moved once the import is merged |
 | D5 | History | Curated snapshot with `studio/IMPORT.md`, no history |
 | D7 | `model1*` aliases | Kept until 0.11 (they already warn with `DeprecationWarning`) |
 | D8 | `nitid1n` detection | Registered with a "COCO only" notice (`dfine_n_coco.pth`, SHA-256 verified) |

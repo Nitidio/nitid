@@ -36,7 +36,7 @@ export function AppRoutes() {
         Skip to content
       </a>
       <header className="site-header">
-        <span className="brand">Nitid Studio</span>
+        <span className="brand">Nitid app</span>
         <MainNav />
       </header>
       <main id="main" tabIndex={-1}>

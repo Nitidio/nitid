@@ -288,7 +288,7 @@
       ],
       "hostable": true,
       "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
-      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_n_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+      "notes": "nitid downloads this file from the pinned commit (dfine/utils/downloads.py, since decision DR-25); a unit test keeps the downloader and this entry in step."
     },
     {
       "id": "dfine-seg-s-coco",
@@ -316,7 +316,7 @@
       ],
       "hostable": true,
       "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
-      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_s_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+      "notes": "nitid downloads this file from the pinned commit (dfine/utils/downloads.py, since decision DR-25); a unit test keeps the downloader and this entry in step."
     },
     {
       "id": "dfine-seg-m-coco",
@@ -344,7 +344,7 @@
       ],
       "hostable": true,
       "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
-      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_m_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+      "notes": "nitid downloads this file from the pinned commit (dfine/utils/downloads.py, since decision DR-25); a unit test keeps the downloader and this entry in step."
     },
     {
       "id": "dfine-seg-l-coco",
@@ -372,7 +372,7 @@
       ],
       "hostable": true,
       "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
-      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_l_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+      "notes": "nitid downloads this file from the pinned commit (dfine/utils/downloads.py, since decision DR-25); a unit test keeps the downloader and this entry in step."
     },
     {
       "id": "dfine-seg-x-coco",
@@ -400,7 +400,7 @@
       ],
       "hostable": true,
       "hostable_reason": "Passes the gate: Apache-2.0 allowlisted for the COCO checkpoints per the model card and upstream README, pinned commit, sha256 verified (LFS), no open caveats. Before hosting: the Hub repository ships no LICENSE/NOTICE, so the upstream LICENSE of ArgoHA/D-FINE-seg must travel with the files, and the Hub licence tag is 'other'. A legal decision, not a technical one.",
-      "notes": "nitid downloads this file today from .../resolve/main/dfine_seg_x_coco.pt (dfine/utils/downloads.py), a moving ref; this entry pins the commit."
+      "notes": "nitid downloads this file from the pinned commit (dfine/utils/downloads.py, since decision DR-25); a unit test keeps the downloader and this entry in step."
     }
   ]
 }

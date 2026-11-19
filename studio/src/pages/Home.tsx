@@ -13,7 +13,7 @@ export function Home() {
 
   return (
     <>
-      <h1>Nitid Studio</h1>
+      <h1>Nitid app</h1>
       <p className="lead">Choose where the model runs.</p>
 
       <p role="status" className="status">

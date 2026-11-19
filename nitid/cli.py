@@ -67,7 +67,7 @@ Commands:
   benchmark Compare exported runtime performance on this machine
   info     Show model parameters, GFLOPs, and checkpoint size
   bugreport Create an environment-only log for a GitHub issue
-  studio   Start the local Nitid Studio web app (needs: pip install "nitid[studio]")
+  studio   Start the local Nitid app, Nitid Studio (needs: pip install "nitid[studio]")
 
 Run "nitid COMMAND --help" for command-specific options and examples.
 Add --report to train, predict, track, val, or export to capture output and environment details.
@@ -396,7 +396,7 @@ Usage:
   nitid studio [key=value ...] [--no-browser]
   python -m nitid.studio [key=value ...] [--no-browser]
 
-Starts the local Nitid Studio web app. Requires the optional extra:
+Starts the local Nitid app (Nitid Studio). Requires the optional extra:
   pip install "nitid[studio]"
 
 Options:

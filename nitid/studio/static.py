@@ -29,7 +29,7 @@ _MEDIA_TYPES = {
 }
 
 UI_NOT_BUILT_MESSAGE = """\
-Nitid Studio is running, but its web UI is not built into this installation.
+Nitid app is running, but its web UI is not built into this installation.
 
 The API is available (try /api/v1/health), but there is no static/index.html to serve.
 

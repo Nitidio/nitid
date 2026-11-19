@@ -196,7 +196,7 @@ export function buildPdfReport(input: PdfReportInput): Uint8Array {
   const line = (s: string, x: number, yy: number, size: number, bold = false, maxW = contentW): void =>
     text(fitText(s, size, maxW), x, yy, size, bold);
 
-  line("Nitid Studio detection report", MARGIN, y - 16, 18, true);
+  line("Nitid app detection report", MARGIN, y - 16, 18, true);
   y -= 34;
 
   const meta: Array<[string, string]> = [
@@ -301,7 +301,7 @@ export function buildPdfReport(input: PdfReportInput): Uint8Array {
   const created = pdfDate(results.createdAt);
   b.object(
     5,
-    `<< /Title ${literal(toWinAnsi(`Nitid Studio report: ${results.image.name}`))} /Producer (Nitid Studio)${created ? ` /CreationDate (${created})` : ""} >>`,
+    `<< /Title ${literal(toWinAnsi(`Nitid app report: ${results.image.name}`))} /Producer (Nitid app)${created ? ` /CreationDate (${created})` : ""} >>`,
   );
   if (info && jpeg) {
     b.object(
