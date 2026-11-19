@@ -59,7 +59,11 @@ def _resolve_inside(root: Path, rel_path: str) -> Path | None:
 def spa_response(static_dir: Path, rel_path: str) -> Response:
     """Answer a GET for ``rel_path`` (no leading slash) outside ``/api/v1``."""
     if rel_path == "api" or rel_path.startswith("api/"):
-        return JSONResponse({"detail": "Not Found"}, status_code=404)
+        return JSONResponse(
+            {"error": {"code": "not_found", "message": "Not found."}},
+            status_code=404,
+            headers={"Cache-Control": "no-store"},
+        )
 
     root = static_dir.resolve()
     if rel_path:
