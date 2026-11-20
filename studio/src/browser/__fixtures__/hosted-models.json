@@ -1,0 +1,25 @@
+{
+  "models": [
+    {
+      "id": "nitid1n",
+      "task": "detect",
+      "url": "nitid1n-detect.onnx",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "label": "nitid1n (detect, coco)"
+    },
+    {
+      "id": "nitid1s",
+      "task": "detect",
+      "url": "nitid1s-detect.onnx",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "label": "nitid1s (detect, coco)"
+    },
+    {
+      "id": "nitid1s",
+      "task": "segment",
+      "url": "nitid1s-segment.onnx",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "label": "nitid1s (segment, coco)"
+    }
+  ]
+}

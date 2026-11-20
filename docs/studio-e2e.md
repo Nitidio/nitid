@@ -160,3 +160,9 @@ all queries of a class the same score.
 - Mobile layouts and accessibility audits are not part of this suite.
 - Exports (PNG/CSV/ZIP/PDF) are covered by the unit tests, not here.
 - The suite has not run in GitHub Actions yet `[NV]`.
+
+## Hosted site (no backend)
+
+`studio/e2e/test_studio_hosted.py` wraps `pnpm run smoke:hosted`: the hosted build, a fixture model bundle,
+`scripts/assemble_hosted.py`, the production Cloudflare `_headers` and real Chrome, with **no Python backend**.
+See [the hosted site](studio-hosted.md). Same skip rules as the rest of this folder.

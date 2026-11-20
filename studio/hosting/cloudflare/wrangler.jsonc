@@ -1,0 +1,25 @@
+// Cloudflare Workers "static assets" deployment of the hosted Nitid app (no Worker script).
+// Deploy (the workflow .github/workflows/studio-hosted.yml does this; secrets are NOT in this file):
+//   python scripts/assemble_hosted.py --bundle <bundle folder> --clean
+//   npx wrangler deploy --config studio/hosting/cloudflare/wrangler.jsonc
+// Reference: https://developers.cloudflare.com/workers/static-assets/
+// Setup, custom domain, rollback and limits: docs/studio-hosted.md
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "nitid-app",
+  "compatibility_date": "2026-11-20",
+  "assets": {
+    // Relative to this file: the folder written by scripts/assemble_hosted.py (UI + models/ + _headers).
+    "directory": "../../dist-hosted-site",
+    // Client-side routes (/run/browser, ...) get index.html with status 200.
+    "not_found_handling": "single-page-application"
+  }
+  // The default deploy target is the free https://nitid-app.<account>.workers.dev URL: it needs no DNS.
+  // Custom domain (app.nitid.io): deliberately NOT enabled here. It needs an ACTIVE Cloudflare zone for
+  // nitid.io (a full setup: nameservers moved to Cloudflare), and the hostname must have no existing
+  // CNAME record; Cloudflare then creates the DNS record and certificate itself. A deploy that carries
+  // this route before the zone exists fails. Once the zone is active, either add the domain in the
+  // dashboard (Workers & Pages > nitid-app > Settings > Domains & Routes > Add > Custom Domain) or
+  // uncomment the next line. See docs/studio-hosted.md, "Custom domain".
+  // ,"routes": [{ "pattern": "app.nitid.io", "custom_domain": true }]
+}

@@ -1,0 +1,183 @@
+name: Studio hosted (Cloudflare)
+
+# Builds the hosted Nitid app (browser-only, no backend), assembles it with the model bundle, runs the
+# browser smoke test and, only when asked, deploys it to Cloudflare. Manual only: nothing here runs on
+# push or pull request. Setup (account, API token, secrets, domain) and rollback: docs/studio-hosted.md
+#
+# Secrets the owner must create (Settings > Secrets and variables > Actions), never in the repository:
+#   CLOUDFLARE_API_TOKEN   token with "Workers Scripts: Edit" (add "Workers Routes/Zone: Edit" for a custom domain)
+#   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account id
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Deploy to Cloudflare after the checks pass. Leave off for a dry run (build, assemble, smoke test)."
+        type: boolean
+        default: false
+  # Later, to publish on every release, uncomment (the deploy gate below must then be reconsidered):
+  # release:
+  #   types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-hosted
+  cancel-in-progress: false
+
+env:
+  STUDIO_MODELS_BASE_URL: /models/
+
+jobs:
+  build-ui:
+    name: Build the hosted UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: studio
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm (version pinned in package.json)
+        run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check the frontend
+        run: pnpm run check
+
+      # STUDIO_MODELS_BASE_URL=/models/ comes from the workflow env: the models are served from the same origin.
+      - name: Build the hosted UI
+        run: pnpm run build:hosted
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hosted-ui
+          path: studio/dist-hosted
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-bundle:
+    name: Publish the model bundle
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_DIR: ${{ github.workspace }}/bundle
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require the bundle tool
+        run: |
+          if [ ! -f tools/publish_models.py ]; then
+            echo "::error::tools/publish_models.py is not on this branch yet (it lands in the studio/hosted-pipeline pull request)."
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra train
+
+      - name: Publish the bundle (models.json, ONNX files, SHA256SUMS, licences)
+        # Only size n: every file must be under the 25 MiB Cloudflare static-assets limit (nitid1s is 39.7 MiB, see docs/studio-hosted-models.md).
+        run: uv run python tools/publish_models.py --out "$BUNDLE_DIR" --sizes n
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hosted-bundle
+          path: bundle
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: Assemble and smoke-test
+    needs: [build-ui, publish-bundle]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hosted-ui
+          path: studio/dist-hosted
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hosted-bundle
+          path: bundle
+
+      # Standard library only: validates models.json, sha256, forbidden files and Cloudflare limits.
+      - name: Assemble studio/dist-hosted-site
+        run: python scripts/assemble_hosted.py --bundle bundle --clean
+
+      - name: Show what will be deployed
+        run: |
+          find studio/dist-hosted-site -maxdepth 2 | sort
+          du -sh studio/dist-hosted-site
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm (version pinned in package.json)
+        run: corepack enable
+
+      - name: Install the frontend dependencies
+        working-directory: studio
+        run: pnpm install --frozen-lockfile
+
+      # playwright-core only drives the Chrome that the runner already has; no browser download.
+      - name: Install playwright-core (outside the repository)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" --no-audit --no-fund playwright-core
+          echo "PLAYWRIGHT_CORE_PATH=$RUNNER_TEMP/pw/node_modules/playwright-core" >> "$GITHUB_ENV"
+          echo "CHROME_PATH=$(command -v google-chrome)" >> "$GITHUB_ENV"
+
+      # Real Chrome, the production headers and a fixture bundle, with no backend. Fails the run on any
+      # console error, /api/* request or loss of cross-origin isolation.
+      - name: Smoke test the hosted site
+        working-directory: studio
+        run: pnpm run smoke:hosted
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hosted-site
+          path: studio/dist-hosted-site
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: Deploy to Cloudflare
+    # Nothing deploys by accident: the run must be started by hand with "deploy" ticked.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy == true }}
+    needs: assemble
+    runs-on: ubuntu-latest
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hosted-site
+          path: studio/dist-hosted-site
+
+      # The config is studio/hosting/cloudflare/wrangler.jsonc (assets-only Worker "nitid-app").
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config studio/hosting/cloudflare/wrangler.jsonc
