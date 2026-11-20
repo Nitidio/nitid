@@ -145,8 +145,10 @@ must be below 25 MiB too, which is a real constraint for the larger model sizes.
 
 The workflow `.github/workflows/studio-hosted.yml` is **manual only** (`workflow_dispatch`). It builds the UI,
 publishes the bundle, assembles, runs the smoke test and, only if you tick **deploy**, deploys. Nothing
-runs on push or pull request. (`tools/publish_models.py` arrives in a sibling pull request; until it is on
-the branch the bundle job stops with a clear message. `[NV]` its command line.)
+runs on push or pull request. The bundle job runs `tools/publish_models.py --sizes n`: only `nitid1n`
+(14.7 MiB) fits under Cloudflare's 25 MiB per-file limit for static assets; `nitid1s` is 39.7 MiB. Serving
+larger sizes from the same hostname needs another store (for example R2 behind a Worker) and is not part of
+this first release.
 
 ### What the owner does by hand
 

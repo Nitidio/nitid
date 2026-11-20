@@ -57,7 +57,7 @@ the browser does not read it. No `.pth`/`.pt` file is ever written to the bundle
 
 ```bash
 uv sync --extra dev                                   # onnx, onnxsim, jsonschema
-uv run python -m tools.publish_models --out dist-models                 # n and s (default)
+uv run python -m tools.publish_models --out dist-models                 # n and s (default); NOTE: the hosted site can only serve n (25 MiB per-file limit), use --sizes n
 uv run python -m tools.check_hosted_bundle dist-models                  # validate
 ```
 

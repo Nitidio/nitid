@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Nitid app, hosted deployment (browser only, no Python server): `pnpm run build:hosted`, Cloudflare headers and `wrangler.jsonc` under `studio/hosting/cloudflare/`, `scripts/assemble_hosted.py`, a hosted smoke test without backend (`pnpm run smoke:hosted`) and a manual-only workflow `studio-hosted.yml` (nothing deploys unless `deploy` is ticked). `tools/publish_models.py` and `tools/check_hosted_bundle.py` build and validate the static model bundle (`models.json`, ONNX, SHA-256, licences) from the `hostable` entries of `studio/models.lock.json`. Measured ONNX sizes at 640 px: nitid1n 14.7 MiB, s 39.7, m 74.1, l 118.1, x 236.2; Cloudflare static assets allow 25 MiB per file, so the first hosted release serves only `nitid1n`. See `docs/studio-hosted.md` and `docs/studio-hosted-models.md`.
 - Segmentation checkpoints are now downloaded from a pinned commit of `ArgoSA/D-FINE-seg` instead of `resolve/main`, so the files match `studio/models.lock.json`.
 - The Studio interface, its PDF report and its start-up messages call the app "Nitid app"; the command, extra and package stay `nitid studio` / `nitid[studio]`.
 - Docs: "Migrating to Studio 0.10" (`docs/studio-migration.md`) and `studio/IMPORT.md` record what was taken from the old `nitid-studio` repository and the decisions taken at the acceptance of ADR-0005, which moves to Accepted.

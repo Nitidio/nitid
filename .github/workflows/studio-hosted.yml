@@ -62,8 +62,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # tools/publish_models.py lands in a sibling pull request (branch studio/hosted-pipeline). Until it is on
-  # the branch this workflow runs from, this job stops with a clear message instead of guessing.
   publish-bundle:
     name: Publish the model bundle
     runs-on: ubuntu-latest
@@ -89,7 +87,8 @@ jobs:
         run: uv sync --extra dev --extra train
 
       - name: Publish the bundle (models.json, ONNX files, SHA256SUMS, licences)
-        run: uv run python tools/publish_models.py --out "$BUNDLE_DIR"   # [NV] CLI of the sibling PR; adjust if it differs
+        # Only size n: every file must be under the 25 MiB Cloudflare static-assets limit (nitid1s is 39.7 MiB, see docs/studio-hosted-models.md).
+        run: uv run python tools/publish_models.py --out "$BUNDLE_DIR" --sizes n
 
       - uses: actions/upload-artifact@v4
         with:
