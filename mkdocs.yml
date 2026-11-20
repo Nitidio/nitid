@@ -37,6 +37,7 @@ nav:
   - Command Line: cli.md
   - Nitid Studio: studio.md
   - Migrating to Studio 0.10: studio-migration.md
+  - Studio hosted site: studio-hosted.md
   - Fine-tuning: fine_tuning.md
   - "Guide: CUDA and OpenVINO": training_cuda_openvino.md
   - Export: export.md
