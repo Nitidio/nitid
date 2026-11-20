@@ -22,7 +22,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
-import { BOXES_IN, NAMES, ONNX, PNG, S, SHA, metaFor } from "./lib/tiny-model.mjs";
+import { BOXES_IN, NAMES, ONNX, PNG, S, SHA, metaFor } from "./helpers/tiny-model.mjs";
 
 const require = createRequire(import.meta.url);
 function loadPlaywright() {
@@ -46,7 +46,7 @@ const { chromium } = loadPlaywright();
 const localDist = resolve(process.env.STUDIO_OUT_DIR ?? "../nitid/studio/static");
 if (!existsSync(join(localDist, "index.html"))) throw new Error(`Build first: ${localDist}/index.html missing`);
 
-/* A white PNG and a tiny ONNX file (constant outputs): see scripts/lib/tiny-model.mjs. */
+/* A white PNG and a tiny ONNX file (constant outputs): see scripts/helpers/tiny-model.mjs. */
 
 /* ---------------- mock servers ---------------- */
 const TOKEN = "smoke-token";

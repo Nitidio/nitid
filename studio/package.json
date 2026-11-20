@@ -23,7 +23,7 @@
     "smoke:unified": "node scripts/smoke-unified.mjs",
     "smoke:hosted": "node scripts/smoke-hosted.mjs",
     "test": "vitest run",
-    "test:scripts": "node --test scripts/lib/*.test.mjs",
+    "test:scripts": "node --test scripts/helpers/*.test.mjs",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run test:scripts && pnpm run build"
   },
   "dependencies": {

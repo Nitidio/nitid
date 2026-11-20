@@ -6,7 +6,7 @@
 // What it does, end to end, with the same pieces that production uses:
 //   1. builds the UI with `vite build --mode hosted` and STUDIO_MODELS_BASE_URL=/models/ (or reuses
 //      SMOKE_HOSTED_UI);
-//   2. writes a fixture model bundle (a tiny ONNX built by scripts/lib/tiny-model.mjs, models.json,
+//   2. writes a fixture model bundle (a tiny ONNX built by scripts/helpers/tiny-model.mjs, models.json,
 //      SHA256SUMS, a licence file);
 //   3. runs scripts/assemble_hosted.py on both (the real deploy gate) into a temporary site folder;
 //   4. serves that folder with a static server that applies hosting/cloudflare/_headers (the production
@@ -25,8 +25,8 @@ import { readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { headersFor, parseHeadersFile } from "./lib/cf-headers.mjs";
-import { ONNX, PNG, SHA } from "./lib/tiny-model.mjs";
+import { headersFor, parseHeadersFile } from "./helpers/cf-headers.mjs";
+import { ONNX, PNG, SHA } from "./helpers/tiny-model.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const studioDir = resolve(here, "..");
