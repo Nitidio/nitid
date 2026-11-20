@@ -21,8 +21,10 @@
     "check:size": "node scripts/check-size.mjs",
     "smoke:local": "node scripts/smoke-local.mjs",
     "smoke:unified": "node scripts/smoke-unified.mjs",
+    "smoke:hosted": "node scripts/smoke-hosted.mjs",
     "test": "vitest run",
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
+    "test:scripts": "node --test scripts/lib/*.test.mjs",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run test:scripts && pnpm run build"
   },
   "dependencies": {
     "fflate": "^0.8.3",
