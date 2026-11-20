@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Default detection weights are now the COCO-only `coco` checkpoints** (ADR-0006), not the Objects365+COCO `obj2coco` ones: the D-FINE authors say `obj2coco` checkpoints should not be assumed to be commercially cleared and nitid has not established what the Objects365 terms allow. `NITID("nitid1s")` and `nitid download` now fetch `dfine_<size>_coco_wrapped.pth`. Published COCO mAP of the defaults: S 48.5, M 52.3, L 54.0, X 55.8 (was 50.7, 55.1, 57.3, 59.3). To keep the previous weights pass `weights="obj2coco"` / `weights=obj2coco`; downloading them prints the Objects365 notice. Existing `*_obj2coco_wrapped.pth` files still load by path.
+
 ### Added
 
 - Segmentation checkpoints are now downloaded from a pinned commit of `ArgoSA/D-FINE-seg` instead of `resolve/main`, so the files match `studio/models.lock.json`.

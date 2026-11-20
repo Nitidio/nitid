@@ -14,6 +14,7 @@ Numbers up to 0003 were used before the first public release and are retired.
 | --- | ----- | ------ |
 | [0004](0004-public-model-naming.md) | Public model naming (`nitid<version><size>`) | Accepted |
 | [0005](0005-nitid-studio.md) | Nitid Studio, a web app inside the nitid library | Accepted |
+| [0006](0006-coco-default-detection-weights.md) | Default detection weights are COCO-only | Accepted |
 
 ## Convention
 

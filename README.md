@@ -69,11 +69,11 @@ and the instance-segmentation checkpoints by
 [D-FINE-seg](https://huggingface.co/ArgoSA/D-FINE-seg). nitid downloads them from
 those sources on first use. The public datasets used for pretraining keep their
 own terms: the checkpoints listed in [Verified models](#verified-models) are
-trained on COCO and Objects365. The upstream D-FINE authors note that Objects365
-checkpoints (the default `obj2coco` weights) may be subject to the Objects365 dataset
-terms and should not be assumed to be commercially cleared; see
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The COCO-only variants
-(`weights="coco"`) carry no such note.
+trained on COCO, and optionally Objects365. The default weights (`coco`) are trained on COCO
+only. The upstream D-FINE authors note that Objects365 checkpoints (`weights="obj2coco"`, opt-in)
+may be subject to the Objects365 dataset terms and should not be assumed to be commercially
+cleared; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). nitid prints that notice when you
+download them.
 
 ## Installation
 
@@ -269,13 +269,14 @@ _Evaluated on COCO val2017 at 640x640 resolution._
 | Model Alias | Architecture | COCO mAP<sup>50-95</sup> _(vs YOLO11)_ | Speed<sup>T4 TRT10 FP16</sup> _(vs YOLO11)_ | Speed<sup>Arc B390 OV FP16</sup> | Params | FLOPs |                                                    Config                                                    |                                       Official Checkpoint                                        |
 | :---------- | :----------- | :------------------------------------: | :-----------------------------------------: | :------------------------------: | :----: | :---: | :----------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------: |
 | `nitid1n`† | **D-FINE-N** |           **42.8** _(40.9)_            |           **2.12 ms** _(1.70 ms)_           |                —                 |  4.0M  |  7B   |        [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/dfine_hgnetv2_n_coco.yml)         |     [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth)     |
-| `nitid1s`   | **D-FINE-S** |           **50.7** _(48.6)_            |           **3.49 ms** _(2.50 ms)_           |           **5.22 ms**            | 10.0M  |  25B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth)   |
-| `nitid1m`   | **D-FINE-M** |           **55.1** _(53.1)_            |           **5.62 ms** _(4.70 ms)_           |           **9.58 ms**            | 19.0M  |  57B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth)   |
-| `nitid1l`   | **D-FINE-L** |           **57.3** _(55.0)_            |           **8.07 ms** _(6.20 ms)_           |           **12.14 ms**           | 31.0M  |  91B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
-| `nitid1x`   | **D-FINE-X** |           **59.3** _(57.5)_            |          **12.89 ms** _(11.80 ms)_          |           **17.49 ms**           | 62.0M  | 202B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth)   |
+| `nitid1s`   | **D-FINE-S** |           **48.5** _(48.6)_            |           **3.49 ms** _(2.50 ms)_           |           **5.22 ms**            | 10.0M  |  25B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth)   |
+| `nitid1m`   | **D-FINE-M** |           **52.3** _(53.1)_            |           **5.62 ms** _(4.70 ms)_           |           **9.58 ms**            | 19.0M  |  57B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth)   |
+| `nitid1l`   | **D-FINE-L** |           **54.0** _(55.0)_            |           **8.07 ms** _(6.20 ms)_           |           **12.14 ms**           | 31.0M  |  91B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_l_obj2coco.yml) | [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_l_obj2coco_e25.pth) |
+| `nitid1x`   | **D-FINE-X** |           **55.8** _(57.5)_            |          **12.89 ms** _(11.80 ms)_          |           **17.49 ms**           | 62.0M  | 202B  | [yml](https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_x_obj2coco.yml) |   [pth](https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_x_obj2coco.pth)   |
 
 _Numbers in parentheses correspond to the equivalent YOLO11 model (YOLO11n/s/m/l/x) for quick reference._  
 _Speed<sup>T4 TRT10 FP16</sup> comes from the D-FINE paper. Speed<sup>Arc B390 OV FP16</sup> is our own measurement with the same method ([how to reproduce it](docs/deployment.md#measuring-latency-and-accuracy-on-intel-hardware)): integrated Arc B390 GPU of an Intel Core Ultra X7 358H, OpenVINO 2026.4.1, mean over 1000 COCO val2017 images. COCO mAP on this GPU is within 0.1 of the table. `nitid1n` was not measured._  
+_The detection table shows the default COCO-only weights (`weights="coco"`). The published COCO mAP of the opt-in Objects365+COCO weights (`weights="obj2coco"`; see the licence caveat above) is 50.7 / 55.1 / 57.3 / 59.3 for S / M / L / X. The Arc B390 latency was measured with those weights; latency depends on the architecture, and the mAP check against the table was done with them too, not re-run with the COCO-only weights._  
 _Official checkpoints for `nitid1n/s/m/l/x` download automatically upon first use._  
 _† `nitid1n` detection has COCO weights only (`dfine_n_coco.pth`, trained on COCO train2017): there is no Objects365 pre-trained variant, unlike `nitid1s/m/l/x`. `nitid download model=nitid1n` prints this notice. `nitid1n` was not measured on the Arc B390 GPU._
 

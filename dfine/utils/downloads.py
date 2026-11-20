@@ -71,6 +71,13 @@ def _asset(
     )
 
 
+_OBJECTS365_NOTICE = (
+    "These obj2coco weights were pre-trained on Objects365. The D-FINE authors say such "
+    "checkpoints may be subject to the Objects365 dataset terms and should not be assumed to "
+    "be commercially cleared; nitid has not established what those terms allow (see "
+    "THIRD_PARTY_NOTICES.md). The default weights (coco) carry no such note."
+)
+
 _NANO_DETECT_NOTICE = (
     "nitid1n detection weights are trained on COCO train2017 only: there is no "
     "Objects365 pre-trained variant, unlike nitid1s/m/l/x."
@@ -91,6 +98,7 @@ MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
             "dfine_s",
             "obj2coco",
             "dfine_s_obj2coco.pth",
+            notice=_OBJECTS365_NOTICE,
         ),
         "coco": _asset("dfine_s", "coco", "dfine_s_coco.pth"),
     },
@@ -99,6 +107,7 @@ MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
             "dfine_m",
             "obj2coco",
             "dfine_m_obj2coco.pth",
+            notice=_OBJECTS365_NOTICE,
         ),
         "coco": _asset("dfine_m", "coco", "dfine_m_coco.pth"),
     },
@@ -107,6 +116,7 @@ MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
             "dfine_l",
             "obj2coco",
             "dfine_l_obj2coco_e25.pth",
+            notice=_OBJECTS365_NOTICE,
         ),
         "coco": _asset("dfine_l", "coco", "dfine_l_coco.pth"),
     },
@@ -115,6 +125,7 @@ MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
             "dfine_x",
             "obj2coco",
             "dfine_x_obj2coco.pth",
+            notice=_OBJECTS365_NOTICE,
         ),
         "coco": _asset("dfine_x", "coco", "dfine_x_coco.pth"),
     },
@@ -145,7 +156,7 @@ SEMANTIC_MODEL_REGISTRY: dict[str, dict[str, ModelAsset]] = {
     for model in ("dfine_n", "dfine_s", "dfine_m", "dfine_l", "dfine_x")
 }
 
-DEFAULT_WEIGHTS = "obj2coco"
+DEFAULT_WEIGHTS = "coco"
 _MODEL_ALIASES = {
     "n": "dfine_n",
     "s": "dfine_s",
@@ -217,8 +228,6 @@ def get_model_asset(
         raise ValueError(f"Unknown model {model!r}. Choose one of: {choices}")
 
     weights_key = _normalize_weights(weights)
-    if weights_key == DEFAULT_WEIGHTS and DEFAULT_WEIGHTS not in registry[model_key]:
-        weights_key = "coco"
     variants = registry[model_key]
     if weights_key not in variants:
         choices = ", ".join(sorted(variants))

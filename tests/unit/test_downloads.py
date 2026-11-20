@@ -37,15 +37,26 @@ def test_nano_detect_asset_is_coco_only_and_carries_a_notice():
     assert asset.filename == "dfine_n_coco_wrapped.pth"
     assert asset.sha256 == "41973938d2784d38a9836990d805b8392855ebf611aba55f0f7add90e110744c"
     assert asset.notice is not None and "COCO" in asset.notice
-    # Same rule as segmentation: the default variant falls back to coco when a size has
-    # no obj2coco weights, so the nano model is never refused for lack of one.
-    assert downloads.get_model_asset("dfine_n", "obj2coco").weights == "coco"
+    # There is no Objects365 variant of the nano model, so asking for it is an error.
+    with pytest.raises(ValueError, match="Unknown weights"):
+        downloads.get_model_asset("dfine_n", "obj2coco")
 
 
-def test_larger_detect_models_keep_obj2coco_as_default_and_have_no_notice():
-    asset = downloads.get_model_asset("dfine_s")
-    assert asset.weights == "obj2coco"
-    assert asset.notice is None
+def test_default_detection_weights_are_coco_and_carry_no_notice():
+    # Decision D-Objects365 (option B, 2026-11-19): coco is the default, obj2coco is opt-in.
+    assert downloads.DEFAULT_WEIGHTS == "coco"
+    for size in "smlx":
+        asset = downloads.get_model_asset(f"dfine_{size}")
+        assert asset.weights == "coco"
+        assert asset.notice is None
+
+
+def test_obj2coco_is_opt_in_and_carries_the_objects365_notice():
+    for size in "smlx":
+        asset = downloads.get_model_asset(f"dfine_{size}", "obj2coco")
+        assert asset.weights == "obj2coco"
+        assert asset.notice is not None and "Objects365" in asset.notice
+        assert "commercially cleared" in asset.notice
 
 
 def test_segment_asset_uses_coco_mask_checkpoint():
@@ -81,13 +92,13 @@ def test_semantic_asset_uses_instance_checkpoint_as_initialization():
 def test_get_model_asset_accepts_model_aliases(name, expected):
     asset = downloads.get_model_asset(name)
     assert asset.model == expected
-    assert asset.weights == "obj2coco"
+    assert asset.weights == "coco"
 
 
 @pytest.mark.parametrize(
     ("weights", "expected"),
     [
-        ("default", "obj2coco"),
+        ("default", "coco"),
         ("obj2coco", "obj2coco"),
         ("objects365-coco", "obj2coco"),
         ("coco", "coco"),
@@ -109,10 +120,10 @@ def test_get_model_asset_rejects_unknown_model_or_weights():
 
 def test_resolve_output_path_uses_variant_specific_filename():
     asset = downloads.get_model_asset("dfine_s")
-    assert downloads.resolve_output_path(asset) == Path("dfine_s_obj2coco_wrapped.pth")
-    assert downloads.resolve_output_path(asset, "models") == Path(
-        "models/dfine_s_obj2coco_wrapped.pth"
-    )
+    assert downloads.resolve_output_path(asset) == Path("dfine_s_coco_wrapped.pth")
+    assert downloads.resolve_output_path(asset, "models") == Path("models/dfine_s_coco_wrapped.pth")
+    obj = downloads.get_model_asset("dfine_s", "obj2coco")
+    assert downloads.resolve_output_path(obj) == Path("dfine_s_obj2coco_wrapped.pth")
     assert downloads.resolve_output_path(asset, "custom.pth") == Path("custom.pth")
 
 
@@ -121,13 +132,13 @@ def test_resolve_output_path_uses_variant_specific_filename():
     [
         (
             "default",
-            "dfine_s_obj2coco.pth",
-            "dfine_s_obj2coco_wrapped.pth",
-        ),
-        (
-            "coco",
             "dfine_s_coco.pth",
             "dfine_s_coco_wrapped.pth",
+        ),
+        (
+            "obj2coco",
+            "dfine_s_obj2coco.pth",
+            "dfine_s_obj2coco_wrapped.pth",
         ),
     ],
 )
@@ -177,7 +188,7 @@ def test_bundled_coco_names_match_dataset_config():
 
 
 def test_download_model_skips_existing_variant_output(monkeypatch, tmp_path):
-    out = tmp_path / "dfine_s_obj2coco_wrapped.pth"
+    out = tmp_path / "dfine_s_coco_wrapped.pth"
     out.write_bytes(b"existing")
 
     def fail_urlretrieve(url, filename):

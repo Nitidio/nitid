@@ -44,9 +44,10 @@ D-FINE-seg are Apache-2.0. What was checked:
    pretrained on Objects365 (`*_obj365`, `*_obj2coco`) *may be subject to the Objects365 dataset
    terms and should not be assumed to be commercially cleared under the D-FINE license*. ADR-0004
    and `THIRD_PARTY_NOTICES.md` state "Apache-2.0" for all D-FINE checkpoints without this
-   caveat. **This matters because `DEFAULT_WEIGHTS = "obj2coco"`** in `dfine/utils/downloads.py`,
-   so `nitid1s/m/l/x` for detection resolve to `obj2coco` checkpoints by default. For the
-   coco-only variants (`weights="coco"`) the README makes no such statement.
+   caveat. **This mattered because `DEFAULT_WEIGHTS` was `"obj2coco"`** in `dfine/utils/downloads.py`
+   up to 0.9.6, so `nitid1s/m/l/x` for detection resolved to `obj2coco` checkpoints by default
+   (changed in 0.10.0, see below). For the coco-only variants (`weights="coco"`) the README makes
+   no such statement.
 3. **[NV]** Whether the Objects365 terms actually restrict commercial use of the derived weights
    was not researched here (the dataset terms were not read). The upstream authors' own wording is
    cautious, and so is this repository: obj2coco entries are `hostable: false`.
@@ -54,10 +55,12 @@ D-FINE-seg are Apache-2.0. What was checked:
    RT-DETR, DEIM; root listing checked). DEIM's `LICENSE` carries an extra copyright line for
    INTELLINDUST (already recorded in `THIRD_PARTY_NOTICES.md`).
 
-Follow-up **done (option A, 2026-11-19)**: `THIRD_PARTY_NOTICES.md`, ADR-0004 and the README now
-state the caveat. The default `obj2coco` choice is unchanged; `obj2coco` entries stay
-`hostable: false`. Reopen if the Objects365 terms are read and found compatible (clear
-`open_caveats`) or restrictive (switch the default to `coco`).
+Follow-up **option A (2026-11-19, morning)**: `THIRD_PARTY_NOTICES.md`, ADR-0004 and the README
+stated the caveat and kept `obj2coco` as the default. **Superseded the same evening by option B
+(owner's decision, "seamos prudentes", [ADR-0006](../adr/0006-coco-default-detection-weights.md)):**
+`DEFAULT_WEIGHTS` is now `"coco"`; `obj2coco` is opt-in, prints the caveat when downloaded, and its
+entries stay `hostable: false`. Reopen the question if the Objects365 terms are read and found
+compatible (clear `open_caveats`, optionally restore `obj2coco` as the default with a new ADR).
 
 ## Table: weights and upstream
 
@@ -66,8 +69,8 @@ state the caveat. The default `obj2coco` choice is unchanged; `obj2coco` entries
 | `nitid1n` detect, `dfine_n_coco.pth` (not registered in nitid today) | `Peterande/D-FINE` | Apache-2.0 | `LICENSE` at D-FINE `956d170`; asset `https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth` (15 489 558 B) | **[V]** licence, size, SHA-256 | Passes the gate (`hostable: true`). Needs the checklist below. |
 | `nitid1s` detect, `dfine_s_coco.pth` | idem | Apache-2.0 | asset `.../dfine_s_coco.pth` (41 841 422 B) | **[V]** licence, size, SHA-256 | Passes the gate (`hostable: true`). |
 | `nitid1m/l/x` detect, `coco` variant | idem | Apache-2.0 | assets `dfine_{m,l,x}_coco.pth` (79 108 938 / 126 059 754 / 252 128 986 B) | **[V]** licence, size, SHA-256 (computed 2026-11-19 with `tools/hash_models_lock.py`) | Passes the gate (`hostable: true`). Needs the checklist below. |
-| `nitid1s` detect, `dfine_s_obj2coco.pth` (**default**) | idem | Apache-2.0 for the code; **Objects365 caveat open** | asset `.../dfine_s_obj2coco.pth` (41 847 790 B) | **[V]** licence, size, SHA-256, caveat text; **[NV]** what the Objects365 terms allow | No (`open_caveats`). |
-| `nitid1m/l/x` detect, `obj2coco` (**default**) | idem | same | assets `dfine_m_obj2coco.pth`, `dfine_l_obj2coco_e25.pth`, `dfine_x_obj2coco.pth` (79 117 378 / 126 083 766 / 252 140 594 B) | **[V]** licence, size, SHA-256 (2026-11-19), caveat; **[NV]** Objects365 terms | No (`open_caveats`). |
+| `nitid1s` detect, `dfine_s_obj2coco.pth` (opt-in) | idem | Apache-2.0 for the code; **Objects365 caveat open** | asset `.../dfine_s_obj2coco.pth` (41 847 790 B) | **[V]** licence, size, SHA-256, caveat text; **[NV]** what the Objects365 terms allow | No (`open_caveats`). |
+| `nitid1m/l/x` detect, `obj2coco` (opt-in) | idem | same | assets `dfine_m_obj2coco.pth`, `dfine_l_obj2coco_e25.pth`, `dfine_x_obj2coco.pth` (79 117 378 / 126 083 766 / 252 140 594 B) | **[V]** licence, size, SHA-256 (2026-11-19), caveat; **[NV]** Objects365 terms | No (`open_caveats`). |
 | `nitid1*` segment, `dfine_seg_{n,s,m,l,x}_coco.pt` | `ArgoHA/D-FINE-seg`, weights on `huggingface.co/ArgoSA/D-FINE-seg` at commit `79572c466448db97aa2b2f029c907d8e6b2a42fc` | Apache-2.0 for the COCO checkpoints (model card paragraph and upstream README); Hub licence tag is `other` | Model card at the pinned commit; README at D-FINE-seg `13385ab`; code `LICENSE` same commit | **[V]** card paragraph, README, code licence, commit, sizes, LFS SHA-256 (reported by the Hub API, 2026-11-19); **[NV]** SHA-256 recomputed from a download | Passes the gate (`hostable: true`), with the conditions below (no LICENSE/NOTICE in the Hub repository; tag `other`). Lock ids `dfine-seg-{n,s,m,l,x}-coco`. |
 | D-FINE-seg Cityscapes semantic weights (`dfine_sem_*_cityscapes.pt`) | `ArgoHA/D-FINE-seg` | Non-commercial (derivative of Cityscapes, per the README) | README `License` section, same commit | **[V]** README statement | **No. Excluded.** |
 | D-FINE-seg keypoints (`dfine_kpts_s_coco.pt`) | idem | Apache-2.0 per the README (COCO weights) | same | **[V]** README; **[NV]** Hub | Out of scope (pose is not in Studio). |
@@ -124,8 +127,9 @@ Tick every item; any miss means "do not host".
       class names and the source checkpoint id.
 - [ ] No weights are committed to git (`studio/scripts/check-size.mjs` already forbids `.onnx`,
       `.pth`, `.wasm` in `studio/`). They are served from a release asset, bucket or the Hub.
-- [ ] The default-weights question is settled: either the hosted set uses the coco-only variants,
-      or the Objects365 caveat has been resolved in writing and `open_caveats` cleared.
+- [x] The default-weights question is settled (ADR-0006): the default and the hosted set use the
+      coco-only variants. `obj2coco` stays out of any hosted set until the Objects365 caveat is
+      resolved in writing and `open_caveats` cleared.
 - [ ] Any weight with a non-commercial, copyleft, platform or unknown licence stays out (see the
       exclusion table).
 

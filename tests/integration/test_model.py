@@ -150,8 +150,8 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     # It should download to default filename in current working dir (None)
     _ = DFINE("dfine_s", device="cpu", verbose=False)
     assert len(download_calls) == 1
-    assert download_calls[0] == ("dfine_s", "detect", "obj2coco", None)
-    assert load_calls[0] == "dfine_s_obj2coco_wrapped.pth"
+    assert download_calls[0] == ("dfine_s", "detect", "coco", None)
+    assert load_calls[0] == "dfine_s_coco_wrapped.pth"
 
     # 2. Test specifying path with .pth suffix (e.g. path/to/dfine_s.pth)
     download_calls.clear()
@@ -159,7 +159,7 @@ def test_model_load_trigger_download(monkeypatch, tmp_path):
     custom_path = tmp_path / "custom_dir" / "dfine_s.pth"
     _ = DFINE(str(custom_path), device="cpu", verbose=False)
     assert len(download_calls) == 1
-    assert download_calls[0][0:3] == ("dfine_s", "detect", "obj2coco")
+    assert download_calls[0][0:3] == ("dfine_s", "detect", "coco")
     assert str(download_calls[0][3]) == str(custom_path)
     assert load_calls[0] == str(custom_path)
 
