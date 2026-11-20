@@ -519,10 +519,14 @@ def obtain_weights(
             raise PublishError(f"{entry['id']}: {asset_name} not found in {offline_from}")
     else:
         raw = workdir / asset_name
-        try:
-            fetch(entry, raw)
-        except Exception as exc:
-            raise PublishError(f"{entry['id']}: download failed ({exc})") from exc
+        if not raw.is_file():  # a --cache-dir hit; the hash check below still applies
+            partial = raw.with_name(raw.name + ".part")
+            try:
+                fetch(entry, partial)
+                partial.replace(raw)
+            except Exception as exc:
+                partial.unlink(missing_ok=True)
+                raise PublishError(f"{entry['id']}: download failed ({exc})") from exc
     actual = sha256_file(raw)
     if actual != entry["sha256"]:
         raise PublishError(

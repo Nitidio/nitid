@@ -606,3 +606,34 @@ def test_publisher_refuses_an_onnx_that_names_another_model(tmp_path, small_lock
 
     with pytest.raises(pm.PublishError, match="lock says"):
         run_publish(small_lock, tmp_path / "b", Other(), notices)
+
+
+def test_cache_dir_hit_skips_the_download_but_still_checks_the_hash(tmp_path, small_lock, notices):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    for e in small_lock["entries"][:2]:
+        data = e["id"].encode()
+        (cache / f"{e['id']}.pth").write_bytes(data)
+        e["sha256"] = pm.hashlib.sha256(data).hexdigest()
+    fakes = Fakes()
+    run_publish(small_lock, tmp_path / "b", fakes, notices, cache_dir=cache)
+    assert fakes.fetched == [] and len(fakes.exported) == 2
+    (cache / "dfine-n-coco.pth").write_bytes(b"corrupt")
+    with pytest.raises(pm.PublishError, match="checksum mismatch"):
+        run_publish(small_lock, tmp_path / "c", Fakes(), notices, cache_dir=cache)
+
+
+def test_a_failed_download_leaves_no_partial_file_in_the_cache(tmp_path, small_lock, notices):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+
+    def half(e: Mapping[str, Any], dest: Path) -> None:
+        dest.write_bytes(b"half")
+        raise OSError("cut off")
+
+    with pytest.raises(pm.PublishError, match="download failed"):
+        pm.publish(
+            small_lock, tmp_path / "b", notices_dir=notices, nitid_version="1", fetch=half,
+            prepare=Fakes.prepare, export=Fakes().export, cache_dir=cache,
+        )  # fmt: skip
+    assert list(cache.iterdir()) == []
