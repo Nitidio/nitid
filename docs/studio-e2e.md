@@ -164,5 +164,5 @@ all queries of a class the same score.
 ## Hosted site (no backend)
 
 `studio/e2e/test_studio_hosted.py` wraps `pnpm run smoke:hosted`: the hosted build, a fixture model bundle,
-`scripts/assemble_hosted.py`, the production Cloudflare `_headers` and real Chrome, with **no Python backend**.
+`scripts/assemble_hosted.py`, the production Cloudflare headers (rendered from `_headers.template`), a second origin for the models (with negative cases) and real Chrome, with **no Python backend**.
 See [the hosted site](studio-hosted.md). Same skip rules as the rest of this folder.
