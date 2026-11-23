@@ -274,7 +274,8 @@ try {
   rec.check("CSP: no request reached the remote origin", evilRequests.length === 0, evilRequests.join(","));
   rec.check("CSP: violations were reported for script, connect, img and frame", ["connect-src", "img-src", "script-src-elem"].every((d) => csp.violations.includes(d)), csp.violations.join(","));
   rec.check("CSP: blob: workers and wasm compilation still work (needed by ONNX Runtime Web)", csp.blobWorker === "ok" && csp.wasmCompile === "allowed", `${csp.blobWorker}/${csp.wasmCompile}`);
-  const expectedNoise = ["http 401:", "Content Security Policy", "Refused to", "Failed to load resource", " csp"];
+  // net::ERR_ABORTED: the browser cancels in-flight requests of the page that the probes navigate away from; on a slow CI runner this is timing, not an app error.
+  const expectedNoise = ["http 401:", "Content Security Policy", "Refused to", "Failed to load resource", " csp", "net::ERR_ABORTED"];
   const rest = watch.unexpected(expectedNoise);
   rec.check("no unexpected console/page errors after the blocked probes (401s and CSP blocks are the probes themselves)", rest.length === 0, rest.join(" | "));
   await context.close();
