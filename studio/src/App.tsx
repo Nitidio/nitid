@@ -5,6 +5,8 @@ import { BackendContext, useBackend } from "./backend-context";
 import { About } from "./pages/About";
 import { Home } from "./pages/Home";
 import { NotFound } from "./pages/NotFound";
+import { Logo } from "./brand/Logo";
+import { ThemeToggle } from "./ThemeToggle";
 
 // The workbenches are only needed on their routes: keep them out of the first load.
 const RunLocal = lazy(() => import("./pages/RunLocal").then((m) => ({ default: m.RunLocal })));
@@ -36,8 +38,12 @@ export function AppRoutes() {
         Skip to content
       </a>
       <header className="site-header">
-        <span className="brand">Nitid app</span>
+        <NavLink to="/" end className="brand" aria-label="Nitid app, home">
+          <Logo className="logo" />
+          <span className="brand-tag" aria-hidden="true">app</span>
+        </NavLink>
         <MainNav />
+        <ThemeToggle />
       </header>
       <main id="main" tabIndex={-1}>
         <Routes>
