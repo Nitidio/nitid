@@ -106,8 +106,12 @@ def test_bundle_is_published_with_default_sizes_as_an_artifact_only():
     publish = next(
         s["run"]
         for s in jobs["publish-bundle"]["steps"]
-        if "publish_models.py" in str(s.get("run", ""))
+        if "--out" in str(s.get("run", "")) and "publish_models" in str(s.get("run", ""))
     )
+    # Run as a module: `python tools/publish_models.py` puts tools/ (not the repo root) on sys.path and the
+    # script's `from tools.check_models_lock import ...` fails with ModuleNotFoundError (seen on the first run).
+    assert "python -m tools.publish_models" in publish
+    assert "tools/publish_models.py" not in publish
     assert "--sizes" not in publish, "default sizes (n, s): the 25 MiB limit no longer applies"
     uploads = [
         s

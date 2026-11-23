@@ -106,7 +106,7 @@ jobs:
       - name: Publish the bundle (models.json, ONNX files, SHA256SUMS, licences)
         # Default sizes (n, s). Not deployed to Cloudflare: an ARTIFACT for the owner to download and upload
         # to his models server (docs/studio-hosted-models.md).
-        run: uv run python tools/publish_models.py --out "$BUNDLE_DIR"
+        run: uv run python -m tools.publish_models --out "$BUNDLE_DIR"
 
       # Strict check of the bundle the owner will upload (needs onnx and jsonschema, installed above).
       - name: Check the bundle
