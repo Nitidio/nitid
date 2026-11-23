@@ -1,0 +1,41 @@
+# TEMPLATE of the response headers of the hosted Nitid app (app.nitid.io), for Cloudflare Workers static assets.
+# It is NOT deployed as it is: scripts/assemble_hosted.py renders it into <site>/_headers, filling in
+# the models origin of the CSP (see below). Do not add a file called _headers next to this one.
+# Syntax and limits: https://developers.cloudflare.com/workers/static-assets/headers/
+# (100 rules at most, 2,000 characters per line; rules apply in file order; "! Name" detaches a header).
+#
+# The security block mirrors SECURITY_HEADERS in nitid/studio/security.py, the policy of the local app.
+# tests/unit/studio/test_hosted_headers.py compares the two programmatically, so they cannot drift.
+# Only the server-side guards (Host / Origin / bearer token) do not apply here: there is no server.
+#
+# The MODELS_CONNECT_SRC placeholder in the CSP line is the ONLY variable part. The model bundle (models.json, *.onnx) is hosted on a
+# separate HTTPS origin chosen by the owner (Cloudflare static assets accept 25 MiB per file at most and
+# nitid1s is larger). The placeholder becomes either nothing (models served from this origin: the
+# same-origin mode, `--bundle`) or " https://models.example.org" (exactly that origin, no path, no
+# wildcard: `--models-base-url`). No other source is ever added to the policy.
+#
+# COOP + COEP make the page "cross-origin isolated", which the multi-threaded WebAssembly runtime needs
+# (SharedArrayBuffer). Under COEP require-corp, a response from the models origin is usable only because
+# the app fetches it in CORS mode and that server answers with Access-Control-Allow-Origin (it should
+# also send Cross-Origin-Resource-Policy: cross-origin). CORP stays same-origin for the app's own files.
+# See docs/studio-hosted.md and docs/studio-hosted-models.md.
+#
+# Content-Type is deliberately NOT set here (.wasm -> application/wasm comes from the file extension);
+# the smoke test and the post-deploy checks in docs/studio-hosted.md verify the type that is served.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()
+  Content-Security-Policy: default-src 'self'; worker-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'{{MODELS_CONNECT_SRC}}; frame-ancestors 'none'
+  ! Cache-Control
+  Cache-Control: no-cache
+
+# Vite names these files after their content (assets/name-HASH.js): they never change under one URL.
+/assets/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable

@@ -1,35 +1,135 @@
-/* Plain CSS, same-origin only (no web fonts, no CDN). Contrast targets WCAG AA. */
-:root {
-  color-scheme: light dark;
-  --bg: #ffffff;
-  --fg: #1a1a1a;
-  --muted: #4d4d4d;
-  --surface: #f4f6f8;
-  --border: #8a8f98;
-  --accent: #0b5cad;
-  --accent-fg: #ffffff;
-  --disabled-bg: #e6e8eb;
-  --disabled-fg: #595959;
-  --warn-bg: #fff4ce;
-  --warn-fg: #5c4400;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.5;
+/* Plain CSS, same-origin only (self-hosted fonts, no CDN). Contrast targets WCAG AA.
+   Look and feel follow nitid.io (nitid-site/site/assets/css/styles.css): Archivo + JetBrains Mono, the NITID
+   palette (blue #055DFB, purple #6227FA, lime #D5E860, deep navy #07264C) and its light / dark role tokens.
+   The website's decorative hairlines are deliberately faint (about 1.3:1); the controls of an application must
+   stay visible, so form controls use --control-edge (3:1 or more) and only decoration uses --hair. */
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
 }
 
+:root {
+  color-scheme: light;
+  /* NITID brand constants (nitid.io). Components use the role tokens below, not these. */
+  --blue: #055dfb;
+  --purple: #6227fa;
+  --lime: #d5e860;
+  --deep-navy: #07264c;
+
+  --bg: #fafbfd;
+  --nav-bg: rgba(247, 248, 252, 0.62);
+  --fg: #07264c;
+  --muted: #3d5371;
+  --surface: #ebf0f8;
+  --card-face: #fefeff;
+  --card-edge: rgba(7, 38, 76, 0.085);
+  --hair: rgba(7, 38, 76, 0.17);
+  --hair-soft: rgba(7, 38, 76, 0.09);
+  /* 3:1 or more against --bg and --card-face: edge of every form control and of the dropzone. */
+  --control-edge: #6b7a90;
+  --border: var(--control-edge);
+  --accent: #055dfb; /* fill of primary buttons */
+  --accent-fg: #ffffff;
+  --link: #055dfb;
+  --focus: #055dfb;
+  --accent-2: #6227fa;
+  --disabled-bg: #e3e8f1;
+  --disabled-fg: #56627a;
+  --warn-bg: #fff4ce;
+  --warn-fg: #5c4400;
+  --logo-word: #07264c;
+  --logo-dot: #d5e860;
+  --logo-blob: url(#nitidGrad);
+  --sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ease: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: var(--sans);
+  line-height: 1.6;
+}
+
+/* Dark: the system preference unless the visitor chose a theme (data-theme set by the toggle). */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12151a;
-    --fg: #e8eaed;
-    --muted: #b4b9c1;
-    --surface: #1c2027;
-    --border: #7b818b;
-    --accent: #8ab4f8;
-    --accent-fg: #0b1220;
-    --disabled-bg: #2a2f37;
-    --disabled-fg: #a0a6af;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #051932;
+    --nav-bg: rgba(5, 25, 50, 0.82);
+    --fg: #f7f8fc;
+    --muted: #aab3c6;
+    --surface: #07264c;
+    --card-face: #0a2b52;
+    --card-edge: rgba(247, 248, 252, 0.1);
+    --hair: rgba(247, 248, 252, 0.14);
+    --hair-soft: rgba(247, 248, 252, 0.08);
+    --control-edge: #7c8aa3;
+    --link: #669cfd;
+    --focus: #669cfd;
+    --accent-2: #aa8afc;
+    --disabled-bg: #12304f;
+    --disabled-fg: #97a2b7;
     --warn-bg: #3d3100;
     --warn-fg: #ffe28a;
+    --logo-word: currentColor;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #051932;
+  --nav-bg: rgba(5, 25, 50, 0.82);
+  --fg: #f7f8fc;
+  --muted: #aab3c6;
+  --surface: #07264c;
+  --card-face: #0a2b52;
+  --card-edge: rgba(247, 248, 252, 0.1);
+  --hair: rgba(247, 248, 252, 0.14);
+  --hair-soft: rgba(247, 248, 252, 0.08);
+  --control-edge: #7c8aa3;
+  --link: #669cfd;
+  --focus: #669cfd;
+  --accent-2: #aa8afc;
+  --disabled-bg: #12304f;
+  --disabled-fg: #97a2b7;
+  --warn-bg: #3d3100;
+  --warn-fg: #ffe28a;
+  --logo-word: currentColor;
 }
 
 * {
@@ -40,11 +140,35 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background-color var(--ease),
+    color var(--ease);
+}
+
+::selection {
+  background: var(--blue);
+  color: #ffffff;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: clamp(1.9rem, 3.2vw, 2.5rem);
 }
 
 :focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 main {
@@ -72,37 +196,132 @@ main:focus {
 }
 
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 60;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border);
+  min-height: 4rem;
+  padding: 0 clamp(1rem, 4vw, 3rem);
+  background: var(--nav-bg);
+  background-image: linear-gradient(104deg, rgba(5, 93, 251, 0.045) 0%, rgba(98, 39, 250, 0.038) 52%, rgba(98, 39, 250, 0) 100%);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  border-bottom: 1px solid var(--hair-soft);
 }
 
 .brand {
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: none;
+  margin-right: clamp(0.75rem, 4vw, 3rem);
+  color: var(--fg);
+  text-decoration: none;
+  transition: opacity var(--ease);
+}
+
+.brand:hover {
+  opacity: 0.78;
+}
+
+.brand .logo {
+  display: block;
+  height: 28px;
+  width: auto;
+  color: var(--fg);
+}
+
+.lg-word {
+  fill: var(--logo-word);
+}
+
+.lg-dot {
+  fill: var(--logo-dot);
+}
+
+.lg-blob {
+  fill: var(--logo-blob);
+}
+
+.brand-tag {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
 }
 
 .site-header nav {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: clamp(1rem, 3vw, 2.25rem);
 }
 
-.site-header a {
-  color: var(--accent);
-  padding: 0.25rem 0;
+.site-header nav a {
+  position: relative;
+  font-size: 0.906rem;
+  color: var(--muted);
+  padding: 0.4rem 0;
+  text-decoration: none;
+  transition: color var(--ease);
 }
 
-.site-header a[aria-current="page"] {
+.site-header nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--blue), var(--purple));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--ease);
+}
+
+.site-header nav a:hover,
+.site-header nav a[aria-current="page"] {
   color: var(--fg);
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 0.25em;
+}
+
+.site-header nav a:hover::after,
+.site-header nav a[aria-current="page"]::after {
+  transform: scaleX(1);
+}
+
+.theme-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--muted);
+}
+
+.theme-toggle:hover {
+  background: var(--hair-soft);
+  color: var(--fg);
+  transform: none;
+}
+
+.theme-toggle svg {
+  display: block;
 }
 
 a {
-  color: var(--accent);
+  color: var(--link);
 }
 
 .lead {
@@ -118,7 +337,7 @@ a {
   background: var(--warn-bg);
   color: var(--warn-fg);
   border: 1px solid var(--warn-fg);
-  border-radius: 0.5rem;
+  border-radius: 12px;
   padding: 0.75rem 1rem;
 }
 
@@ -129,10 +348,19 @@ a {
 }
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  padding: 1rem 1.25rem;
+  background: var(--card-face);
+  border: 1px solid var(--card-edge);
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 2px rgba(7, 38, 76, 0.035);
+  transition:
+    border-color var(--ease),
+    box-shadow var(--ease);
+}
+
+.card:hover {
+  border-color: rgba(98, 39, 250, 0.26);
+  box-shadow: 0 2px 4px rgba(7, 38, 76, 0.05), 0 10px 26px rgba(7, 38, 76, 0.07);
 }
 
 .card h2 {
@@ -149,12 +377,27 @@ button {
   font: inherit;
   font-weight: 600;
   min-height: 2.75rem;
-  padding: 0.5rem 1.25rem;
-  border: 2px solid var(--accent);
-  border-radius: 0.5rem;
+  padding: 0.5rem 1.35rem;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
   background: var(--accent);
   color: var(--accent-fg);
   cursor: pointer;
+  transition:
+    background-color var(--ease),
+    border-color var(--ease),
+    color var(--ease),
+    transform var(--ease),
+    box-shadow var(--ease);
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 14px rgba(5, 93, 251, 0.26);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 button:disabled {
@@ -186,9 +429,9 @@ dd {
 .export-panel {
   margin-top: 0.5rem;
   padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: var(--surface);
+  border: 1px solid var(--card-edge);
+  border-radius: 12px;
+  background: var(--card-face);
 }
 
 .export-list {
@@ -219,9 +462,17 @@ dd {
 }
 
 /* ---- Local panel ---- */
+code,
+.mono,
+table.detections td.num {
+  font-family: var(--mono);
+  font-size: 0.88em;
+}
+
 code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.9em;
+  background: var(--hair-soft);
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
 }
 
 select,
@@ -235,8 +486,8 @@ select {
   padding: 0.25rem 0.5rem;
   background: var(--bg);
   color: var(--fg);
-  border: 2px solid var(--border);
-  border-radius: 0.5rem;
+  border: 1px solid var(--control-edge);
+  border-radius: 9px;
 }
 
 input[type="range"] {
@@ -253,7 +504,14 @@ input[type="checkbox"] {
 
 button.secondary {
   background: transparent;
-  color: var(--accent);
+  color: var(--link);
+  border-color: var(--control-edge);
+  font-weight: 500;
+}
+
+button.secondary:hover:not(:disabled) {
+  border-color: var(--link);
+  box-shadow: none;
 }
 
 button.secondary:disabled {
@@ -313,9 +571,9 @@ fieldset.field legend {
 }
 
 .dropzone {
-  border: 2px dashed var(--border);
-  border-radius: 0.75rem;
-  padding: 1rem;
+  border: 2px dashed var(--control-edge);
+  border-radius: 14px;
+  padding: 1.25rem;
   text-align: center;
   background: var(--surface);
 }
@@ -336,9 +594,9 @@ fieldset.field legend {
 .button-like {
   display: inline-block;
   min-height: 2.75rem;
-  padding: 0.5rem 1.25rem;
-  border: 2px solid var(--accent);
-  border-radius: 0.5rem;
+  padding: 0.5rem 1.35rem;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
   background: var(--accent);
   color: var(--accent-fg);
   font-weight: 600;
@@ -346,8 +604,8 @@ fieldset.field legend {
 }
 
 .visually-hidden-input:focus-visible + .button-like {
-  outline: 3px solid var(--fg);
-  outline-offset: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
 }
 
 .visually-hidden-input:disabled + .button-like {
@@ -371,7 +629,7 @@ fieldset.field legend {
   align-items: center;
   gap: 1rem;
   padding: 0.25rem 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--hair);
 }
 
 .problems {
@@ -419,8 +677,8 @@ fieldset.field legend {
   display: block;
   width: 100%;
   height: auto;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border: 1px solid var(--card-edge);
+  border-radius: 12px;
   background: var(--surface);
 }
 
@@ -445,7 +703,7 @@ table.detections th,
 table.detections td {
   text-align: left;
   padding: 0.35rem 0.5rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--hair);
 }
 
 /* Unified UI: comparison view and browser-mode extras */
@@ -472,8 +730,8 @@ table.detections td {
 
 .agreement {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border: 1px solid var(--card-edge);
+  border-radius: 12px;
   padding: 0.75rem 1rem;
   margin: 1rem 0;
 }
@@ -482,4 +740,11 @@ table.detections td {
   display: block;
   width: 100%;
   max-width: 24rem;
+}
+
+/* Light / dark switch (a button in the header; see theme.ts). */
+@media (prefers-reduced-motion: no-preference) {
+  .site-header nav a::after {
+    transition-duration: 180ms;
+  }
 }

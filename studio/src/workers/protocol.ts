@@ -12,7 +12,7 @@ import type { Backend, InitInfo, RunOptions, RunResult } from "../engine/session
 export interface InitRequest {
   id: number;
   type: "init";
-  /** Fetch the model from this same-origin URL (cached by sha256/ETag)... */
+  /** Fetch the model from this URL (same origin, or the hosted models origin over CORS; cached by sha256/ETag)... */
   modelUrl?: string;
   /** ...or use these bytes (a file the user picked). Transferred. */
   modelBytes?: ArrayBuffer;

@@ -11,6 +11,12 @@
  *
  *   `url` is resolved against the base URL. `sha256` is the cache key and integrity check; without
  *   it the engine tries a HEAD request for a strong ETag and otherwise does not cache.
+ *
+ *   The base URL is either root-relative (`/models/`: same origin as the app) or absolute
+ *   (another origin, see docs/studio-hosted.md). Every model `url` must
+ *   resolve to the SAME origin as the base: the hosted Content-Security-Policy allows only that one
+ *   origin in `connect-src`, so any other would fail with an opaque network error; it is refused here
+ *   with a clear message instead.
  */
 import { API_PREFIX } from "../api/client";
 import type { Model, Task } from "../api/types";
@@ -64,6 +70,7 @@ export class CatalogError extends Error {
 export function parseHostedCatalog(value: unknown, baseUrl: string): BrowserModel[] {
   const list = (value as { models?: unknown } | null)?.models;
   if (!Array.isArray(list)) throw new CatalogError('The model catalogue must be {"models": [...]}.');
+  const base = new URL(baseUrl, globalThis.location?.href);
   const out: BrowserModel[] = [];
   const seen = new Set<string>();
   list.forEach((raw, i) => {
@@ -77,6 +84,15 @@ export function parseHostedCatalog(value: unknown, baseUrl: string): BrowserMode
       throw new CatalogError(`${where}.sha256 must be 64 lowercase hex characters.`);
     }
     if (e.label !== undefined && typeof e.label !== "string") throw new CatalogError(`${where}.label must be a string.`);
+    let url: URL;
+    try {
+      url = new URL(e.url, base);
+    } catch {
+      throw new CatalogError(`${where}.url ${JSON.stringify(e.url)} is not a valid URL.`);
+    }
+    if (url.origin !== base.origin) {
+      throw new CatalogError(`${where}.url must be on the models origin ${base.origin}, not ${url.origin}.`);
+    }
     const key = modelKey({ id: e.id, task: e.task });
     if (seen.has(key)) throw new CatalogError(`${where}: duplicate model ${key}.`);
     seen.add(key);
@@ -86,7 +102,7 @@ export function parseHostedCatalog(value: unknown, baseUrl: string): BrowserMode
       task: e.task,
       label: typeof e.label === "string" && e.label ? e.label : `${e.id} (${e.task})`,
       origin: "hosted",
-      url: new URL(e.url, new URL(baseUrl, globalThis.location?.href)).href,
+      url: url.href,
       ...(typeof e.sha256 === "string" ? { sha256: e.sha256 } : {}),
     });
   });
@@ -97,9 +113,17 @@ export function parseHostedCatalog(value: unknown, baseUrl: string): BrowserMode
 export async function loadHostedCatalog(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<BrowserModel[]> {
   let response: Response;
   try {
-    response = await fetchImpl(`${baseUrl}models.json`, { headers: { Accept: "application/json" } });
+    // CORS mode and no credentials, explicitly: the catalogue may live on another origin. `Accept` is a
+    // CORS-safelisted header, so the request needs no preflight.
+    response = await fetchImpl(`${baseUrl}models.json`, {
+      mode: "cors",
+      credentials: "omit",
+      headers: { Accept: "application/json" },
+    });
   } catch {
-    throw new CatalogError("The model catalogue could not be reached.");
+    throw new CatalogError(
+      "The model catalogue could not be reached. If the models are on another server, it must allow this site (CORS: Access-Control-Allow-Origin); the browser console says which check failed.",
+    );
   }
   if (!response.ok) throw new CatalogError(`The model catalogue answered HTTP ${response.status}.`);
   let body: unknown;

@@ -166,3 +166,11 @@ copyright holder and any additional notices of ONNX Runtime Web (and of the
 actually installed when the engine work package lands, and recorded here
 before the first release that contains it. [NV: not verified; `microsoft/onnxruntime` was not
 reachable from this audit session.]
+
+## Archivo and JetBrains Mono (fonts)
+
+The Nitid app uses the same typefaces as nitid.io: **Archivo** (Omnibus-Type) and **JetBrains Mono**
+(JetBrains), both under the SIL Open Font License 1.1. The `latin` subsets in `studio/src/assets/fonts/`
+are the `@fontsource` 5.3.0 builds; the licence texts ship in `studio/public/licenses/OFL-Archivo.txt` and
+`OFL-JetBrains-Mono.txt`. They are self-hosted (CSP: no external font host) and are not npm production
+dependencies, so `scripts/check-licenses.mjs` does not cover them: this entry is their record.
