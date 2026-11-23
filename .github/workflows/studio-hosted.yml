@@ -224,4 +224,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Pinned: without it the action installs wrangler 3.90.0 (Nov 2024) when none is found, and the
+          # first real deploy served the site WITHOUT the headers of _headers (no COOP/COEP/CSP).
+          wranglerVersion: "4.166.0"
           command: deploy --config studio/hosting/cloudflare/wrangler.jsonc

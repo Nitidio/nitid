@@ -135,3 +135,13 @@ def test_site_is_assembled_cross_origin_and_never_with_the_bundle_inside():
     assert "--validate-bundle bundle" in command
     assert "--bundle bundle" not in command.replace("--validate-bundle bundle", "")
     assert "--allow-http-loopback" not in TEXT, "plain http is for the local smoke test only"
+
+
+def test_wrangler_is_pinned_to_a_version_that_applies_headers():
+    deploy = WORKFLOW["jobs"]["deploy"]["steps"]
+    step = next(
+        s for s in deploy if str(s.get("uses", "")).startswith("cloudflare/wrangler-action")
+    )
+    version = str(step["with"].get("wranglerVersion", ""))
+    # The action installs wrangler 3.90.0 when it finds none; the first real deploy then lacked COOP/COEP/CSP.
+    assert version and version[0].isdigit() and int(version.split(".")[0]) >= 4
