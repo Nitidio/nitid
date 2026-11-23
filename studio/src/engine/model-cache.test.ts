@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MODEL_CACHE_NAME, loadModelBytes, sha256FromEtag, sha256Hex, type CacheLike, type CacheStorageLike } from "./model-cache";
+import { MODEL_CACHE_NAME, loadModelBytes, requestInit, sha256FromEtag, sha256Hex, type CacheLike, type CacheStorageLike } from "./model-cache";
 
 const ORIGIN = "https://studio.test";
 
@@ -84,6 +84,39 @@ describe("model-cache: request headers", () => {
     seen.length = 0;
     await loadModelBytes({ url: "/m", fetchFn: fn, caches: null, origin: ORIGIN });
     expect(seen).toEqual([{ method: "GET", auth: null }]);
+  });
+});
+
+describe("model-cache: cross-origin request options", () => {
+  it("builds CORS requests without credentials, with headers only when given", () => {
+    expect(requestInit(undefined)).toEqual({ mode: "cors", credentials: "omit" });
+    expect(requestInit({})).toEqual({ mode: "cors", credentials: "omit" });
+    expect(requestInit({ Authorization: "Bearer t" })).toEqual({
+      mode: "cors",
+      credentials: "omit",
+      headers: { Authorization: "Bearer t" },
+    });
+  });
+
+  it("the HEAD and the GET of a model on another origin are CORS requests without credentials or headers", async () => {
+    const url = "https://models.example.test/nitid1s-detect.onnx";
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const fn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return init?.method === "HEAD"
+        ? new Response(null, { status: 200, headers: { etag: `"${await hashOf("m")}"` } })
+        : new Response(bytesOf("m"), { status: 200 });
+    }) as typeof fetch;
+    const storage = new FakeStorage();
+    await loadModelBytes({ url, fetchFn: fn, caches: storage, origin: ORIGIN });
+    expect(calls.map((c) => c.init?.method ?? "GET")).toEqual(["HEAD", "GET"]);
+    for (const call of calls) {
+      expect(call.url).toBe(url);
+      expect(call.init).toMatchObject({ mode: "cors", credentials: "omit" });
+      expect(call.init?.headers).toBeUndefined(); // no custom header: no preflight
+    }
+    // The cache entry is keyed by the page's origin, not by the models origin.
+    expect([...storage.cache.store.keys()].every((k) => k.startsWith(`${ORIGIN}/__nitid-onnx__/`))).toBe(true);
   });
 });
 

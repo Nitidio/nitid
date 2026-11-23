@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defaultClientConditions } from "vite";
 import { defineConfig } from "vitest/config";
+import { validateModelsBaseUrl } from "./src/config";
 
 /**
  * Build modes
@@ -10,7 +11,9 @@ import { defineConfig } from "vitest/config";
  *               ../nitid/studio/static so the Python package can serve it.
  *   hosted   -> `vite build --mode hosted`: no backend probing at all; the
  *               output (dist-hosted/) is a plain static site.
- * STUDIO_MODELS_BASE_URL (build time) points the browser-only mode at a folder with models.json.
+ * STUDIO_MODELS_BASE_URL (build time) points the browser-only mode at a folder with models.json: a
+ * root-relative path (/models/) or an absolute https URL (https://models.example.org/, another origin).
+ * It is validated here (src/config.ts); the hosted CSP must allow that origin (scripts/assemble_hosted.py).
  * STUDIO_OUT_DIR overrides the output directory in both modes. The directory is
  * emptied before each build, so point it at a dedicated folder.
  */
@@ -32,7 +35,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __STUDIO_MODE__: JSON.stringify(hosted ? "hosted" : "auto"),
       // Base URL of the hosted model catalogue ("" = none configured). Never hardcode a vendor URL here.
-      __STUDIO_MODELS_BASE_URL__: JSON.stringify(process.env.STUDIO_MODELS_BASE_URL ?? ""),
+      __STUDIO_MODELS_BASE_URL__: JSON.stringify(validateModelsBaseUrl(process.env.STUDIO_MODELS_BASE_URL)),
     },
     server: {
       port: 5173,

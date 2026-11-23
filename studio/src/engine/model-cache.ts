@@ -12,8 +12,13 @@
  *   key; a mismatch is an error (`model_hash_mismatch`) and a corrupt cache
  *   entry is deleted and re-downloaded.
  * - At most `maxEntries` models are kept (oldest inserted first are evicted).
- * - Everything is same-origin; there is no CDN. If the cache cannot be written
- *   (quota, private mode) loading still works and `cached` is `false`.
+ * - The model comes from the local server (same origin) or, in the hosted deployment, from the
+ *   configured models origin (CORS, no credentials; `requestInit`). The cache key is built from the
+ *   page's own origin, never from the model's. If the cache cannot be written (quota, private mode)
+ *   loading still works and `cached` is `false`.
+ * - Across origins, the `ETag` / `Content-Length` of a response are only readable when the server sends
+ *   `Access-Control-Expose-Headers: ETag, Content-Length`. Without them: no HEAD key (the catalogue
+ *   `sha256` is then the only key) and no progress total; the streamed size cap still applies.
  */
 import { EngineError } from "./errors";
 import { MAX_MODEL_BYTES } from "./types";
@@ -106,7 +111,7 @@ export async function loadModelBytes(options: LoadModelOptions): Promise<LoadedM
   let key = options.sha256;
   if (!key && cache) {
     try {
-      const head = await fetchFn(options.url, { method: "HEAD", ...withHeaders(options.headers) });
+      const head = await fetchFn(options.url, { method: "HEAD", ...requestInit(options.headers) });
       if (head.ok) key = sha256FromEtag(head.headers.get("etag")) ?? undefined;
     } catch {
       // HEAD unsupported or network error: fall through to the plain download.
@@ -130,7 +135,7 @@ export async function loadModelBytes(options: LoadModelOptions): Promise<LoadedM
   // 3. Download with a size cap.
   let response: Response;
   try {
-    response = await fetchFn(options.url, withHeaders(options.headers));
+    response = await fetchFn(options.url, requestInit(options.headers));
   } catch (error) {
     throw new EngineError("model_fetch_failed", `Could not download the model: ${String(error)}`, { cause: error });
   }
@@ -169,8 +174,19 @@ export async function loadModelBytes(options: LoadModelOptions): Promise<LoadedM
   return { bytes, source: "network", sha256: expected ?? digest, cached };
 }
 
-function withHeaders(headers: Readonly<Record<string, string>> | undefined): RequestInit {
-  return headers && Object.keys(headers).length > 0 ? { headers: { ...headers } } : {};
+/**
+ * Options of every model request. They are explicit because the model may live on another origin
+ * (hosted deployment, `docs/studio-hosted.md`): the page is cross-origin isolated (COEP
+ * `require-corp`), so a cross-origin response is only usable when it passes CORS, hence
+ * `mode: "cors"`; and the request must never carry cookies or other ambient credentials, hence
+ * `credentials: "omit"` (the local server authenticates with the explicit `Authorization` header).
+ * A header list is added only when given: without custom headers the request stays a CORS "simple"
+ * request and needs no preflight.
+ */
+export function requestInit(headers: Readonly<Record<string, string>> | undefined): RequestInit {
+  const init: RequestInit = { mode: "cors", credentials: "omit" };
+  if (headers && Object.keys(headers).length > 0) init.headers = { ...headers };
+  return init;
 }
 
 function tooLarge(size: number, limit: number): EngineError {

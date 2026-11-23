@@ -34,6 +34,12 @@ describe("catalogue written by tools/publish_models.py", () => {
     }
   });
 
+  it("resolves against an absolute models origin too (cross-origin hosting)", () => {
+    for (const m of parseHostedCatalog(catalogue, "https://models.example.test/")) {
+      expect(m.url.startsWith("https://models.example.test/")).toBe(true);
+    }
+  });
+
   it("keeps the labels the publisher wrote", () => {
     const models = parseHostedCatalog(catalogue, BASE);
     const raw = (catalogue as { models: { label: string }[] }).models;
