@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-23
+
+Nitid Studio, the web app ("Nitid app"), now lives inside nitid: `pip install "nitid[studio]"` and
+`nitid studio` run it on your machine with PyTorch or OpenVINO, and a browser-only build is deployed at
+<https://app.nitid.io>, where the models run on your device with ONNX Runtime Web. The default detection
+weights change to the COCO-only checkpoints (ADR-0006), so `NITID("nitid1s")` loads different weights than
+in 0.9.x; see "Changed" before upgrading.
+
 ### Changed
 
 - **Default detection weights are now the COCO-only `coco` checkpoints** (ADR-0006), not the Objects365+COCO `obj2coco` ones: the D-FINE authors say `obj2coco` checkpoints should not be assumed to be commercially cleared and nitid has not established what the Objects365 terms allow. `NITID("nitid1s")` and `nitid download` now fetch `dfine_<size>_coco_wrapped.pth`. Published COCO mAP of the defaults: S 48.5, M 52.3, L 54.0, X 55.8 (was 50.7, 55.1, 57.3, 59.3). To keep the previous weights pass `weights="obj2coco"` / `weights=obj2coco`; downloading them prints the Objects365 notice. Existing `*_obj2coco_wrapped.pth` files still load by path.
 
 ### Added
 
+- The Nitid app takes the look and feel of nitid.io: Archivo and JetBrains Mono (self-hosted, SIL OFL 1.1, notices in `THIRD_PARTY_NOTICES.md`), the NITID colour palette, the logo in the header and a light/dark switch. The chosen theme lasts for the tab (no persistent storage by policy); with no choice it follows the system.
 - Nitid app, hosted deployment (browser only, no Python server): `pnpm run build:hosted`, Cloudflare headers (`studio/hosting/cloudflare/_headers.template`, rendered by `scripts/assemble_hosted.py`) and `wrangler.jsonc` under `studio/hosting/cloudflare/`, a hosted smoke test without backend that runs same-origin and cross-origin scenarios with negative cases (`pnpm run smoke:hosted`) and a manual-only workflow `studio-hosted.yml` (nothing deploys unless `deploy` is ticked). The ONNX models are served from a separate HTTPS origin configured with `STUDIO_MODELS_BASE_URL` (CORS, no credentials); the generated CSP opens `connect-src` only to that origin, because Cloudflare static assets allow 25 MiB per file and `nitid1s` is 39.7 MiB. `tools/publish_models.py` and `tools/check_hosted_bundle.py` build and validate the static model bundle (`models.json`, ONNX, SHA-256, licences) from the `hostable` entries of `studio/models.lock.json`. Measured ONNX sizes at 640 px: nitid1n 14.7 MiB, s 39.7, m 74.1, l 118.1, x 236.2. See `docs/studio-hosted.md` and `docs/studio-hosted-models.md`.
 - Segmentation checkpoints are now downloaded from a pinned commit of `ArgoSA/D-FINE-seg` instead of `resolve/main`, so the files match `studio/models.lock.json`.
 - The Studio interface, its PDF report and its start-up messages call the app "Nitid app"; the command, extra and package stay `nitid studio` / `nitid[studio]`.
@@ -213,7 +222,9 @@ from now on.
   default `runs/mlflow` is stored as SQLite instead of MLflow's file store,
   which MLflow 3 refuses by default.
 
-[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.9.5...HEAD
+[Unreleased]: https://github.com/Nitidio/nitid/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Nitidio/nitid/compare/v0.9.6...v0.10.0
+[0.9.6]: https://github.com/Nitidio/nitid/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/Nitidio/nitid/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/Nitidio/nitid/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/Nitidio/nitid/releases/tag/v0.9.3
