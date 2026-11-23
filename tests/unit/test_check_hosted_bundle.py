@@ -312,3 +312,27 @@ def test_cli_ok_and_failure_exit_codes(bundle, lock, tmp_path, capsys):
     assert chk.main([str(bundle), "--lock", str(lock_path)]) == 1
     assert "PROBLEM:" in capsys.readouterr().err
     assert chk.main([str(bundle), "--lock", str(tmp_path / "nope.json")]) == 2
+
+
+def test_assemble_hosted_full_check(bundle, lock, tmp_path):
+    """``scripts/assemble_hosted.py --validate-bundle`` runs this tool: a real bundle passes, nothing is copied."""
+    from tests.unit import test_assemble_hosted as ta
+
+    lock_path = tmp_path / "lock.json"
+    lock_path.write_text(json.dumps(lock), encoding="utf-8")
+    assert ta.assemble_hosted.full_bundle_problems(bundle, lock_path) == []
+    template = tmp_path / "_headers.template"
+    template.write_text(ta.TEMPLATE, encoding="utf-8")
+    report = ta.assemble_hosted.assemble(
+        ta.make_ui(tmp_path / "ui"),
+        tmp_path / "site",
+        template,
+        models_base_url=ta.MODELS_BASE,
+        validate_bundle_dir=bundle,
+        bundle_lock=lock_path,
+    )
+    assert report.models
+    assert not (tmp_path / "site" / "models").exists()
+
+    (bundle / "dfine_l.pth").write_bytes(b"x")  # a checkpoint in the bundle: refused by the tool
+    assert any(".pth" in p for p in ta.assemble_hosted.full_bundle_problems(bundle, lock_path))

@@ -56,5 +56,78 @@ def test_permissions_are_read_only_and_no_literal_credentials():
     )
 
 
-def test_models_are_served_from_the_same_origin():
-    assert WORKFLOW["env"]["STUDIO_MODELS_BASE_URL"] == "/models/"
+def test_models_url_is_a_repository_variable_not_a_secret_and_not_hardcoded():
+    assert "STUDIO_MODELS_BASE_URL" not in (WORKFLOW.get("env") or {}), "no workflow-wide value"
+    assert "vars.STUDIO_MODELS_BASE_URL" in TEXT
+    assert "secrets.STUDIO_MODELS_BASE_URL" not in TEXT
+    assert not re.search(r"STUDIO_MODELS_BASE_URL:\s*['\"]?(https?://|/)", TEXT)
+    assert not re.search(
+        r"https://models\.[a-z0-9.-]+/",
+        "\n".join(
+            ln
+            for ln in TEXT.splitlines()
+            if not ln.lstrip().startswith("#") and "::error" not in ln
+        ),
+    )
+
+
+def test_ui_is_built_for_the_models_variable():
+    steps = WORKFLOW["jobs"]["build-ui"]["steps"]
+    build = next(s for s in steps if s.get("run") == "pnpm run build:hosted")
+    assert build["env"]["STUDIO_MODELS_BASE_URL"] == "${{ vars.STUDIO_MODELS_BASE_URL }}"
+
+
+def test_deploy_fails_clearly_when_the_variable_is_empty():
+    jobs = WORKFLOW["jobs"]
+    for job, needs_gate in (("build-ui", True), ("deploy", False)):
+        guard = next(
+            s
+            for s in jobs[job]["steps"]
+            if "STUDIO_MODELS_BASE_URL is empty" in str(s.get("run", ""))
+        )
+        assert '[ -z "$STUDIO_MODELS_BASE_URL" ]' in guard["run"] and "exit 1" in guard["run"]
+        assert "::error::" in guard["run"] and "docs/studio-hosted.md" in guard["run"]
+        assert guard["env"]["STUDIO_MODELS_BASE_URL"] == "${{ vars.STUDIO_MODELS_BASE_URL }}"
+        if needs_gate:  # the dry run must not need the variable
+            assert "inputs.deploy == true" in guard["if"]
+        build_index = [s.get("run") for s in jobs[job]["steps"]].index(guard["run"])
+        assert build_index >= 0
+
+
+def test_the_guard_runs_before_the_ui_is_built():
+    runs = [str(s.get("run", "")) for s in WORKFLOW["jobs"]["build-ui"]["steps"]]
+    guard = next(i for i, r in enumerate(runs) if "is empty" in r)
+    build = runs.index("pnpm run build:hosted")
+    assert guard < build
+
+
+def test_bundle_is_published_with_default_sizes_as_an_artifact_only():
+    jobs = WORKFLOW["jobs"]
+    publish = next(
+        s["run"]
+        for s in jobs["publish-bundle"]["steps"]
+        if "publish_models.py" in str(s.get("run", ""))
+    )
+    assert "--sizes" not in publish, "default sizes (n, s): the 25 MiB limit no longer applies"
+    uploads = [
+        s
+        for s in jobs["publish-bundle"]["steps"]
+        if str(s.get("uses", "")).startswith("actions/upload-artifact")
+    ]
+    assert uploads and uploads[0]["with"]["name"] == "hosted-bundle"
+    assert "tools.check_hosted_bundle" in " ".join(
+        str(s.get("run", "")) for s in jobs["publish-bundle"]["steps"]
+    )
+
+
+def test_site_is_assembled_cross_origin_and_never_with_the_bundle_inside():
+    steps = WORKFLOW["jobs"]["assemble"]["steps"]
+    commands = [
+        str(s.get("run", "")) for s in steps if "assemble_hosted.py" in str(s.get("run", ""))
+    ]
+    assert len(commands) == 1
+    command = commands[0]
+    assert '--models-base-url "$STUDIO_MODELS_BASE_URL"' in command
+    assert "--validate-bundle bundle" in command
+    assert "--bundle bundle" not in command.replace("--validate-bundle bundle", "")
+    assert "--allow-http-loopback" not in TEXT, "plain http is for the local smoke test only"

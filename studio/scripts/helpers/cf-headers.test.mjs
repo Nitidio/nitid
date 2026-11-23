@@ -5,7 +5,9 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { headersFor, parseHeadersFile, patternToRegExp } from "./cf-headers.mjs";
 
-const PRODUCTION = fileURLToPath(new URL("../../hosting/cloudflare/_headers", import.meta.url));
+const TEMPLATE = fileURLToPath(new URL("../../hosting/cloudflare/_headers.template", import.meta.url));
+// scripts/assemble_hosted.py fills the placeholder; tests/unit/test_assemble_hosted.py tests that renderer.
+const render = (origin) => readFileSync(TEMPLATE, "utf8").replace("{{MODELS_CONNECT_SRC}}", origin ? ` ${origin}` : "");
 
 test("parses blocks, comments and detach lines in order", () => {
   const rules = parseHeadersFile("# c\n/a/*\n  X-A: 1\n  ! X-B\n\n/b\n  X-C: two: parts\n");
@@ -41,8 +43,8 @@ test("matching rules combine in order: join, then detach and set again", () => {
   assert.deepEqual(headersFor(rules, "/p/x"), { "x-list": "a, b", "cache-control": "immutable" });
 });
 
-test("the production file: security block everywhere, caching by folder", () => {
-  const rules = parseHeadersFile(readFileSync(PRODUCTION, "utf8"));
+test("the production template: security block everywhere, caching by folder", () => {
+  const rules = parseHeadersFile(render(null));
   for (const path of ["/", "/index.html", "/run/browser", "/ort/ort-wasm-simd-threaded.wasm", "/models/models.json", "/assets/a-1.js"]) {
     const h = headersFor(rules, path);
     assert.equal(h["cross-origin-opener-policy"], "same-origin", path);
@@ -53,4 +55,12 @@ test("the production file: security block everywhere, caching by folder", () => 
   assert.equal(headersFor(rules, "/assets/index-AbC123.js")["cache-control"], "public, max-age=31536000, immutable");
   assert.equal(headersFor(rules, "/index.html")["cache-control"], "no-cache");
   assert.equal(headersFor(rules, "/models/models.json")["cache-control"], "no-cache");
+});
+
+test("the template with a models origin: only connect-src changes", () => {
+  const origin = "https://models.example.test";
+  const plain = headersFor(parseHeadersFile(render(null)), "/")["content-security-policy"];
+  const cross = headersFor(parseHeadersFile(render(origin)), "/")["content-security-policy"];
+  assert.ok(plain.includes("connect-src 'self';"));
+  assert.equal(cross, plain.replace("connect-src 'self';", `connect-src 'self' ${origin};`));
 });

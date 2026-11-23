@@ -1,13 +1,17 @@
 """The hosted site's Cloudflare configuration (studio/hosting/cloudflare) against the local app.
 
-Cheap and dependency-free (no Studio extra): it parses the committed ``_headers`` and ``wrangler.jsonc``
-and compares the security policy with ``nitid/studio/security.py``, so the two cannot drift apart.
+Cheap and dependency-free (no Studio extra): it renders the committed ``_headers.template`` the way
+``scripts/assemble_hosted.py`` does (for the same-origin mode and for a cross-origin models origin), parses
+the result and ``wrangler.jsonc``, and compares the security policy with ``nitid/studio/security.py``, so the
+two cannot drift apart. The ONLY allowed difference is the models origin in ``connect-src``.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,7 +20,18 @@ from nitid.studio.security import CONTENT_SECURITY_POLICY, SECURITY_HEADERS
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CF_DIR = REPO_ROOT / "studio" / "hosting" / "cloudflare"
-HEADERS_FILE = CF_DIR / "_headers"
+HEADERS_FILE = CF_DIR / "_headers.template"
+
+_spec = importlib.util.spec_from_file_location(
+    "assemble_hosted", REPO_ROOT / "scripts" / "assemble_hosted.py"
+)
+assert _spec is not None and _spec.loader is not None
+assemble_hosted = importlib.util.module_from_spec(_spec)
+sys.modules.setdefault("assemble_hosted", assemble_hosted)
+_spec.loader.exec_module(assemble_hosted)
+
+#: The two shapes of the deployed file: models on the same origin, and on a separate one.
+MODELS_ORIGINS = [None, "https://models.nitid.io", "https://models.example.org:8443"]
 
 MAX_RULES = 100  # https://developers.cloudflare.com/workers/static-assets/headers/
 MAX_LINE = 2000
@@ -72,9 +87,26 @@ def parse_csp(policy: str) -> dict[str, frozenset[str]]:
     return directives
 
 
+def render(origin: str | None) -> str:
+    return assemble_hosted.render_headers(HEADERS_FILE.read_text(encoding="utf-8"), origin)
+
+
+@pytest.fixture(scope="module", params=MODELS_ORIGINS, ids=lambda o: o or "same-origin")
+def models_origin(request):
+    return request.param
+
+
 @pytest.fixture(scope="module")
-def rules():
-    return parse_headers(HEADERS_FILE.read_text(encoding="utf-8"))
+def rules(models_origin):
+    return parse_headers(render(models_origin))
+
+
+def local_csp_with(models_origin: str | None) -> dict[str, frozenset[str]]:
+    """The local app's policy plus, as the only difference, the models origin in connect-src."""
+    local = parse_csp(CONTENT_SECURITY_POLICY)
+    if models_origin is not None:
+        local["connect-src"] = local["connect-src"] | {models_origin}
+    return local
 
 
 PATHS = [
@@ -87,6 +119,11 @@ PATHS = [
     "/models/models.json",
     "/models/nitid1s-detect.onnx",
 ]
+
+
+def test_there_is_no_static_headers_file_next_to_the_template():
+    """A committed _headers would be deployed without the models origin; the generator is the only source."""
+    assert not (CF_DIR / "_headers").exists()
 
 
 def test_file_respects_cloudflare_limits(rules):
@@ -130,22 +167,47 @@ def test_csp_allows_everything_the_local_app_needs(rules, path):
 
 
 @pytest.mark.parametrize("path", PATHS)
-def test_csp_is_not_looser_than_the_local_one(rules, path):
-    """... and nothing more: no extra directive, no extra source (a CDN, 'unsafe-eval', a wildcard)."""
+def test_csp_is_not_looser_than_the_local_one(rules, models_origin, path):
+    """... and nothing more: no extra directive, no extra source (a CDN, 'unsafe-eval', a wildcard).
+
+    The drift test: hosted == local, except that connect-src also lists the models origin (when there is one).
+    """
     hosted = parse_csp(headers_for(rules, path)["content-security-policy"])
-    local = parse_csp(CONTENT_SECURITY_POLICY)
-    assert hosted == local
+    assert hosted == local_csp_with(models_origin)
 
 
-def test_csp_has_no_dangerous_sources(rules):
+def test_csp_has_no_dangerous_sources(rules, models_origin):
     csp = headers_for(rules, "/")["content-security-policy"]
     assert "'unsafe-eval'" not in csp
     assert "*" not in csp
-    assert "http:" not in csp and "https:" not in csp
+    assert "http:" not in csp and not re.search(r"(?<![\w/])https:(?!//)", csp)
     parsed = parse_csp(csp)
     assert parsed["script-src"] == {"'self'", "'wasm-unsafe-eval'"}
-    assert parsed["connect-src"] == {"'self'"}
     assert parsed["frame-ancestors"] == {"'none'"}
+    # The models origin is allowed for fetch/XHR only, never for scripts, workers, frames or images.
+    expected = {"'self'"} | ({models_origin} if models_origin else set())
+    assert parsed["connect-src"] == expected
+    for directive, sources in parsed.items():
+        if directive != "connect-src":
+            assert not any(src.startswith("http") for src in sources), directive
+
+
+def test_models_origin_appears_once_and_nowhere_else(models_origin):
+    text = render(models_origin)
+    if models_origin is None:
+        assert not re.search(
+            r"https?://", "\n".join(ln for ln in text.splitlines() if not ln.startswith("#"))
+        )
+    else:
+        code = "\n".join(ln for ln in text.splitlines() if not ln.startswith("#"))
+        assert code.count(models_origin) == 1
+        assert len(re.findall(r"https?://", code)) == 1
+
+
+def test_cross_origin_resource_policy_of_the_app_stays_same_origin(rules):
+    """Only the models server sends CORP cross-origin; the app's own files are never embeddable elsewhere."""
+    for path in PATHS:
+        assert headers_for(rules, path)["cross-origin-resource-policy"] == "same-origin"
 
 
 def test_caching_policy(rules):
@@ -172,7 +234,8 @@ def test_content_type_is_left_to_the_file_extension(rules):
     assert "content-type" not in names
 
 
-def test_file_holds_no_secret_or_vendor_url():
+def test_template_holds_no_secret_or_vendor_url():
+    """The committed template names no host: the models origin is a deployment setting, not source."""
     lines = HEADERS_FILE.read_text(encoding="utf-8").splitlines()
     text = "\n".join(
         ln for ln in lines if not ln.lstrip().startswith("#")

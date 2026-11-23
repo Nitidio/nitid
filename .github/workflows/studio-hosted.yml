@@ -1,12 +1,19 @@
 name: Studio hosted (Cloudflare)
 
-# Builds the hosted Nitid app (browser-only, no backend), assembles it with the model bundle, runs the
-# browser smoke test and, only when asked, deploys it to Cloudflare. Manual only: nothing here runs on
-# push or pull request. Setup (account, API token, secrets, domain) and rollback: docs/studio-hosted.md
+# Builds the hosted Nitid app (browser-only, no backend), runs the browser smoke test and, only when asked,
+# deploys it to Cloudflare. Manual only: nothing here runs on push or pull request. Setup (account, API
+# token, secrets, variable, domain) and rollback: docs/studio-hosted.md
 #
-# Secrets the owner must create (Settings > Secrets and variables > Actions), never in the repository:
+# The ONNX models are NOT deployed to Cloudflare (static assets accept 25 MiB per file; nitid1s is larger).
+# The owner hosts the model bundle on a server of his own (docs/studio-hosted-models.md). The "hosted-bundle"
+# artifact of this workflow is only what he downloads and uploads there; the UI is built for its URL.
+#
+# Secrets the owner must create (Settings > Secrets and variables > Actions > Secrets), never in the repository:
 #   CLOUDFLARE_API_TOKEN   token with "Workers Scripts: Edit" (add "Workers Routes/Zone: Edit" for a custom domain)
 #   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account id
+# Repository VARIABLE (Settings > Secrets and variables > Actions > Variables; not a secret, it is public):
+#   STUDIO_MODELS_BASE_URL  absolute https base URL of the models server, e.g. https://models.nitid.io/
+#                           Required for a deploy; the dry run falls back to the smoke test's own local setup.
 
 on:
   workflow_dispatch:
@@ -25,9 +32,6 @@ permissions:
 concurrency:
   group: studio-hosted
   cancel-in-progress: false
-
-env:
-  STUDIO_MODELS_BASE_URL: /models/
 
 jobs:
   build-ui:
@@ -51,8 +55,21 @@ jobs:
       - name: Check the frontend
         run: pnpm run check
 
-      # STUDIO_MODELS_BASE_URL=/models/ comes from the workflow env: the models are served from the same origin.
+      # The UI is built for the models server of the owner: vars.STUDIO_MODELS_BASE_URL (a repository
+      # variable, not a secret). A deploy without it would publish an app with no models: refuse early.
+      - name: Require the models URL for a deploy
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy == true }}
+        env:
+          STUDIO_MODELS_BASE_URL: ${{ vars.STUDIO_MODELS_BASE_URL }}
+        run: |
+          if [ -z "$STUDIO_MODELS_BASE_URL" ]; then
+            echo "::error::The repository variable STUDIO_MODELS_BASE_URL is empty. Create it (Settings > Secrets and variables > Actions > Variables) with the https base URL of the models server, e.g. https://models.nitid.io/ (docs/studio-hosted.md), then run again."
+            exit 1
+          fi
+
       - name: Build the hosted UI
+        env:
+          STUDIO_MODELS_BASE_URL: ${{ vars.STUDIO_MODELS_BASE_URL }}
         run: pnpm run build:hosted
 
       - uses: actions/upload-artifact@v4
@@ -87,8 +104,13 @@ jobs:
         run: uv sync --extra dev --extra train
 
       - name: Publish the bundle (models.json, ONNX files, SHA256SUMS, licences)
-        # Only size n: every file must be under the 25 MiB Cloudflare static-assets limit (nitid1s is 39.7 MiB, see docs/studio-hosted-models.md).
-        run: uv run python tools/publish_models.py --out "$BUNDLE_DIR" --sizes n
+        # Default sizes (n, s). Not deployed to Cloudflare: an ARTIFACT for the owner to download and upload
+        # to his models server (docs/studio-hosted-models.md).
+        run: uv run python tools/publish_models.py --out "$BUNDLE_DIR"
+
+      # Strict check of the bundle the owner will upload (needs onnx and jsonschema, installed above).
+      - name: Check the bundle
+        run: uv run python -m tools.check_hosted_bundle "$BUNDLE_DIR"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -119,11 +141,22 @@ jobs:
           name: hosted-bundle
           path: bundle
 
-      # Standard library only: validates models.json, sha256, forbidden files and Cloudflare limits.
+      # Cross-origin mode: nothing of the bundle goes into the site; the CSP gets exactly the origin of
+      # STUDIO_MODELS_BASE_URL, and the script checks that the UI was built for the same URL. Standard
+      # library only. Without the variable (a dry run) there is nothing to deploy, so this step is skipped.
       - name: Assemble studio/dist-hosted-site
-        run: python scripts/assemble_hosted.py --bundle bundle --clean
+        if: ${{ vars.STUDIO_MODELS_BASE_URL != '' }}
+        env:
+          STUDIO_MODELS_BASE_URL: ${{ vars.STUDIO_MODELS_BASE_URL }}
+        run: python scripts/assemble_hosted.py --models-base-url "$STUDIO_MODELS_BASE_URL" --validate-bundle bundle --bundle-check basic --clean
+
+      - name: Note when the site is not assembled
+        if: ${{ vars.STUDIO_MODELS_BASE_URL == '' }}
+        run: |
+          echo "::notice::The repository variable STUDIO_MODELS_BASE_URL is empty: dry run, no site assembled (a deploy needs it). The smoke test below builds its own."
 
       - name: Show what will be deployed
+        if: ${{ vars.STUDIO_MODELS_BASE_URL != '' }}
         run: |
           find studio/dist-hosted-site -maxdepth 2 | sort
           du -sh studio/dist-hosted-site
@@ -146,13 +179,15 @@ jobs:
           echo "PLAYWRIGHT_CORE_PATH=$RUNNER_TEMP/pw/node_modules/playwright-core" >> "$GITHUB_ENV"
           echo "CHROME_PATH=$(command -v google-chrome)" >> "$GITHUB_ENV"
 
-      # Real Chrome, the production headers and a fixture bundle, with no backend. Fails the run on any
-      # console error, /api/* request or loss of cross-origin isolation.
+      # Real Chrome, the production headers, a fixture bundle and a second origin for it, with no backend:
+      # the same-origin and the cross-origin topologies, plus negative cases (no CORS header, origin missing
+      # from the CSP). Fails the run on any console error, CSP violation, /api/* request or loss of isolation.
       - name: Smoke test the hosted site
         working-directory: studio
         run: pnpm run smoke:hosted
 
       - uses: actions/upload-artifact@v4
+        if: ${{ vars.STUDIO_MODELS_BASE_URL != '' }}
         with:
           name: hosted-site
           path: studio/dist-hosted-site
@@ -168,6 +203,15 @@ jobs:
     environment: cloudflare-production
     steps:
       - uses: actions/checkout@v7
+
+      - name: Require the models URL
+        env:
+          STUDIO_MODELS_BASE_URL: ${{ vars.STUDIO_MODELS_BASE_URL }}
+        run: |
+          if [ -z "$STUDIO_MODELS_BASE_URL" ]; then
+            echo "::error::The repository variable STUDIO_MODELS_BASE_URL is empty: the app would be deployed without models. Create it (docs/studio-hosted.md) and run again."
+            exit 1
+          fi
 
       - uses: actions/download-artifact@v4
         with:
