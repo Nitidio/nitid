@@ -95,9 +95,7 @@ Known gaps:
    ([#8](https://github.com/Nitidio/nitid/issues/8)).
 2. An interactive demo on Hugging Face Spaces
    ([#7](https://github.com/Nitidio/nitid/issues/7)).
-3. Automated GitHub Releases from a version tag
-   ([#3](https://github.com/Nitidio/nitid/issues/3)).
-4. Benchmark-grade validation runs for segmentation on datasets larger than
+3. Benchmark-grade validation runs for segmentation on datasets larger than
    smoke tests.
 
 Further out, and accepted but not yet scheduled: multi-GPU training with
